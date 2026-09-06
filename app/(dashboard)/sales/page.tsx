@@ -8,6 +8,7 @@ import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Pagination } from "@/components/shared/Pagination";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
+import { usePolling } from "@/hooks/usePolling";
 import { Search, Eye, Printer, Receipt } from "lucide-react";
 
 export default function SalesPage() {
@@ -28,6 +29,13 @@ export default function SalesPage() {
   const [perPage, setPerPage] = useState(20);
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
 
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("butcher_cached_sales");
+      if (cached) setPaginated(JSON.parse(cached));
+    } catch {}
+  }, []);
+
   const fetchSales = useCallback(async () => {
     try {
       const res = await salesService.getSales({
@@ -38,18 +46,16 @@ export default function SalesPage() {
         status: statusFilter,
       });
       setPaginated(res);
+      if (typeof window !== "undefined" && currentPage === 1 && search === "" && paymentFilter === "all" && statusFilter === "all") {
+        localStorage.setItem("butcher_cached_sales", JSON.stringify(res));
+      }
     } catch (e) {
       console.error("Failed to load sales:", e);
     }
   }, [currentPage, perPage, search, paymentFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchSales();
-
-    const handleDataChange = () => fetchSales();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
-  }, [fetchSales]);
+  // Real-time polling every 10s
+  usePolling(fetchSales, 10000);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">

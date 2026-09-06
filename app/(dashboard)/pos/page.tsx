@@ -7,6 +7,7 @@ import { customersService } from "@/services/customers.service";
 import { posService } from "@/services/pos.service";
 import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
+import { usePolling } from "@/hooks/usePolling";
 import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPane } from "@/components/pos/CartPane";
 import { WeightInput } from "@/components/shared/WeightInput";
@@ -21,6 +22,7 @@ export default function PosPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Modals state
   const [selectedProductForWeight, setSelectedProductForWeight] = useState<Product | null>(null);
@@ -45,7 +47,18 @@ export default function PosPage() {
     clearCart,
   } = useCart();
 
-  const { isShiftOpen } = useShift();
+  const { isShiftOpen, isLoading: isShiftLoading } = useShift();
+
+  useEffect(() => {
+    try {
+      const cachedProds = localStorage.getItem("butcher_cached_products");
+      const cachedCats = localStorage.getItem("butcher_cached_categories");
+      const cachedCusts = localStorage.getItem("butcher_cached_customers");
+      if (cachedProds) setProducts(JSON.parse(cachedProds));
+      if (cachedCats) setCategories(JSON.parse(cachedCats));
+      if (cachedCusts) setCustomers(JSON.parse(cachedCusts));
+    } catch {}
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -57,18 +70,21 @@ export default function PosPage() {
       setCategories(cats);
       setProducts(prodsRes.data);
       setCustomers(custsRes.data);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_cached_categories", JSON.stringify(cats));
+        localStorage.setItem("butcher_cached_products", JSON.stringify(prodsRes.data));
+        localStorage.setItem("butcher_cached_customers", JSON.stringify(custsRes.data));
+      }
     } catch (e) {
       console.error("Failed to load POS data:", e);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-
-    const handleDataChange = () => loadData();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
-  }, [loadData]);
+  // Poll every 10 seconds and on butcher:data-change
+  usePolling(loadData, 10000);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProductForWeight(product);
@@ -122,30 +138,31 @@ export default function PosPage() {
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full overflow-hidden select-none relative bg-[#f8fafc]">
-      {/* Shift Closed Warning Banner */}
-      {!isShiftOpen && (
-        <div className="absolute top-0 inset-x-0 z-40 bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-800 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>
-              <strong>Shift Closed:</strong> Open your cashier shift to track cash drawer balances.
-            </span>
-          </div>
-          <Link
-            href="/shift"
-            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors shrink-0"
-          >
-            Open Shift
-          </Link>
-        </div>
-      )}
-
       {/* Left Column: Product Selection Grid */}
       <div className="flex-1 h-full overflow-hidden flex flex-col min-w-0">
+        {/* Shift Closed Warning Banner - displayed in flow without overlapping search */}
+        {!isShiftLoading && !isShiftOpen && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-800 shadow-2xs shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Shift Closed:</strong> Open your cashier shift to track cash drawer balances.
+              </span>
+            </div>
+            <Link
+              href="/shift"
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors shrink-0"
+            >
+              Open Shift
+            </Link>
+          </div>
+        )}
+
         <ProductGrid
           products={products}
           categories={categories}
           onSelectProduct={handleSelectProduct}
+          isLoading={isLoading}
         />
       </div>
 

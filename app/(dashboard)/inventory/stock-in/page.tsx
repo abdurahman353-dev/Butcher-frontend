@@ -7,12 +7,14 @@ import { productsService } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
 import { Product } from "@/types";
 import { formatWeight } from "@/lib/formatters";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { ArrowLeft, PlusCircle, CheckCircle2 } from "lucide-react";
 
 function StockInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product_id");
+  const { confirm, alert } = useSystemDialog();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(
@@ -28,10 +30,15 @@ function StockInForm() {
     async function load() {
       const res = await productsService.getProducts({ per_page: 100 });
       setProducts(res.data);
-      if (preselectedProductId) {
+      if (!preselectedProductId && res.data.length > 0) {
+        setSelectedProductId(res.data[0].id);
+      } else if (preselectedProductId) {
         const found = res.data.find((p) => p.id === Number(preselectedProductId));
-        if (found && found.buying_cost_per_kg) {
-          setBuyingCost(found.buying_cost_per_kg.toString());
+        if (found) {
+          setSelectedProductId(found.id);
+          if (found.buying_cost_per_kg) {
+            setBuyingCost(found.buying_cost_per_kg.toString());
+          }
         }
       }
     }
@@ -46,9 +53,23 @@ function StockInForm() {
     const cost = parseFloat(buyingCost) || 0;
 
     if (isNaN(qty) || qty <= 0) {
-      alert("Please enter a valid stock quantity in KG.");
+      await alert({
+        title: "Invalid Stock Quantity",
+        message: "Please enter a valid stock quantity greater than 0 KG.",
+        type: "warning",
+      });
       return;
     }
+
+    const confirmed = await confirm({
+      title: "Confirm Stock In",
+      message: `Add ${formatWeight(qty)} of "${selectedProduct?.name || 'Product'}" to stock?`,
+      confirmText: "Yes, Add Stock",
+      cancelText: "Cancel",
+      type: "info",
+    });
+
+    if (!confirmed) return;
 
     setIsSubmitting(true);
     try {
@@ -67,7 +88,11 @@ function StockInForm() {
         router.push("/inventory");
       }, 1500);
     } catch (err: any) {
-      alert(err.message || "Failed to add stock.");
+      await alert({
+        title: "Stock In Failed",
+        message: err.message || "Failed to add stock.",
+        type: "danger",
+      });
     } finally {
       setIsSubmitting(false);
     }

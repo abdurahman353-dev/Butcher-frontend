@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useShift } from "@/hooks/useShift";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { roundTo } from "@/lib/math";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import {
   Clock,
   Banknote,
@@ -16,6 +17,7 @@ import {
 
 export default function ShiftPage() {
   const { shift, isShiftOpen, openShift, closeShift } = useShift();
+  const { confirm, alert } = useSystemDialog();
 
   // Open Shift Form State
   const [openingFloat, setOpeningFloat] = useState<string>("5000");
@@ -35,14 +37,40 @@ export default function ShiftPage() {
   const handleOpenShift = async () => {
     const floatNum = parseFloat(openingFloat);
     if (isNaN(floatNum) || floatNum < 0) {
-      alert("Please enter a valid opening float.");
+      await alert({
+        title: "Invalid Float Amount",
+        message: "Please enter a valid non-negative opening cash float.",
+        type: "warning",
+      });
       return;
     }
+
+    const confirmed = await confirm({
+      title: "Open Register Shift",
+      message: `Open register shift with an opening cash float of ${formatCurrency(
+        floatNum
+      )}?`,
+      confirmText: "Yes, Open Shift",
+      cancelText: "Cancel",
+      type: "info",
+    });
+
+    if (!confirmed) return;
+
     setIsOpening(true);
     try {
       await openShift(floatNum, openNotes);
+      await alert({
+        title: "Shift Opened",
+        message: `Your till is now open with ${formatCurrency(floatNum)} float. POS terminal is ready for sales.`,
+        type: "success",
+      });
     } catch (e: any) {
-      alert(e.message || "Failed to open shift.");
+      await alert({
+        title: "Failed to Open Shift",
+        message: e.message || "Failed to open shift.",
+        type: "danger",
+      });
     } finally {
       setIsOpening(false);
     }
@@ -50,15 +78,50 @@ export default function ShiftPage() {
 
   const handleCloseShift = async () => {
     if (countedCash === "") {
-      alert("Please enter the counted cash in the drawer.");
+      await alert({
+        title: "Cash Amount Required",
+        message: "Please enter the physical cash counted in the drawer before closing the shift.",
+        type: "warning",
+      });
       return;
     }
+
+    const diffText =
+      discrepancy === 0
+        ? "Drawer is perfectly balanced."
+        : discrepancy > 0
+        ? `Drawer has an overage of +${formatCurrency(discrepancy)}.`
+        : `Drawer has a shortage of -${formatCurrency(Math.abs(discrepancy))}.`;
+
+    const confirmed = await confirm({
+      title: "Confirm Shift Closure",
+      message: `Are you sure you want to close and reconcile this shift?\n\nExpected Cash: ${formatCurrency(
+        expectedCash
+      )}\nCounted Cash: ${formatCurrency(numCounted)}\n${diffText}\n\nThis will lock the register till session.`,
+      confirmText: "Yes, Reconcile & Close",
+      cancelText: "Cancel",
+      type: discrepancy === 0 ? "warning" : "danger",
+    });
+
+    if (!confirmed) return;
+
     setIsClosing(true);
     try {
       const closed = await closeShift(numCounted, closeNotes);
       setClosedSummary(closed);
+      await alert({
+        title: "Shift Closed & Reconciled",
+        message: `Shift #${closed.id} has been closed successfully. Total sales: ${formatCurrency(
+          closed.total_sales
+        )}.`,
+        type: "success",
+      });
     } catch (e: any) {
-      alert(e.message || "Failed to close shift.");
+      await alert({
+        title: "Failed to Close Shift",
+        message: e.message || "Failed to close shift.",
+        type: "danger",
+      });
     } finally {
       setIsClosing(false);
     }

@@ -1,55 +1,36 @@
 import apiClient from "./api";
-import { realtimeStore } from "./realtime-store";
 import { Shift } from "@/types";
 
 export const shiftsService = {
   async getCurrentShift(): Promise<Shift | null> {
-    try {
-      if (process.env.NEXT_PUBLIC_USE_REMOTE_API === "true") {
-        const res = await apiClient.get<Shift>("/shifts/current");
-        return res.data;
-      }
-    } catch {}
-
-    return realtimeStore.getActiveShift();
+    const res = await apiClient.get<Shift | null>("/shifts/current");
+    return res.data;
   },
 
   async openShift(openingCash: number, notes?: string): Promise<Shift> {
-    try {
-      if (process.env.NEXT_PUBLIC_USE_REMOTE_API === "true") {
-        const res = await apiClient.post<Shift>("/shifts/open", {
-          opening_cash: openingCash,
-          notes,
-        });
-        return res.data;
-      }
-    } catch {}
-
-    return realtimeStore.openShift(openingCash, notes);
+    const res = await apiClient.post<Shift>("/shifts/open", {
+      opening_cash: openingCash,
+      notes,
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
   },
 
   async closeShift(countedCash: number, notes?: string): Promise<Shift> {
-    try {
-      if (process.env.NEXT_PUBLIC_USE_REMOTE_API === "true") {
-        const res = await apiClient.post<Shift>("/shifts/close", {
-          counted_cash: countedCash,
-          notes,
-        });
-        return res.data;
-      }
-    } catch {}
-
-    return realtimeStore.closeShift(countedCash, notes);
+    const res = await apiClient.post<Shift>("/shifts/close", {
+      counted_cash: countedCash,
+      notes,
+    });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
   },
 
   async getShiftHistory(): Promise<Shift[]> {
-    try {
-      if (process.env.NEXT_PUBLIC_USE_REMOTE_API === "true") {
-        const res = await apiClient.get<Shift[]>("/shifts");
-        return res.data;
-      }
-    } catch {}
-
-    return realtimeStore.getShifts();
+    const res = await apiClient.get<Shift[]>("/shifts");
+    return res.data;
   },
 };

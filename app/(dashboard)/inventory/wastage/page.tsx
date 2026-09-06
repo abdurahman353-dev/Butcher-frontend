@@ -6,9 +6,11 @@ import { productsService } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
 import { Product, WastageRecord, WastageReason } from "@/types";
 import { formatWeight, formatCurrency, formatDateTime } from "@/lib/formatters";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2 } from "lucide-react";
 
 export default function WastagePage() {
+  const { confirm, alert } = useSystemDialog();
   const [products, setProducts] = useState<Product[]>([]);
   const [wastageList, setWastageList] = useState<WastageRecord[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(1);
@@ -25,6 +27,9 @@ export default function WastagePage() {
         inventoryService.getWastage(),
       ]);
       setProducts(prodsRes.data);
+      if (prodsRes.data.length > 0 && !selectedProductId) {
+        setSelectedProductId(prodsRes.data[0].id);
+      }
       setWastageList(wastageRes);
     } catch (e) {
       console.error("Failed to load wastage data:", e);
@@ -41,13 +46,33 @@ export default function WastagePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (numQty <= 0) {
-      alert("Please enter a valid wastage quantity in KG.");
+      await alert({
+        title: "Invalid Wastage Quantity",
+        message: "Please enter a valid wastage quantity in KG greater than 0.",
+        type: "warning",
+      });
       return;
     }
     if (selectedProduct && numQty > selectedProduct.current_stock) {
-      alert(`Cannot log wastage exceeding current stock (${formatWeight(selectedProduct.current_stock)}).`);
+      await alert({
+        title: "Excessive Wastage Error",
+        message: `Cannot log wastage (${formatWeight(numQty)}) exceeding current stock (${formatWeight(
+          selectedProduct.current_stock
+        )}).`,
+        type: "danger",
+      });
       return;
     }
+
+    const confirmed = await confirm({
+      title: "Confirm Wastage Log",
+      message: `Log ${formatWeight(numQty)} of "${selectedProduct?.name || 'Product'}" as wastage (${reason})?\n\nThis will permanently deduct the weight from available store stock.`,
+      confirmText: "Yes, Record Wastage",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
 
     setIsSubmitting(true);
     try {
@@ -61,8 +86,17 @@ export default function WastagePage() {
       setQuantity("");
       setNotes("");
       loadData();
+      await alert({
+        title: "Wastage Logged",
+        message: `Recorded ${formatWeight(numQty)} of "${selectedProduct?.name}" as ${reason}. Stock has been updated.`,
+        type: "success",
+      });
     } catch (err: any) {
-      alert(err.message || "Failed to record wastage.");
+      await alert({
+        title: "Wastage Log Failed",
+        message: err.message || "Failed to record wastage.",
+        type: "danger",
+      });
     } finally {
       setIsSubmitting(false);
     }

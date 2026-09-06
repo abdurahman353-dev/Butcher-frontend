@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { CartItem, Customer } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { CartItemRow } from "./CartItemRow";
 import { ShoppingBag, Trash2, UserPlus, Banknote, Smartphone, ChevronRight } from "lucide-react";
 
@@ -37,16 +38,32 @@ export function CartPane({
   onClearCart,
   onProceedCheckout,
 }: CartPaneProps) {
+  const { confirm } = useSystemDialog();
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
+
+  const handleClearClick = async () => {
+    const confirmed = await confirm({
+      title: "Clear Shopping Cart",
+      message: "Are you sure you want to remove all items from the current cart? This cannot be undone.",
+      confirmText: "Yes, Clear Cart",
+      cancelText: "No, Keep Items",
+      type: "warning",
+    });
+    if (confirmed) {
+      onClearCart();
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none">
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
-        <div className="flex items-center gap-2">
-          <ShoppingBag className="w-4 h-4 text-zinc-400" />
-          <h3 className="text-sm font-semibold text-zinc-800">Current Sale</h3>
-          <span className="text-xs text-zinc-400">
+        <div>
+          <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
+            <ShoppingBag className="w-4 h-4 text-green-600" />
+            Current Order
+          </h2>
+          <span className="text-[11px] text-zinc-500">
             {items.length} item{items.length !== 1 ? "s" : ""} • {formatWeight(totalWeight)}
           </span>
         </div>
@@ -54,8 +71,8 @@ export function CartPane({
         {items.length > 0 && (
           <button
             type="button"
-            onClick={onClearCart}
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-600 transition-colors"
+            onClick={handleClearClick}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50"
           >
             <Trash2 className="w-3 h-3" />
             Clear

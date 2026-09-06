@@ -11,9 +11,10 @@ interface ProductGridProps {
   products: Product[];
   categories: Category[];
   onSelectProduct: (product: Product) => void;
+  isLoading?: boolean;
 }
 
-export function ProductGrid({ products, categories, onSelectProduct }: ProductGridProps) {
+export function ProductGrid({ products, categories, onSelectProduct, isLoading = false }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
@@ -30,7 +31,7 @@ export function ProductGrid({ products, categories, onSelectProduct }: ProductGr
         return (
           p.name.toLowerCase().includes(query) ||
           p.sku.toLowerCase().includes(query) ||
-          p.category_name.toLowerCase().includes(query)
+          (p.category_name || "").toLowerCase().includes(query)
         );
       }
 
@@ -71,7 +72,20 @@ export function ProductGrid({ products, categories, onSelectProduct }: ProductGr
 
       {/* Product Cards Grid */}
       <div className="flex-1 overflow-y-auto p-3">
-        {filteredProducts.length === 0 ? (
+        {isLoading && filteredProducts.length === 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="bg-white rounded-xl border border-zinc-200 p-4 animate-pulse h-36 flex flex-col justify-between"
+              >
+                <div className="h-4 bg-zinc-200 rounded w-2/3" />
+                <div className="h-6 bg-zinc-100 rounded w-1/2" />
+                <div className="h-8 bg-zinc-200 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <EmptyState
             title="No cuts found"
             description={

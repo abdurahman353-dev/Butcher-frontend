@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { productsService } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
@@ -14,7 +14,17 @@ import {
   SlidersHorizontal,
   Trash2,
   Search,
+  AlertTriangle,
+  PackageX,
+  DollarSign,
+  ChevronDown,
+  ArrowUpDown,
+  X,
+  Filter,
 } from "lucide-react";
+
+type SortKey = "name" | "current_stock" | "min_stock" | "price_per_kg" | "valuation";
+type SortDir = "asc" | "desc";
 
 export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState<"levels" | "movements">("levels");
@@ -29,14 +39,20 @@ export default function InventoryPage() {
     to: 0,
   });
 
+  // Filter state
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [movTypeFilter, setMovTypeFilter] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const fetchInventory = useCallback(async () => {
     try {
       const [prodsRes, movsRes] = await Promise.all([
-        productsService.getProducts({ per_page: 100 }),
+        productsService.getProducts({ per_page: 500 }),
         inventoryService.getMovements({
           page: currentPage,
           per_page: 20,
@@ -46,31 +62,136 @@ export default function InventoryPage() {
       ]);
       setProducts(prodsRes.data);
       setMovementsPaginated(movsRes);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_cached_products", JSON.stringify(prodsRes.data));
+      }
     } catch (e) {
       console.error("Failed to load inventory:", e);
     }
   }, [currentPage, search, statusFilter]);
 
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem("butcher_cached_products");
+      if (cached) setProducts(JSON.parse(cached));
+    } catch {}
+
     fetchInventory();
 
+    const intervalId = setInterval(fetchInventory, 10000);
     const handleDataChange = () => fetchInventory();
     window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("butcher:data-change", handleDataChange);
+    };
   }, [fetchInventory]);
 
-  const filteredProducts = products.filter((p) => {
+  // Derive unique categories from products
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(products.map((p) => p.category_name).filter(Boolean)));
+    return cats.sort();
+  }, [products]);
+
+  // Filtered & sorted products
+  const filteredProducts = useMemo(() => {
+    let list = [...products];
+
+    // Text search — name or SKU
     if (search.trim()) {
       const q = search.toLowerCase();
-      if (!p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) {
-        return false;
-      }
+      list = list.filter(
+        (p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
+      );
     }
-    if (statusFilter === "low_stock") return p.current_stock <= p.min_stock;
-    if (statusFilter === "out_of_stock") return p.current_stock <= 0;
-    if (statusFilter === "good") return p.current_stock > p.min_stock;
-    return true;
-  });
+
+    // Stock status filter
+    if (statusFilter === "low_stock") list = list.filter((p) => p.current_stock > 0 && p.current_stock <= p.min_stock);
+    else if (statusFilter === "out_of_stock") list = list.filter((p) => p.current_stock <= 0);
+    else if (statusFilter === "good") list = list.filter((p) => p.current_stock > p.min_stock);
+
+    // Category filter
+    if (categoryFilter !== "all") list = list.filter((p) => p.category_name === categoryFilter);
+
+    // Sort
+    list.sort((a, b) => {
+      let av: number | string = 0;
+      let bv: number | string = 0;
+      if (sortKey === "name") { av = a.name; bv = b.name; }
+      else if (sortKey === "current_stock") { av = a.current_stock; bv = b.current_stock; }
+      else if (sortKey === "min_stock") { av = a.min_stock; bv = b.min_stock; }
+      else if (sortKey === "price_per_kg") { av = a.price_per_kg; bv = b.price_per_kg; }
+      else if (sortKey === "valuation") {
+        av = (a.current_stock || 0) * (a.buying_cost_per_kg || a.price_per_kg * 0.75);
+        bv = (b.current_stock || 0) * (b.buying_cost_per_kg || b.price_per_kg * 0.75);
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [products, search, statusFilter, categoryFilter, sortKey, sortDir]);
+
+  // Real-time KPI calculations
+  const kpis = useMemo(() => {
+    const totalValue = products.reduce(
+      (sum, p) => sum + (p.current_stock || 0) * (p.buying_cost_per_kg || p.price_per_kg * 0.75),
+      0
+    );
+    const lowStock = products.filter((p) => p.current_stock > 0 && p.current_stock <= p.min_stock).length;
+    const outOfStock = products.filter((p) => p.current_stock <= 0).length;
+    const goodStock = products.filter((p) => p.current_stock > p.min_stock).length;
+    return { totalValue, lowStock, outOfStock, goodStock, total: products.length };
+  }, [products]);
+
+  // Filtered movements by type
+  const filteredMovements = useMemo(() => {
+    if (movTypeFilter === "all") return movementsPaginated.data;
+    return movementsPaginated.data.filter((m) => m.type === movTypeFilter);
+  }, [movementsPaginated.data, movTypeFilter]);
+
+  // Active filter count for badge
+  const activeFilterCount = [
+    statusFilter !== "all",
+    categoryFilter !== "all",
+    search.trim() !== "",
+  ].filter(Boolean).length;
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setSortKey("name");
+    setSortDir("asc");
+  };
+
+  const SortTh = ({
+    label,
+    col,
+    className = "",
+  }: {
+    label: string;
+    col: SortKey;
+    className?: string;
+  }) => (
+    <th
+      className={`py-3.5 px-3 cursor-pointer select-none hover:text-zinc-800 transition-colors ${className}`}
+      onClick={() => toggleSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <ArrowUpDown
+          className={`w-3 h-3 ${sortKey === col ? "text-green-600" : "text-zinc-400"}`}
+        />
+      </span>
+    </th>
+  );
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">
@@ -90,7 +211,7 @@ export default function InventoryPage() {
           </p>
         </div>
 
-        {/* 3 Quick Action Shortcuts */}
+        {/* Quick Action Shortcuts */}
         <div className="flex items-center gap-2 flex-wrap">
           <Link
             href="/inventory/stock-in"
@@ -102,19 +223,86 @@ export default function InventoryPage() {
 
           <Link
             href="/inventory/adjust"
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
           >
-            <SlidersHorizontal className="w-4 h-4 text-zinc-500" />
+            <SlidersHorizontal className="w-4 h-4" />
             <span>Adjustment</span>
           </Link>
 
           <Link
             href="/inventory/wastage"
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
           >
-            <Trash2 className="w-4 h-4 text-rose-500" />
+            <Trash2 className="w-4 h-4" />
             <span>Log Wastage</span>
           </Link>
+        </div>
+      </div>
+
+      {/* Real-time KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-xs flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Stock Value</span>
+            <div className="w-7 h-7 rounded-lg bg-green-50 border border-green-100 flex items-center justify-center text-green-600">
+              <DollarSign className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl font-bold text-zinc-900 tabular-nums tracking-tight mt-1">
+            {formatCurrency(kpis.totalValue)}
+          </div>
+          <p className="text-[11px] text-green-700 font-semibold">Est. inventory valuation</p>
+        </div>
+
+        <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-xs flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Meat Cuts</span>
+            <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+              <Boxes className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="text-xl font-bold text-zinc-900 tabular-nums tracking-tight mt-1">
+            {kpis.total}
+          </div>
+          <p className="text-[11px] text-zinc-500 font-medium">{kpis.goodStock} at good levels</p>
+        </div>
+
+        <div className={`rounded-2xl p-4 shadow-xs flex flex-col gap-1 border ${kpis.lowStock > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-zinc-200"}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Low Stock</span>
+            <div className="w-7 h-7 rounded-lg bg-amber-100 border border-amber-200 flex items-center justify-center text-amber-600">
+              <AlertTriangle className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className={`text-xl font-bold tabular-nums tracking-tight mt-1 ${kpis.lowStock > 0 ? "text-amber-700" : "text-zinc-900"}`}>
+            {kpis.lowStock}
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("low_stock")}
+            className="text-[11px] text-amber-700 font-semibold text-left hover:underline"
+          >
+            {kpis.lowStock > 0 ? "View low stock cuts →" : "All well stocked"}
+          </button>
+        </div>
+
+        <div className={`rounded-2xl p-4 shadow-xs flex flex-col gap-1 border ${kpis.outOfStock > 0 ? "bg-rose-50 border-rose-200" : "bg-white border-zinc-200"}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">Out of Stock</span>
+            <div className="w-7 h-7 rounded-lg bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-600">
+              <PackageX className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className={`text-xl font-bold tabular-nums tracking-tight mt-1 ${kpis.outOfStock > 0 ? "text-rose-700" : "text-zinc-900"}`}>
+            {kpis.outOfStock}
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("out_of_stock")}
+            className="text-[11px] text-rose-700 font-semibold text-left hover:underline"
+          >
+            {kpis.outOfStock > 0 ? "View out of stock →" : "All items in stock"}
+          </button>
         </div>
       </div>
 
@@ -145,31 +333,189 @@ export default function InventoryPage() {
         </button>
       </div>
 
-      {/* Filter Bar */}
-      <div className="p-4 bg-white border border-zinc-200 rounded-2xl flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-xs">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cut name or SKU..."
-            className="w-full bg-white border border-zinc-200 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-          />
-        </div>
+      {/* ── FILTER BAR ── */}
+      {activeTab === "levels" ? (
+        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
+          {/* Primary row: search + toggle */}
+          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center p-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, SKU, or category…"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filter inventory by stock status"
-          className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-        >
-          <option value="all">All Inventory</option>
-          <option value="good">Good Stock Level</option>
-          <option value="low_stock">Low Stock Alerts</option>
-          <option value="out_of_stock">Out of Stock</option>
-        </select>
-      </div>
+            {/* Expand/collapse advanced filters */}
+            <button
+              type="button"
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                showFilters || activeFilterCount > 0
+                  ? "bg-green-50 border-green-300 text-green-700"
+                  : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-green-600 text-white text-[9px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+            </button>
+
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 text-xs font-semibold hover:bg-rose-100 transition-all"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Advanced filter panel */}
+          {showFilters && (
+            <div className="border-t border-zinc-100 bg-zinc-50/70 p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Stock Status */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                  Stock Status
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="good">✅ Good Level</option>
+                  <option value="low_stock">⚠️ Low Stock</option>
+                  <option value="out_of_stock">🚫 Out of Stock</option>
+                </select>
+              </div>
+
+              {/* Category */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                  Category
+                </label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sort By */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                  Sort By
+                </label>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as SortKey)}
+                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                >
+                  <option value="name">Name (A–Z)</option>
+                  <option value="current_stock">Stock Weight</option>
+                  <option value="min_stock">Min Threshold</option>
+                  <option value="price_per_kg">Price / KG</option>
+                  <option value="valuation">Est. Valuation</option>
+                </select>
+              </div>
+
+              {/* Sort Direction */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                  Order
+                </label>
+                <select
+                  value={sortDir}
+                  onChange={(e) => setSortDir(e.target.value as SortDir)}
+                  className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                >
+                  <option value="asc">↑ Ascending</option>
+                  <option value="desc">↓ Descending</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Active filter chips */}
+          {activeFilterCount > 0 && (
+            <div className="border-t border-zinc-100 px-4 py-2 flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Active:</span>
+              {statusFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 text-[10px] font-semibold">
+                  {statusFilter.replace("_", " ")}
+                  <button onClick={() => setStatusFilter("all")}><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {categoryFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-semibold">
+                  {categoryFilter}
+                  <button onClick={() => setCategoryFilter("all")}><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {search.trim() && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-700 text-[10px] font-semibold">
+                  &quot;{search}&quot;
+                  <button onClick={() => setSearch("")}><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              <span className="text-[10px] text-zinc-400 ml-auto">{filteredProducts.length} of {products.length} items</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Movements filter bar */
+        <div className="p-4 bg-white border border-zinc-200 rounded-2xl flex flex-col md:flex-row gap-3 items-stretch md:items-center shadow-xs">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search movements by product name…"
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
+            />
+          </div>
+          <select
+            value={movTypeFilter}
+            onChange={(e) => setMovTypeFilter(e.target.value)}
+            aria-label="Filter by movement type"
+            className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+          >
+            <option value="all">All Movement Types</option>
+            <option value="stock_in">📦 Stock In</option>
+            <option value="sale">🛒 Sale</option>
+            <option value="wastage">🗑️ Wastage</option>
+            <option value="adjustment">⚖️ Adjustment</option>
+          </select>
+        </div>
+      )}
 
       {/* TAB 1: Current Stock Levels Table */}
       {activeTab === "levels" ? (
@@ -178,69 +524,87 @@ export default function InventoryPage() {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  <th className="py-3.5 pl-4">Product Cut</th>
+                  <SortTh label="Product Cut" col="name" className="pl-4" />
                   <th className="py-3.5 px-3">SKU</th>
                   <th className="py-3.5 px-3">Category</th>
-                  <th className="py-3.5 px-3 text-right">Available Weight</th>
-                  <th className="py-3.5 px-3 text-right">Min Threshold</th>
-                  <th className="py-3.5 px-3 text-right">Buying Cost / KG</th>
-                  <th className="py-3.5 px-3 text-right">Est. Valuation</th>
+                  <SortTh label="Available Weight" col="current_stock" className="text-right" />
+                  <SortTh label="Min Threshold" col="min_stock" className="text-right" />
+                  <SortTh label="Cost / KG" col="price_per_kg" className="text-right" />
+                  <SortTh label="Est. Valuation" col="valuation" className="text-right" />
                   <th className="py-3.5 px-3 text-center">Status</th>
                   <th className="py-3.5 pr-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {filteredProducts.map((p) => {
-                  const isOut = p.current_stock <= 0;
-                  const isLow = !isOut && p.current_stock <= p.min_stock;
-                  const stockStatus = isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
-                  const valuation = p.current_stock * (p.buying_cost_per_kg || p.price_per_kg * 0.75);
+                {filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-10 text-center text-zinc-400 text-sm">
+                      No meat cuts match your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((p) => {
+                    const isOut = p.current_stock <= 0;
+                    const isLow = !isOut && p.current_stock <= p.min_stock;
+                    const stockStatus = isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
+                    const valuation =
+                      (p.current_stock || 0) * (p.buying_cost_per_kg || p.price_per_kg * 0.75);
 
-                  return (
-                    <tr key={p.id} className="hover:bg-zinc-50/60 transition-colors">
-                      <td className="py-3 pl-4 font-semibold text-zinc-900">{p.name}</td>
-                      <td className="py-3 px-3 font-mono text-zinc-500">{p.sku}</td>
-                      <td className="py-3 px-3 text-zinc-700">{p.category_name}</td>
-                      <td className="py-3 px-3 text-right font-bold tabular-nums text-sm">
-                        <span
-                          className={
-                            isOut ? "text-rose-600" : isLow ? "text-amber-700" : "text-green-700"
-                          }
-                        >
-                          {formatWeight(p.current_stock)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                        {formatWeight(p.min_stock)}
-                      </td>
-                      <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                        {p.buying_cost_per_kg ? formatCurrency(p.buying_cost_per_kg) : "—"}
-                      </td>
-                      <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
-                        {formatCurrency(valuation)}
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <StatusBadge status={stockStatus} type="stock" />
-                      </td>
-                      <td className="py-3 pr-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Link
-                            href={`/inventory/stock-in?product_id=${p.id}`}
-                            className="px-2 py-1 bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 rounded-lg text-[10px] font-semibold"
-                          >
-                            + Stock
-                          </Link>
-                          <Link
-                            href={`/inventory/adjust?product_id=${p.id}`}
-                            className="px-2 py-1 bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-700 rounded-lg text-[10px] font-semibold shadow-2xs"
-                          >
-                            Adjust
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={p.id} className="hover:bg-zinc-50/60 transition-colors">
+                        <td className="py-3 pl-4 font-semibold text-zinc-900">{p.name}</td>
+                        <td className="py-3 px-3 font-mono text-zinc-500">{p.sku}</td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 text-[10px] font-semibold">
+                            {p.category_name}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-bold tabular-nums text-sm">
+                          <span className={isOut ? "text-rose-600" : isLow ? "text-amber-700" : "text-green-700"}>
+                            {formatWeight(p.current_stock)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
+                          {formatWeight(p.min_stock)}
+                        </td>
+                        <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
+                          {p.buying_cost_per_kg ? formatCurrency(p.buying_cost_per_kg) : "—"}
+                        </td>
+                        <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
+                          {formatCurrency(valuation)}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <StatusBadge status={stockStatus} type="stock" />
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Link
+                              href={`/inventory/stock-in?product_id=${p.id}`}
+                              className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
+                              title={`Add stock to ${p.name}`}
+                            >
+                              + Stock
+                            </Link>
+                            <Link
+                              href={`/inventory/adjust?product_id=${p.id}`}
+                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
+                              title={`Adjust ${p.name}`}
+                            >
+                              Adjust
+                            </Link>
+                            <Link
+                              href={`/inventory/wastage?product_id=${p.id}`}
+                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
+                              title={`Log wastage for ${p.name}`}
+                            >
+                              Waste
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -263,14 +627,14 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {movementsPaginated.data.length === 0 ? (
+                {filteredMovements.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-8 text-center text-zinc-400">
                       No stock movements recorded yet.
                     </td>
                   </tr>
                 ) : (
-                  movementsPaginated.data.map((m) => (
+                  filteredMovements.map((m) => (
                     <tr key={m.id} className="hover:bg-zinc-50/60 transition-colors">
                       <td className="py-3 pl-4 text-zinc-500">{formatDateTime(m.created_at)}</td>
                       <td className="py-3 px-3 font-semibold text-zinc-900">{m.product_name}</td>

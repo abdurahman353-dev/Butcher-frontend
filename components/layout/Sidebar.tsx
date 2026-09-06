@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
+import { useSystemDialog } from "@/contexts/DialogContext";
 
 interface NavItem {
   name: string;
@@ -33,6 +34,20 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, isAdmin, switchRole, logout } = useAuth();
   const { isShiftOpen } = useShift();
+  const { confirm } = useSystemDialog();
+
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: "Sign Out",
+      message: "Are you sure you want to sign out of the butcher POS system?",
+      confirmText: "Yes, Sign Out",
+      cancelText: "Stay Logged In",
+      type: "warning",
+    });
+    if (confirmed) {
+      logout();
+    }
+  };
 
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -106,7 +121,7 @@ export function Sidebar() {
           </div>
           <button
             type="button"
-            onClick={logout}
+            onClick={handleLogout}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
             title="Sign out"
           >

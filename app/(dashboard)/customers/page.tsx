@@ -5,9 +5,12 @@ import { customersService } from "@/services/customers.service";
 import { Customer, PaginatedResponse } from "@/types";
 import { formatCurrency } from "@/lib/formatters";
 import { Pagination } from "@/components/shared/Pagination";
-import { Users, Plus, Search, Phone, ShoppingBag, X } from "lucide-react";
+import { usePolling } from "@/hooks/usePolling";
+import { useSystemDialog } from "@/contexts/DialogContext";
+import { Users, Plus, Search, Phone, ShoppingBag, X, Trash2 } from "lucide-react";
 
 export default function CustomersPage() {
+  const { confirm, alert } = useSystemDialog();
   const [paginated, setPaginated] = useState<PaginatedResponse<Customer>>({
     data: [],
     current_page: 1,
@@ -29,6 +32,28 @@ export default function CustomersPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("butcher_cached_customers");
+      if (cached) {
+        const list = JSON.parse(cached);
+        if (Array.isArray(list)) {
+          setPaginated({
+            data: list,
+            current_page: 1,
+            last_page: 1,
+            per_page: 20,
+            total: list.length,
+            from: 1,
+            to: list.length,
+          });
+        } else if (list.data) {
+          setPaginated(list);
+        }
+      }
+    } catch {}
+  }, []);
+
   const fetchCustomers = useCallback(async () => {
     try {
       const res = await customersService.getCustomers({
@@ -37,41 +62,75 @@ export default function CustomersPage() {
         search,
       });
       setPaginated(res);
+      if (typeof window !== "undefined" && currentPage === 1 && !search) {
+        localStorage.setItem("butcher_cached_customers", JSON.stringify(res.data));
+      }
     } catch (e) {
       console.error("Failed to load customers:", e);
     }
   }, [currentPage, search]);
 
-  useEffect(() => {
-    fetchCustomers();
-
-    const handleDataChange = () => fetchCustomers();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
-  }, [fetchCustomers]);
+  // Real-time polling every 10s
+  usePolling(fetchCustomers, 10000);
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
-      alert("Name and phone number are required.");
+      await alert({
+        title: "Validation Error",
+        message: "Customer name and contact phone number are required.",
+        type: "warning",
+      });
       return;
     }
 
     setIsSaving(true);
     try {
       await customersService.createCustomer({
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email || undefined,
-        address: formData.address || undefined,
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim() || undefined,
+        address: formData.address.trim() || undefined,
       });
       setIsAddModalOpen(false);
       setFormData({ name: "", phone: "", email: "", address: "" });
       fetchCustomers();
+      await alert({
+        title: "Customer Added",
+        message: `Customer "${formData.name.trim()}" has been registered successfully.`,
+        type: "success",
+      });
     } catch (err: any) {
-      alert(err.message || "Failed to add customer.");
+      await alert({
+        title: "Registration Failed",
+        message: err.message || "Failed to add customer.",
+        type: "danger",
+      });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCustomer = async (c: Customer) => {
+    const confirmed = await confirm({
+      title: "Delete Customer",
+      message: `Are you sure you want to delete customer account for "${c.name}"?\n\nPhone: ${c.phone}\nThis action cannot be undone.`,
+      confirmText: "Yes, Delete Customer",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await customersService.deleteCustomer(c.id);
+      fetchCustomers();
+    } catch (err: any) {
+      await alert({
+        title: "Delete Failed",
+        message: err.message || "Failed to delete customer.",
+        type: "danger",
+      });
     }
   };
 
@@ -136,8 +195,18 @@ export default function CustomersPage() {
                     {c.phone}
                   </p>
                 </div>
-                <div className="w-9 h-9 rounded-full bg-green-50 border border-green-200 flex items-center justify-center font-bold text-green-700 text-xs">
-                  {c.name.charAt(0)}
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-full bg-green-50 border border-green-200 flex items-center justify-center font-bold text-green-700 text-xs">
+                    {c.name.charAt(0)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCustomer(c)}
+                    className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-2xs"
+                    title="Delete customer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 

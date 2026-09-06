@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { CartItem, Customer, Sale } from "@/types";
 import { formatCurrency } from "@/lib/formatters";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { CashPayment } from "./CashPayment";
 import { MPesaPayment } from "./MPesaPayment";
 import { Banknote, Smartphone, CreditCard, X, CheckCircle2, Printer, Eye, PlusCircle } from "lucide-react";
@@ -41,6 +42,7 @@ export function CheckoutModal({
   onPrintReceipt,
   onNewSale,
 }: CheckoutModalProps) {
+  const { alert: showAlert } = useSystemDialog();
   const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "card">(initialMethod);
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
@@ -54,7 +56,11 @@ export function CheckoutModal({
       const sale = await onCompleteSale({ payment_method: "cash", amount_received: received });
       setCompletedSale(sale);
     } catch (e: any) {
-      alert(e.message || "Failed to complete sale.");
+      await showAlert({
+        title: "Checkout Error",
+        message: e.message || "Failed to complete sale.",
+        type: "danger",
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -66,7 +72,11 @@ export function CheckoutModal({
       const sale = await onCompleteSale({ payment_method: "mpesa", mpesa_reference: ref });
       setCompletedSale(sale);
     } catch (e: any) {
-      alert(e.message || "Failed to complete sale.");
+      await showAlert({
+        title: "Checkout Error",
+        message: e.message || "Failed to complete sale.",
+        type: "danger",
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -81,7 +91,11 @@ export function CheckoutModal({
       });
       setCompletedSale(sale);
     } catch (e: any) {
-      alert(e.message || "Failed to complete sale.");
+      await showAlert({
+        title: "Checkout Error",
+        message: e.message || "Failed to complete sale.",
+        type: "danger",
+      });
     } finally {
       setIsProcessing(false);
     }

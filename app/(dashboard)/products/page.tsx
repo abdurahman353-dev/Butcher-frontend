@@ -6,15 +6,20 @@ import { Product, Category, PaginatedResponse } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { MeatImage } from "@/components/shared/MeatImage";
 import { Pagination } from "@/components/shared/Pagination";
+import { usePolling } from "@/hooks/usePolling";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import {
   Package,
   Plus,
   Search,
   Edit2,
+  Trash2,
   X,
+  AlertCircle,
 } from "lucide-react";
 
 export default function ProductsPage() {
+  const { confirm, alert } = useSystemDialog();
   const [paginated, setPaginated] = useState<PaginatedResponse<Product>>({
     data: [],
     current_page: 1,
@@ -31,9 +36,30 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
+  useEffect(() => {
+    try {
+      const cachedProds = localStorage.getItem("butcher_cached_products");
+      const cachedCats = localStorage.getItem("butcher_cached_categories");
+      if (cachedProds) {
+        const list = JSON.parse(cachedProds);
+        setPaginated({
+          data: list,
+          current_page: 1,
+          last_page: 1,
+          per_page: 20,
+          total: list.length,
+          from: 1,
+          to: list.length,
+        });
+      }
+      if (cachedCats) setCategories(JSON.parse(cachedCats));
+    } catch {}
+  }, []);
+
   // Modal State (Add or Edit)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
@@ -47,8 +73,7 @@ export default function ProductsPage() {
 
   const fetchProducts = useCallback(async () => {
     try {
-      const [cats, prods] = await Promise.all([
-        productsService.getCategories(),
+      const [prodsRes, cats] = await Promise.all([
         productsService.getProducts({
           page: currentPage,
           per_page: 20,
@@ -56,24 +81,25 @@ export default function ProductsPage() {
           category_id: categoryFilter,
           status: statusFilter,
         }),
+        productsService.getCategories(),
       ]);
+      setPaginated(prodsRes);
       setCategories(cats);
-      setPaginated(prods);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_cached_products", JSON.stringify(prodsRes.data));
+        localStorage.setItem("butcher_cached_categories", JSON.stringify(cats));
+      }
     } catch (e) {
       console.error("Failed to load products:", e);
     }
   }, [currentPage, search, categoryFilter, statusFilter]);
 
-  useEffect(() => {
-    fetchProducts();
-
-    const handleDataChange = () => fetchProducts();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
-  }, [fetchProducts]);
+  // Real-time: poll every 10s
+  usePolling(fetchProducts, 10000);
 
   const openAddModal = () => {
     setEditingProduct(null);
+    setModalError(null);
     setFormData({
       name: "",
       sku: "",
@@ -88,6 +114,7 @@ export default function ProductsPage() {
 
   const openEditModal = (product: Product) => {
     setEditingProduct(product);
+    setModalError(null);
     setFormData({
       name: product.name,
       sku: product.sku,
@@ -102,16 +129,24 @@ export default function ProductsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
+
     if (!formData.name.trim() || !formData.price_per_kg) {
-      alert("Please fill in the product name and price per KG.");
+      const errMsg = "Please fill in the product name and selling price per KG.";
+      setModalError(errMsg);
+      await alert({
+        title: "Validation Error",
+        message: errMsg,
+        type: "warning",
+      });
       return;
     }
 
     setIsSaving(true);
     try {
       const payload: Partial<Product> = {
-        name: formData.name,
-        sku: formData.sku || undefined,
+        name: formData.name.trim(),
+        sku: formData.sku.trim() || undefined,
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
         buying_cost_per_kg: formData.buying_cost_per_kg ? parseFloat(formData.buying_cost_per_kg) : undefined,
@@ -129,18 +164,64 @@ export default function ProductsPage() {
       setIsModalOpen(false);
       fetchProducts();
     } catch (err: any) {
-      alert(err.message || "Failed to save product.");
+      const msg = err.message || "Failed to save product.";
+      setModalError(msg);
+      await alert({
+        title: "Error Saving Product",
+        message: msg,
+        type: "danger",
+      });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleToggleStatus = async (id: number) => {
+  const handleToggleStatus = async (product: Product) => {
+    const isActivating = !product.is_active;
+    const confirmed = await confirm({
+      title: isActivating ? "Activate Meat Cut" : "Deactivate Meat Cut",
+      message: isActivating
+        ? `Make "${product.name}" active and visible on the POS terminal?`
+        : `Deactivate "${product.name}"? It will no longer be sellable on the POS terminal until re-activated.`,
+      confirmText: isActivating ? "Yes, Activate" : "Yes, Deactivate",
+      cancelText: "Cancel",
+      type: isActivating ? "success" : "warning",
+    });
+
+    if (!confirmed) return;
+
     try {
-      await productsService.toggleStatus(id);
+      await productsService.toggleStatus(product.id);
       fetchProducts();
     } catch (e: any) {
-      alert(e.message || "Failed to update status.");
+      await alert({
+        title: "Status Update Failed",
+        message: e.message || "Failed to update product status.",
+        type: "danger",
+      });
+    }
+  };
+
+  const handleDeleteProduct = async (product: Product) => {
+    const confirmed = await confirm({
+      title: "Delete Meat Cut",
+      message: `Are you sure you want to delete "${product.name}" (${product.sku})?\n\nThis will permanently remove this meat cut from inventory and POS terminal. This action cannot be undone.`,
+      confirmText: "Yes, Delete Product",
+      cancelText: "No, Keep Product",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await productsService.deleteProduct(product.id);
+      fetchProducts();
+    } catch (e: any) {
+      await alert({
+        title: "Delete Failed",
+        message: e.message || "Failed to delete product.",
+        type: "danger",
+      });
     }
   };
 
@@ -286,12 +367,13 @@ export default function ProductsPage() {
                       <td className="py-3 px-3 text-center">
                         <button
                           type="button"
-                          onClick={() => handleToggleStatus(product.id)}
+                          onClick={() => handleToggleStatus(product)}
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
                             product.is_active
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : "bg-zinc-100 text-zinc-500 border-zinc-200"
+                              ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                              : "bg-zinc-100 text-zinc-500 border-zinc-200 hover:bg-zinc-200"
                           }`}
+                          title={`Click to ${product.is_active ? "deactivate" : "activate"}`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
@@ -302,14 +384,24 @@ export default function ProductsPage() {
                         </button>
                       </td>
                       <td className="py-3 pr-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(product)}
-                          className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 transition-colors shadow-2xs"
-                          title="Edit product"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(product)}
+                            className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 transition-colors shadow-2xs"
+                            title="Edit meat cut"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProduct(product)}
+                            className="p-1.5 rounded-lg border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors shadow-2xs"
+                            title="Delete meat cut"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -352,6 +444,13 @@ export default function ProductsPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {modalError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSave} className="space-y-3 text-xs">
               <div>

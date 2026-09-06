@@ -30,6 +30,11 @@ export function Topbar({ isMobileMenuOpen, onMobileMenuToggle }: TopbarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
   const { isShiftOpen } = useShift();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const title = pageTitles[pathname] ?? "Prime Cut POS";
 
@@ -48,13 +53,15 @@ export function Topbar({ isMobileMenuOpen, onMobileMenuToggle }: TopbarProps) {
 
       <div className="flex items-center gap-3">
         {/* Shift indicator */}
-        <div className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
-          isShiftOpen
-            ? "bg-green-50 text-green-700"
-            : "bg-zinc-100 text-zinc-500"
-        }`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isShiftOpen ? "bg-green-500" : "bg-zinc-400"}`} />
-          {isShiftOpen ? "Shift Open" : "Shift Closed"}
+        <div
+          className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
+            mounted && isShiftOpen
+              ? "bg-green-50 text-green-700"
+              : "bg-zinc-100 text-zinc-500"
+          }`}
+        >
+          <div className={`w-1.5 h-1.5 rounded-full ${mounted && isShiftOpen ? "bg-green-500" : "bg-zinc-400"}`} />
+          {mounted ? (isShiftOpen ? "Shift Open" : "Shift Closed") : "Checking..."}
         </div>
 
         <div className="w-7 h-7 rounded-full bg-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-600">

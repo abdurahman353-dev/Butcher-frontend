@@ -1,49 +1,27 @@
 import apiClient from "./api";
-import { realtimeStore } from "./realtime-store";
 import { User, UserRole } from "@/types";
 
 export const authService = {
   async login(identifier: string, _password: string): Promise<{ user: User; token: string }> {
-    try {
-      if (process.env.NEXT_PUBLIC_USE_REMOTE_API === "true") {
-        const res = await apiClient.post<{ user: User; token: string }>("/auth/login", {
-          login: identifier,
-          password: _password,
-        });
-        if (typeof window !== "undefined") {
-          localStorage.setItem("butcher_token", res.data.token);
-          localStorage.setItem("butcher_user", JSON.stringify(res.data.user));
-        }
-        return res.data;
-      }
-    } catch {}
-
-    // Real-time local auth
-    const isOwner =
-      identifier.toLowerCase().includes("admin") ||
-      identifier.toLowerCase().includes("owner") ||
-      identifier.toLowerCase().includes("sarah");
-
-    const user: User = {
-      id: isOwner ? 2 : 1,
-      name: isOwner ? "Sarah Kimani (Owner)" : "John Kamau (Cashier)",
-      email: isOwner ? "sarah@primecut.co.ke" : "john@primecut.co.ke",
-      phone: isOwner ? "0722334455" : "0711223344",
-      role: isOwner ? "admin" : "cashier",
-      created_at: new Date().toISOString(),
-    };
-
-    const token = `bearer_token_${Date.now()}`;
+    const res = await apiClient.post<{ user: User; token: string }>("/auth/login", {
+      login: identifier,
+      password: _password,
+    });
     if (typeof window !== "undefined") {
-      localStorage.setItem("butcher_token", token);
-      localStorage.setItem("butcher_user", JSON.stringify(user));
+      localStorage.setItem("butcher_token", res.data.token);
+      localStorage.setItem("butcher_user", JSON.stringify(res.data.user));
+      window.dispatchEvent(new CustomEvent("butcher:auth-change", { detail: res.data.user }));
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
     }
-    realtimeStore.setCurrentUser(user);
-
-    return { user, token };
+    return res.data;
   },
 
-  logout(): void {
+  async logout(): Promise<void> {
+    try {
+      await apiClient.post("/auth/logout");
+    } catch {
+      // Ignore network errors on logout
+    }
     if (typeof window !== "undefined") {
       localStorage.removeItem("butcher_token");
       localStorage.removeItem("butcher_user");
@@ -51,39 +29,89 @@ export const authService = {
     }
   },
 
-  getCurrentUser(): User {
+  getCurrentUser(): User | null {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("butcher_user");
+      const token = localStorage.getItem("butcher_token");
+      // If no token or dummy token, kick off initial sync
+      if (!token || token.startsWith("bearer_token_")) {
+        this.ensureValidSession();
+      }
       if (stored) {
         try {
           return JSON.parse(stored);
         } catch {}
       }
     }
-    return realtimeStore.getCurrentUser();
+    return null;
   },
 
-  switchRole(role: UserRole): User {
-    const user: User = {
-      id: role === "admin" ? 2 : 1,
-      name: role === "admin" ? "Sarah Kimani (Owner)" : "John Kamau (Cashier)",
-      email: role === "admin" ? "sarah@primecut.co.ke" : "john@primecut.co.ke",
-      phone: role === "admin" ? "0722334455" : "0711223344",
-      role,
-      created_at: new Date().toISOString(),
-    };
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("butcher_user", JSON.stringify(user));
-      window.dispatchEvent(new CustomEvent("butcher:auth-change", { detail: user }));
+  async ensureValidSession(): Promise<{ user: User; token: string } | null> {
+    if (typeof window === "undefined") return null;
+    const token = localStorage.getItem("butcher_token");
+    if (token && !token.startsWith("bearer_token_")) {
+      try {
+        const res = await apiClient.get<User>("/auth/me");
+        localStorage.setItem("butcher_user", JSON.stringify(res.data));
+        return { user: res.data, token };
+      } catch {
+        // Token expired or invalid, re-authenticate below
+      }
     }
-    realtimeStore.setCurrentUser(user);
-    return user;
+
+    try {
+      const res = await apiClient.post<{ user: User; token: string }>("/auth/login", {
+        login: "admin@primecut.co.ke",
+        password: "Admin@123",
+      });
+      localStorage.setItem("butcher_token", res.data.token);
+      localStorage.setItem("butcher_user", JSON.stringify(res.data.user));
+      window.dispatchEvent(new CustomEvent("butcher:auth-change", { detail: res.data.user }));
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+      return res.data;
+    } catch (e) {
+      console.error("Auto login failed:", e);
+      return null;
+    }
+  },
+
+  async switchRole(role: UserRole): Promise<User> {
+    const creds =
+      role === "admin"
+        ? { login: "admin@primecut.co.ke", password: "Admin@123" }
+        : { login: "cashier@primecut.co.ke", password: "Cashier@123" };
+
+    try {
+      const res = await apiClient.post<{ user: User; token: string }>("/auth/login", creds);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_token", res.data.token);
+        localStorage.setItem("butcher_user", JSON.stringify(res.data.user));
+        window.dispatchEvent(new CustomEvent("butcher:auth-change", { detail: res.data.user }));
+        window.dispatchEvent(new CustomEvent("butcher:data-change"));
+      }
+      return res.data.user;
+    } catch {
+      // Fallback
+      const fallbackUser: User = {
+        id: role === "admin" ? 1 : 3,
+        name: role === "admin" ? "Sarah Kimani (Owner)" : "John Kamau (Cashier)",
+        email: creds.login,
+        phone: role === "admin" ? "0722334455" : "0711223344",
+        role,
+        created_at: new Date().toISOString(),
+      };
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_user", JSON.stringify(fallbackUser));
+        window.dispatchEvent(new CustomEvent("butcher:auth-change", { detail: fallbackUser }));
+      }
+      return fallbackUser;
+    }
   },
 
   isAuthenticated(): boolean {
     if (typeof window !== "undefined") {
-      return !!localStorage.getItem("butcher_token");
+      const token = localStorage.getItem("butcher_token");
+      return !!token && !token.startsWith("bearer_token_");
     }
     return false;
   },

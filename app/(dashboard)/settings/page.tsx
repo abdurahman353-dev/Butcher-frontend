@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { settingsService } from "@/services/settings.service";
 import { ShopSettings } from "@/types";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { Settings, Save, CheckCircle2 } from "lucide-react";
 
 export default function SettingsPage() {
+  const { alert } = useSystemDialog();
   const [settings, setSettings] = useState<ShopSettings>({
     shop_name: "Prime Cut Artisan Butchery",
     phone: "+254 712 345 678",
@@ -25,10 +27,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const data = await settingsService.getSettings();
-      setSettings(data);
+      try {
+        const data = await settingsService.getSettings();
+        setSettings(data);
+      } catch (e) {
+        console.error("Failed to load settings:", e);
+      }
     }
     load();
+
+    const handleDataChange = () => load();
+    window.addEventListener("butcher:data-change", handleDataChange);
+    return () => window.removeEventListener("butcher:data-change", handleDataChange);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,7 +49,11 @@ export default function SettingsPage() {
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (e: any) {
-      alert(e.message || "Failed to save settings.");
+      await alert({
+        title: "Settings Save Failed",
+        message: e.message || "Failed to save settings.",
+        type: "danger",
+      });
     } finally {
       setIsSaving(false);
     }

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { reportsService } from "@/services/reports.service";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
+import { usePolling } from "@/hooks/usePolling";
 import {
   BarChart3,
   TrendingUp,
@@ -27,20 +28,19 @@ export default function ReportsPage() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchAnalytics() {
-      setIsLoading(true);
-      try {
-        const data = await reportsService.getReportAnalytics(period);
-        setAnalytics(data);
-      } catch (e) {
-        console.error("Failed to load report analytics:", e);
-      } finally {
-        setIsLoading(false);
-      }
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const data = await reportsService.getReportAnalytics(period);
+      setAnalytics(data);
+    } catch (e) {
+      console.error("Failed to load report analytics:", e);
+    } finally {
+      setIsLoading(false);
     }
-    fetchAnalytics();
   }, [period]);
+
+  // Real-time polling every 10s
+  usePolling(fetchAnalytics, 10000);
 
   const cashAmount = analytics?.payment_breakdown?.cash || 0;
   const mpesaAmount = analytics?.payment_breakdown?.mpesa || 0;

@@ -8,12 +8,14 @@ import { inventoryService } from "@/services/inventory.service";
 import { Product } from "@/types";
 import { formatWeight } from "@/lib/formatters";
 import { roundTo } from "@/lib/math";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { ArrowLeft, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 
 function StockAdjustForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product_id");
+  const { confirm, alert } = useSystemDialog();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(
@@ -40,17 +42,43 @@ function StockAdjustForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (adjNum === 0) {
-      alert("Please enter a non-zero adjustment amount (+KG or -KG).");
+      await alert({
+        title: "Invalid Adjustment",
+        message: "Please enter a non-zero adjustment amount (+KG to add, or -KG to reduce).",
+        type: "warning",
+      });
       return;
     }
     if (!reason.trim()) {
-      alert("A reason is mandatory for all inventory adjustments.");
+      await alert({
+        title: "Reason Required",
+        message: "An adjustment audit reason is mandatory for all inventory changes.",
+        type: "warning",
+      });
       return;
     }
     if (newStock < 0) {
-      alert("Adjustment cannot result in negative stock.");
+      await alert({
+        title: "Negative Stock Error",
+        message: `Adjustment cannot result in negative stock. Current stock is ${formatWeight(
+          selectedProduct?.current_stock || 0
+        )}.`,
+        type: "danger",
+      });
       return;
     }
+
+    const confirmed = await confirm({
+      title: "Confirm Stock Adjustment",
+      message: `Adjust stock for "${selectedProduct?.name || 'Product'}" by ${
+        adjNum > 0 ? `+${adjNum}` : adjNum
+      } KG?\n\nReason: "${reason.trim()}".\nNew stock will be: ${formatWeight(newStock)}.`,
+      confirmText: "Yes, Apply Adjustment",
+      cancelText: "Cancel",
+      type: adjNum < 0 ? "warning" : "info",
+    });
+
+    if (!confirmed) return;
 
     setIsSubmitting(true);
     try {
@@ -69,7 +97,11 @@ function StockAdjustForm() {
         router.push("/inventory");
       }, 1500);
     } catch (err: any) {
-      alert(err.message || "Failed to adjust stock.");
+      await alert({
+        title: "Adjustment Failed",
+        message: err.message || "Failed to adjust stock.",
+        type: "danger",
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -9,9 +9,21 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const cur = authService.getCurrentUser();
-    setUser(cur);
-    setIsLoading(false);
+    async function init() {
+      const cur = authService.getCurrentUser();
+      if (cur) {
+        setUser(cur);
+        setIsLoading(false);
+      } else {
+        const session = await authService.ensureValidSession();
+        if (session) {
+          setUser(session.user);
+        }
+        setIsLoading(false);
+      }
+    }
+
+    init();
 
     const handleAuthChange = (e: any) => {
       if (e.detail) setUser(e.detail);
@@ -23,8 +35,8 @@ export function useAuth() {
     };
   }, []);
 
-  const switchRole = (role: UserRole) => {
-    const updated = authService.switchRole(role);
+  const switchRole = async (role: UserRole) => {
+    const updated = await authService.switchRole(role);
     setUser(updated);
     return updated;
   };

@@ -8,6 +8,7 @@ import { Sale } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import {
   ArrowLeft,
   Printer,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 export default function SaleDetailPage() {
+  const { confirm, alert } = useSystemDialog();
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
@@ -48,17 +50,42 @@ export default function SaleDetailPage() {
 
   const handleRefund = async () => {
     if (!refundReason.trim()) {
-      alert("Please provide a reason for the refund.");
+      await alert({
+        title: "Refund Reason Required",
+        message: "Please enter an explanation or reason for processing this refund.",
+        type: "warning",
+      });
       return;
     }
+
+    const confirmed = await confirm({
+      title: "Confirm Transaction Refund",
+      message: `Are you sure you want to refund sale #${sale?.sale_number} for ${formatCurrency(
+        sale?.total || 0
+      )}?\n\nReason: "${refundReason.trim()}".\nAll sold items will be returned to store inventory.`,
+      confirmText: "Yes, Issue Refund",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
 
     setIsRefunding(true);
     try {
       const updated = await salesService.refundSale(id, refundReason);
       setSale(updated);
       setIsRefundDialogOpen(false);
+      await alert({
+        title: "Refund Completed",
+        message: `Sale #${updated.sale_number} was successfully refunded and inventory has been restored.`,
+        type: "success",
+      });
     } catch (e: any) {
-      alert(e.message || "Failed to process refund.");
+      await alert({
+        title: "Refund Failed",
+        message: e.message || "Failed to process refund.",
+        type: "danger",
+      });
     } finally {
       setIsRefunding(false);
     }

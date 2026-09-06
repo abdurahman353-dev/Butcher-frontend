@@ -6,6 +6,7 @@ import { reportsService } from "@/services/reports.service";
 import { DashboardSummary } from "@/types";
 import { formatCurrency, formatWeight, formatTimeOnly } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { usePolling } from "@/hooks/usePolling";
 import {
   DollarSign,
   TrendingUp,
@@ -32,10 +33,20 @@ export default function DashboardPage() {
   const [chartPeriod, setChartPeriod] = useState<"today" | "week" | "month">("today");
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("butcher_cached_dashboard_summary");
+      if (cached) setSummary(JSON.parse(cached));
+    } catch {}
+  }, []);
+
   const fetchSummary = useCallback(async () => {
     try {
       const data = await reportsService.getDashboardSummary();
       setSummary(data);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("butcher_cached_dashboard_summary", JSON.stringify(data));
+      }
     } catch (e) {
       console.error("Failed to load dashboard summary:", e);
     } finally {
@@ -43,13 +54,8 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSummary();
-
-    const handleDataChange = () => fetchSummary();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
-  }, [fetchSummary]);
+  // Real-time: poll every 10 seconds
+  usePolling(fetchSummary, 10000);
 
   const currentChartData =
     chartPeriod === "today"
