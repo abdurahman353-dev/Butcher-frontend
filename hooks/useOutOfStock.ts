@@ -11,6 +11,21 @@ function notifyAll(n: number) {
   _listeners.forEach((fn) => fn(n));
 }
 
+export async function refreshStockAlert(): Promise<number> {
+  try {
+    const res = await productsService.getProducts({ per_page: 500, status: "low_stock" });
+    // Filter active products where current_stock is at or below min_stock threshold
+    const lowStockItems = (res.data || []).filter(
+      (p) => p.is_active && Number(p.current_stock) <= Number(p.min_stock)
+    );
+    const count = lowStockItems.length;
+    notifyAll(count);
+    return count;
+  } catch {
+    return _cachedCount ?? 0;
+  }
+}
+
 /** Shared singleton hook — only one API call shared across all consumers */
 export function useOutOfStock() {
   const [outOfStockCount, setOutOfStockCount] = useState<number>(_cachedCount ?? 0);
@@ -19,22 +34,32 @@ export function useOutOfStock() {
     const listener = (n: number) => setOutOfStockCount(n);
     _listeners.add(listener);
     if (_cachedCount !== null) setOutOfStockCount(_cachedCount);
-    return () => { _listeners.delete(listener); };
+    return () => {
+      _listeners.delete(listener);
+    };
   }, []);
 
-  const poll = useCallback(async () => {
-    try {
-      const res = await productsService.getProducts({ per_page: 500, status: "out_of_stock" });
-      const count = res.total ?? res.data.length;
-      notifyAll(count);
-    } catch {}
+  const poll = useCallback(() => {
+    refreshStockAlert();
   }, []);
 
-  // Poll every 15s
   useEffect(() => {
     poll();
-    const id = setInterval(poll, 15000);
-    return () => clearInterval(id);
+
+    // Re-check immediately whenever data changes anywhere in the app
+    const handleDataChange = () => {
+      refreshStockAlert();
+    };
+
+    window.addEventListener("butcher:data-change", handleDataChange);
+    window.addEventListener("focus", handleDataChange);
+    const intervalId = setInterval(poll, 10000);
+
+    return () => {
+      window.removeEventListener("butcher:data-change", handleDataChange);
+      window.removeEventListener("focus", handleDataChange);
+      clearInterval(intervalId);
+    };
   }, [poll]);
 
   return outOfStockCount;
