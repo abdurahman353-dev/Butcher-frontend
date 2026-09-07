@@ -12,7 +12,7 @@ interface MPesaPaymentProps {
 }
 
 export function MPesaPayment({ total, customerPhone = "", onConfirm, isProcessing = false }: MPesaPaymentProps) {
-  const [phone, setPhone] = useState(customerPhone || "0712345678");
+  const [phone, setPhone] = useState(customerPhone || "");
   const [stkState, setStkState] = useState<"idle" | "sent" | "confirmed" | "failed">("idle");
   const [mpesaRef, setMpesaRef] = useState("");
   const [countdown, setCountdown] = useState(12);
