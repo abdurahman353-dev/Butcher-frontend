@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { X, LayoutDashboard, ShoppingCart, Receipt, Package, Boxes, Users, BarChart3, Settings, Clock, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useOutOfStock } from "@/hooks/useOutOfStock";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -26,6 +27,7 @@ interface MobileNavProps {
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const { user, isAdmin, logout } = useAuth();
+  const outOfStockCount = useOutOfStock();
 
   if (!isOpen) return null;
 
@@ -48,6 +50,9 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             if (item.adminOnly && !isAdmin) return null;
             const Icon = item.icon;
             const isActive = pathname === item.href;
+            const isInventory = item.href === "/inventory";
+            const hasAlert = isInventory && outOfStockCount > 0;
+
             return (
               <Link
                 key={item.href}
@@ -55,12 +60,29 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 onClick={onClose}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
                   isActive
-                    ? "bg-green-50 text-green-700 font-semibold"
+                    ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
+                    : hasAlert
+                    ? "text-rose-600 hover:bg-rose-50 hover:text-rose-800"
                     : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
                 }`}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-green-600" : "text-zinc-400"}`} />
-                {item.name}
+                <div className="relative shrink-0">
+                  <Icon className={`w-4 h-4 ${
+                    isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"
+                  }`} />
+                  {hasAlert && (
+                    <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center">
+                      <span className="absolute inline-flex w-3 h-3 rounded-full bg-rose-500 opacity-75 animate-ping" />
+                      <span className="relative inline-flex w-2 h-2 rounded-full bg-rose-600" />
+                    </span>
+                  )}
+                </div>
+                <span className={hasAlert ? "font-semibold" : ""}>{item.name}</span>
+                {hasAlert && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">
+                    {outOfStockCount > 99 ? "99+" : outOfStockCount}
+                  </span>
+                )}
               </Link>
             );
           })}

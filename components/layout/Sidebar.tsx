@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
 import { useSystemDialog } from "@/contexts/DialogContext";
+import { useOutOfStock } from "@/hooks/useOutOfStock";
 
 interface NavItem {
   name: string;
@@ -35,6 +36,7 @@ export function Sidebar() {
   const { user, isAdmin, switchRole, logout } = useAuth();
   const { isShiftOpen } = useShift();
   const { confirm } = useSystemDialog();
+  const outOfStockCount = useOutOfStock();
 
   const handleLogout = async () => {
     const confirmed = await confirm({
@@ -80,18 +82,46 @@ export function Sidebar() {
           if (item.adminOnly && !isAdmin) return null;
           const isActive = pathname === item.href;
           const Icon = item.icon;
+          const isInventory = item.href === "/inventory";
+          const hasAlert = isInventory && outOfStockCount > 0;
+
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
                 isActive
-                  ? "bg-green-50 text-green-700"
+                  ? hasAlert
+                    ? "bg-rose-50 text-rose-700"
+                    : "bg-green-50 text-green-700"
+                  : hasAlert
+                  ? "text-rose-600 hover:text-rose-800 hover:bg-rose-50"
                   : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50"
               }`}
             >
-              <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-green-600" : "text-zinc-400"}`} />
-              <span>{item.name}</span>
+              <div className="relative shrink-0">
+                <Icon
+                  className={`w-4 h-4 ${
+                    isActive
+                      ? hasAlert ? "text-rose-600" : "text-green-600"
+                      : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"
+                  }`}
+                />
+                {/* Blinking red ping dot */}
+                {hasAlert && (
+                  <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center">
+                    <span className="absolute inline-flex w-3 h-3 rounded-full bg-rose-500 opacity-75 animate-ping" />
+                    <span className="relative inline-flex w-2 h-2 rounded-full bg-rose-600" />
+                  </span>
+                )}
+              </div>
+              <span className={hasAlert ? "font-semibold" : ""}>{item.name}</span>
+              {/* Count badge */}
+              {hasAlert && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">
+                  {outOfStockCount > 99 ? "99+" : outOfStockCount}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -129,7 +159,7 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* Role Switcher (kept for demo/testing) */}
+        {/* Role Switcher */}
         <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1">
           <span>Role mode:</span>
           <div className="flex gap-1">
