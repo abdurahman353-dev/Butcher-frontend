@@ -774,7 +774,11 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
                     fontSize={10}
                     tickLine={false}
                     tickFormatter={(val) =>
-                      chartMetric === "weight" ? `${val}kg` : `KSh ${val}`
+                      chartMetric === "weight"
+                        ? `${val}kg`
+                        : val >= 1000
+                        ? `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k`
+                        : `KSh ${val}`
                     }
                   />
                   <Tooltip

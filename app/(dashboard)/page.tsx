@@ -209,7 +209,10 @@ export default function DashboardPage() {
                   stroke="#a1a1aa"
                   fontSize={11}
                   tickLine={false}
-                  tickFormatter={(val) => `${val / 1000}k`}
+                  tickFormatter={(val) => {
+                    if (val >= 1000) return `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k`;
+                    return val.toString();
+                  }}
                 />
                 <Tooltip
                   contentStyle={{
