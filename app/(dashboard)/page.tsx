@@ -187,7 +187,7 @@ export default function DashboardPage() {
                       : "text-zinc-600 hover:text-zinc-900"
                   }`}
                 >
-                  {period === "today" ? "Today" : period === "week" ? "7 Days" : "30 Days"}
+                  {period === "today" ? "Today" : period === "week" ? "7 Days" : "Monthly Trend"}
                 </button>
               ))}
             </div>
