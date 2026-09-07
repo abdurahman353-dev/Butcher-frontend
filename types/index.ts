@@ -199,6 +199,17 @@ export interface PaginatedResponse<T> {
   total: number;
   from: number;
   to: number;
+  summary?: {
+    total_revenue: number;
+    total_count: number;
+    completed_count: number;
+    refunded_count: number;
+    refunded_amount: number;
+    average_order_value: number;
+  };
+  filter_options?: {
+    cashiers: Array<{ id: number; name: string; role?: string }>;
+  };
 }
 
 export interface PaginationParams {
@@ -209,8 +220,14 @@ export interface PaginationParams {
   status?: string;
   date_from?: string;
   date_to?: string;
+  start_date?: string;
+  end_date?: string;
   payment_method?: string;
   cashier_id?: number | string;
+  min_amount?: number | string;
+  max_amount?: number | string;
+  sort_by?: string;
+  sort_direction?: "asc" | "desc";
 }
 
 export interface ApiResponse<T> {

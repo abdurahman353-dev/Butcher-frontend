@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { productsService } from "@/services/products.service";
 import { Product, Category, PaginatedResponse } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
@@ -16,6 +16,12 @@ import {
   Trash2,
   X,
   AlertCircle,
+  Filter,
+  SlidersHorizontal,
+  ChevronDown,
+  Layers,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ProductsPage() {
@@ -31,6 +37,7 @@ export default function ProductsPage() {
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -93,6 +100,19 @@ export default function ProductsPage() {
       console.error("Failed to load products:", e);
     }
   }, [currentPage, search, categoryFilter, statusFilter]);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reactive debounced fetch — fires instantly on any filter change
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchProducts();
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [fetchProducts]);
 
   // Real-time: poll every 10s
   usePolling(fetchProducts, 10000);
@@ -253,59 +273,142 @@ export default function ProductsPage() {
         </button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="p-4 bg-white border border-zinc-200 rounded-2xl flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between shadow-xs">
-        {/* Search */}
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Search cut name or SKU..."
-            className="w-full bg-white border border-zinc-200 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-          />
-        </div>
+      {/* ── FILTER CONSOLE (collapsed by default) ── */}
+      {(() => {
+        const activeFiltersCount = [search.trim(), categoryFilter !== "all", statusFilter !== "all"].filter(Boolean).length;
+        return (
+          <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
+            {/* Header / Toggle */}
+            <div className={`p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/70 transition-colors ${isFilterOpen || activeFiltersCount > 0 ? "border-b border-zinc-200" : ""}`}>
+              <div
+                onClick={() => setIsFilterOpen((v) => !v)}
+                className="flex items-center gap-2.5 cursor-pointer select-none group flex-1"
+              >
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-all shrink-0 ${isFilterOpen || activeFiltersCount > 0 ? "bg-green-500/10 border-green-600/20" : "bg-zinc-100 border-zinc-200"}`}>
+                  <Filter className="w-4 h-4 text-green-700" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider group-hover:text-green-700 transition-colors">Filter Products</span>
+                    {activeFiltersCount > 0 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white">{activeFiltersCount} Active</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : "Filter cuts by name, category, or status."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(""); setCategoryFilter("all"); setStatusFilter("all"); setCurrentPage(1); }}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-all active:scale-95"
+                  >
+                    <X className="w-3 h-3" /> Reset ({activeFiltersCount})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen((v) => !v)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 ${isFilterOpen ? "bg-zinc-900 text-white border-zinc-900" : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200"}`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>{isFilterOpen ? "Close" : "Open Filters"}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
+            </div>
 
-        {/* Categories */}
-        <div className="flex items-center gap-2">
-          <select
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter by category"
-            className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-          >
-            <option value="all">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id.toString()}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            {/* Collapsible body */}
+            {isFilterOpen && (
+              <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white">
+                {/* Search */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <Search className="w-3 h-3 text-zinc-400" /> Search
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                      placeholder="Cut name or SKU..."
+                      className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                    />
+                    <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    {search && (
+                      <button type="button" onClick={() => { setSearch(""); setCurrentPage(1); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-          {/* Status */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter by stock status"
-            className="bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active Only</option>
-            <option value="inactive">Inactive Only</option>
-            <option value="low_stock">Low Stock Only</option>
-          </select>
-        </div>
-      </div>
+                {/* Category */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-zinc-400" /> Category
+                  </label>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+                    className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                  >
+                    <option value="all">All Categories</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id.toString()}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-zinc-400" /> Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                    className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active Only</option>
+                    <option value="inactive">Inactive Only</option>
+                    <option value="low_stock">Low Stock Only</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Active filter chips */}
+            {activeFiltersCount > 0 && (
+              <div className="px-3 sm:px-4 py-2 bg-zinc-50/80 border-t border-zinc-100 flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Active:</span>
+                {search.trim() && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-200 text-zinc-800 text-[11px] font-medium">
+                    🔍 &quot;{search}&quot;
+                    <button onClick={() => setSearch("")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {categoryFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                    🥩 {categories.find((c) => String(c.id) === categoryFilter)?.name || categoryFilter}
+                    <button onClick={() => setCategoryFilter("all")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {statusFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold">
+                    🏷️ {statusFilter.replace("_", " ").toUpperCase()}
+                    <button onClick={() => setStatusFilter("all")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Products Table */}
       <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">

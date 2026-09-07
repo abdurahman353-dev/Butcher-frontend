@@ -19,6 +19,7 @@ import {
   Receipt,
   X,
   ChevronDown,
+  SlidersHorizontal,
   Layers,
   FileSpreadsheet,
   FileText,
@@ -45,6 +46,7 @@ export default function ReportsPage() {
   const [analytics, setAnalytics] = useState<ReportAnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<MetricView>("revenue");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -350,91 +352,139 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
         </div>
       </div>
 
-      {/* ── OPEN FILTER BAR ── */}
+      {/* ── COLLAPSIBLE FILTER CONSOLE (closed by default) ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden print:hidden">
-        {/* Filter Controls Grid */}
-        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-white">
-          {/* From Date */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-zinc-400" /> From Date
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
-            />
+        {/* Header / Toggle */}
+        <div className={`p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/70 transition-colors ${isFilterOpen || activeFiltersCount > 0 ? "border-b border-zinc-200" : ""}`}>
+          <div
+            onClick={() => setIsFilterOpen((v) => !v)}
+            className="flex items-center gap-2.5 cursor-pointer select-none group flex-1"
+          >
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-all shrink-0 ${isFilterOpen || activeFiltersCount > 0 ? "bg-green-500/10 border-green-600/20" : "bg-zinc-100 border-zinc-200"}`}>
+              <Filter className="w-4 h-4 text-green-700" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-zinc-900 uppercase tracking-wider group-hover:text-green-700 transition-colors">Filter Analytics</span>
+                {activeFiltersCount > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white">{activeFiltersCount} Active</span>
+                )}
+                {isLoading && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                    <RefreshCw className="w-2.5 h-2.5 animate-spin" /> Querying...
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : "Filter reports by date range, payment method, category, or cashier."}
+              </p>
+            </div>
           </div>
-
-          {/* To Date */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-zinc-400" /> To Date
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
-            />
-          </div>
-
-          {/* Payment Method */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-              <Banknote className="w-3 h-3 text-zinc-400" /> Payment Method
-            </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            {activeFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-all active:scale-95"
+              >
+                <X className="w-3 h-3" /> Reset ({activeFiltersCount})
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsFilterOpen((v) => !v)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 ${isFilterOpen ? "bg-zinc-900 text-white border-zinc-900" : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200"}`}
             >
-              <option value="all">All Payment Types</option>
-              <option value="cash">💵 Cash Only</option>
-              <option value="mpesa">📱 M-Pesa Only</option>
-              <option value="card">💳 Card Only</option>
-            </select>
-          </div>
-
-          {/* Meat Category */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-              <Layers className="w-3 h-3 text-zinc-400" /> Meat Category
-            </label>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
-            >
-              <option value="all">All Categories</option>
-              {(analytics?.filter_options?.categories || []).map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Cashier / Staff */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-              <Receipt className="w-3 h-3 text-zinc-400" /> Cashier / Staff
-            </label>
-            <select
-              value={cashierId}
-              onChange={(e) => setCashierId(e.target.value)}
-              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
-            >
-              <option value="all">All Staff Members</option>
-              {(analytics?.filter_options?.cashiers || []).map((usr) => (
-                <option key={usr.id} value={usr.id}>
-                  {usr.name} {usr.role ? `(${usr.role})` : ""}
-                </option>
-              ))}
-            </select>
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>{isFilterOpen ? "Close Filters" : "Open Filters"}</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterOpen ? "rotate-180" : ""}`} />
+            </button>
           </div>
         </div>
+
+        {/* Collapsible Filter Controls */}
+        {isFilterOpen && (
+          <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-white">
+            {/* From Date */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-zinc-400" /> From Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-zinc-400" /> To Date
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+              />
+            </div>
+
+            {/* Payment Method */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                <Banknote className="w-3 h-3 text-zinc-400" /> Payment Method
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+              >
+                <option value="all">All Payment Types</option>
+                <option value="cash">💵 Cash Only</option>
+                <option value="mpesa">📱 M-Pesa Only</option>
+                <option value="card">💳 Card Only</option>
+              </select>
+            </div>
+
+            {/* Meat Category */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                <Layers className="w-3 h-3 text-zinc-400" /> Meat Category
+              </label>
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+              >
+                <option value="all">All Categories</option>
+                {(analytics?.filter_options?.categories || []).map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Cashier / Staff */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                <Receipt className="w-3 h-3 text-zinc-400" /> Cashier / Staff
+              </label>
+              <select
+                value={cashierId}
+                onChange={(e) => setCashierId(e.target.value)}
+                className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+              >
+                <option value="all">All Staff Members</option>
+                {(analytics?.filter_options?.cashiers || []).map((usr) => (
+                  <option key={usr.id} value={usr.id}>
+                    {usr.name} {usr.role ? `(${usr.role})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Active Filter Badges & Reset */}
         {activeFiltersCount > 0 && (
@@ -445,12 +495,8 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-800 text-[11px] font-semibold">
                   📅 {startDate && endDate ? `${startDate} → ${endDate}` : startDate ? `From ${startDate}` : `Up to ${endDate}`}
                   <button
-                    onClick={() => {
-                      setStartDate("");
-                      setEndDate("");
-                    }}
+                    onClick={() => { setStartDate(""); setEndDate(""); }}
                     className="hover:text-green-950 ml-0.5"
-                    title="Clear date filter"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -459,7 +505,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               {paymentMethod !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold">
                   💳 {paymentMethod.toUpperCase()}
-                  <button onClick={() => setPaymentMethod("all")} className="hover:text-blue-950 ml-0.5" title="Clear payment filter">
+                  <button onClick={() => setPaymentMethod("all")} className="hover:text-blue-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -467,7 +513,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               {categoryId !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
                   🥩 {categoryName}
-                  <button onClick={() => setCategoryId("all")} className="hover:text-amber-950 ml-0.5" title="Clear category filter">
+                  <button onClick={() => setCategoryId("all")} className="hover:text-amber-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -475,21 +521,12 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               {cashierId !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold">
                   👤 {cashierName}
-                  <button onClick={() => setCashierId("all")} className="hover:text-purple-950 ml-0.5" title="Clear staff filter">
+                  <button onClick={() => setCashierId("all")} className="hover:text-purple-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
             </div>
-
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-all"
-            >
-              <X className="w-3 h-3" />
-              <span>Reset All ({activeFiltersCount})</span>
-            </button>
           </div>
         )}
       </div>
