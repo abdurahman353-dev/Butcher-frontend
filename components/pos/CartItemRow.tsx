@@ -13,6 +13,8 @@ interface CartItemRowProps {
 }
 
 export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }: CartItemRowProps) {
+  const isAtMaxStock = typeof item.available_stock === "number" && item.weight >= item.available_stock;
+
   return (
     <div className="p-3 bg-white border border-zinc-200 rounded-lg flex flex-col gap-2 hover:border-zinc-300 transition-colors">
       {/* Top: name + subtotal */}
@@ -59,12 +61,27 @@ export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }
           <button
             type="button"
             onClick={() => onAdjustWeight(item.id, 0.25)}
-            className="w-6 h-6 rounded flex items-center justify-center bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 transition-colors"
-            title="Increase 250g"
+            disabled={isAtMaxStock}
+            className={`w-6 h-6 rounded flex items-center justify-center border transition-colors ${
+              isAtMaxStock
+                ? "bg-zinc-100 border-zinc-200 text-zinc-300 cursor-not-allowed"
+                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+            }`}
+            title={
+              isAtMaxStock
+                ? `Max available stock reached (${formatWeight(item.available_stock ?? 0)})`
+                : "Increase 250g"
+            }
           >
             <Plus className="w-3 h-3" />
           </button>
         </div>
+
+        {isAtMaxStock && (
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+            Max ({formatWeight(item.available_stock ?? 0)})
+          </span>
+        )}
 
         <button
           type="button"

@@ -30,34 +30,37 @@ export function useCart() {
 
   const addItem = useCallback((product: Product, weightKg: number = 1.0, discount: number = 0) => {
     const validWeight = roundTo(Math.max(0.005, weightKg), 3);
+    const maxStock = typeof product.current_stock === "number" ? Math.max(0, product.current_stock) : Infinity;
+
     setItems((prev) => {
       const existingIdx = prev.findIndex((it) => it.product_id === product.id);
       if (existingIdx !== -1) {
         // Update existing line
         const updated = [...prev];
         const existing = updated[existingIdx];
-        const newWeight = roundTo(existing.weight + validWeight, 3);
+        const newWeight = roundTo(Math.min(existing.weight + validWeight, maxStock), 3);
         const sub = calculateSubtotal(newWeight, existing.price_per_kg);
         updated[existingIdx] = {
           ...existing,
           weight: newWeight,
-          available_stock: product.current_stock,
+          available_stock: maxStock,
           subtotal: roundTo(Math.max(0, sub - existing.discount), 2),
         };
         return updated;
       }
 
       // Add new item
-      const sub = calculateSubtotal(validWeight, product.price_per_kg);
+      const cappedWeight = Math.min(validWeight, maxStock);
+      const sub = calculateSubtotal(cappedWeight, product.price_per_kg);
       const newItem: CartItem = {
         id: `${product.id}-${Date.now()}`,
         product_id: product.id,
         product_name: product.name,
         price_per_kg: product.price_per_kg,
-        weight: validWeight,
+        weight: cappedWeight,
         discount,
         subtotal: roundTo(Math.max(0, sub - discount), 2),
-        available_stock: product.current_stock,
+        available_stock: maxStock,
         image: product.image,
       };
       return [...prev, newItem];
@@ -65,10 +68,11 @@ export function useCart() {
   }, []);
 
   const updateWeight = useCallback((cartItemId: string, weightKg: number) => {
-    const validWeight = roundTo(Math.max(0.005, weightKg), 3);
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === cartItemId) {
+          const maxStock = typeof item.available_stock === "number" ? item.available_stock : Infinity;
+          const validWeight = roundTo(Math.min(Math.max(0.005, weightKg), maxStock), 3);
           const sub = calculateSubtotal(validWeight, item.price_per_kg);
           return {
             ...item,
@@ -86,7 +90,11 @@ export function useCart() {
       prev
         .map((item) => {
           if (item.id === cartItemId) {
-            const newWeight = roundTo(item.weight + deltaKg, 3);
+            const maxStock = typeof item.available_stock === "number" ? item.available_stock : Infinity;
+            let newWeight = roundTo(item.weight + deltaKg, 3);
+            if (deltaKg > 0 && newWeight > maxStock) {
+              newWeight = maxStock;
+            }
             if (newWeight <= 0) return null; // Remove if <= 0
             const sub = calculateSubtotal(newWeight, item.price_per_kg);
             return {
