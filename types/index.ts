@@ -66,6 +66,8 @@ export interface SaleItem {
   product_name: string;
   weight: number; // in KG
   price_per_kg: number;
+  buying_cost_per_kg?: number;
+  discount?: number;
   subtotal: number;
 }
 
