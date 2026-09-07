@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { reportsService, ReportAnalyticsData } from "@/services/reports.service";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { usePolling } from "@/hooks/usePolling";
@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   Calendar,
   Filter,
-  Printer,
   RefreshCw,
   Scale,
   Receipt,
@@ -22,6 +21,7 @@ import {
   ChevronDown,
   Layers,
   FileSpreadsheet,
+  FileText,
 } from "lucide-react";
 import {
   AreaChart,
@@ -33,21 +33,20 @@ import {
   CartesianGrid,
 } from "recharts";
 
-type PeriodPreset = "today" | "yesterday" | "7days" | "30days" | "this_month" | "all" | "custom";
 type MetricView = "revenue" | "weight" | "profit";
 
 export default function ReportsPage() {
-  const [period, setPeriod] = useState<PeriodPreset>("today");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("all");
   const [categoryId, setCategoryId] = useState("all");
   const [cashierId, setCashierId] = useState("all");
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [analytics, setAnalytics] = useState<ReportAnalyticsData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartMetric, setChartMetric] = useState<MetricView>("revenue");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load cached analytics on mount
   useEffect(() => {
@@ -59,11 +58,10 @@ export default function ReportsPage() {
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const params: any = { period };
-      if (period === "custom") {
-        if (startDate) params.start_date = startDate;
-        if (endDate) params.end_date = endDate;
-      }
+      setIsLoading(true);
+      const params: any = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
       if (paymentMethod !== "all") params.payment_method = paymentMethod;
       if (categoryId !== "all") params.category_id = categoryId;
       if (cashierId !== "all") params.cashier_id = cashierId;
@@ -76,27 +74,32 @@ export default function ReportsPage() {
     } catch (e) {
       console.error("Failed to load report analytics:", e);
     } finally {
+      setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [period, startDate, endDate, paymentMethod, categoryId, cashierId]);
+  }, [startDate, endDate, paymentMethod, categoryId, cashierId]);
 
-  // Real-time polling every 10s
-  usePolling(fetchAnalytics, 10000);
+  // Immediately apply any filter change with debounce for date inputs
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchAnalytics();
+    }, 200);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [fetchAnalytics]);
+
+  // Real-time polling every 15s with current filter criteria
+  usePolling(fetchAnalytics, 15000);
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
     fetchAnalytics();
   };
 
-  const handleApplyCustomDates = () => {
-    if (startDate && endDate) {
-      setPeriod("custom");
-      fetchAnalytics();
-    }
-  };
-
   const clearAllFilters = () => {
-    setPeriod("today");
     setStartDate("");
     setEndDate("");
     setPaymentMethod("all");
@@ -106,13 +109,13 @@ export default function ReportsPage() {
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-    if (period !== "today") count++;
+    if (startDate) count++;
+    if (endDate) count++;
     if (paymentMethod !== "all") count++;
     if (categoryId !== "all") count++;
     if (cashierId !== "all") count++;
-    if (period === "custom" && (startDate || endDate)) count++;
     return count;
-  }, [period, paymentMethod, categoryId, cashierId, startDate, endDate]);
+  }, [startDate, endDate, paymentMethod, categoryId, cashierId]);
 
   const totalRevenue = analytics?.revenue || 0;
   const cashAmount = analytics?.payment_breakdown?.cash || 0;
@@ -133,6 +136,82 @@ export default function ReportsPage() {
   const mpesaCount = analytics?.payment_breakdown?.counts?.mpesa ?? 0;
   const cardCount = analytics?.payment_breakdown?.counts?.card ?? 0;
 
+  // Category/cashier name for filter chips
+  const categoryName = useMemo(() => {
+    if (categoryId === "all") return null;
+    return analytics?.filter_options?.categories?.find((c) => String(c.id) === String(categoryId))?.name || `Cat #${categoryId}`;
+  }, [categoryId, analytics]);
+  const cashierName = useMemo(() => {
+    if (cashierId === "all") return null;
+    return analytics?.filter_options?.cashiers?.find((c) => String(c.id) === String(cashierId))?.name || `Staff #${cashierId}`;
+  }, [cashierId, analytics]);
+
+  // PDF Generator
+  const handleGeneratePDF = () => {
+    if (!analytics) return;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-KE", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
+    const rangeLabel = startDate && endDate ? `${startDate} to ${endDate}` : startDate ? `From ${startDate}` : endDate ? `Up to ${endDate}` : "All Records";
+    const pl: Record<string, string> = { today: "Today", yesterday: "Yesterday", "7days": "Past 7 Days", "30days": "Past 30 Days", this_month: "This Month", last_month: "Last Month", all: "All Time", custom: rangeLabel };
+    const fK = (n: number) => `KSh ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fW = (n: number) => `${Number(n).toFixed(2)} KG`;
+    const itemizedHTML = (analytics.itemized_categories || []).map(cat => `
+      <div style="margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+          <thead>
+            <tr style="background:#14532d"><th colspan="4" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:none">${cat.category_name}</th></tr>
+            <tr style="background:#dcfce7"><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d">Item / Cut</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Discount</th></tr>
+          </thead>
+          <tbody>${cat.items.map(it => `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(it.price)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${it.discount > 0 ? fK(it.discount) : "-"}</td></tr>`).join("")}</tbody>
+          <tfoot><tr style="background:#f0fdf4;border-top:2px solid #16a34a"><td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:700;color:#14532d">SUBTOTAL — ${cat.category_name}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${cat.subtotal_discount > 0 ? fK(cat.subtotal_discount) : "-"}</td></tr></tfoot>
+        </table>
+      </div>`).join("");
+    const topHTML = (analytics.top_products || []).slice(0,10).map((p,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center">${i+1}</td><td style="padding:6px 10px;border:1px solid #f3f4f6">${p.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6">${p.category}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(p.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(p.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(p.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;color:${p.margin_percent>=30?"#15803d":p.margin_percent>=20?"#b45309":"#374151"};font-weight:700">${p.margin_percent}%</td></tr>`).join("");
+    const cashierHTML = (analytics.cashier_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${c.transactions}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.aov)}</td></tr>`).join("");
+    const catHTML = (analytics.category_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;font-weight:700;color:#14532d">${c.percent}%</td></tr>`).join("");
+    const wastageHTML = (analytics.wastage_breakdown || []).map(w => `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${w.reason}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${w.count}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(w.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#be123c;font-weight:700">${fK(w.cost)}</td></tr>`).join("");
+    const th = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151"`;
+    const thr = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:right"`;
+    const thc = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:center"`;
+    const sec = (title: string, sub: string) => `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#374151;border-bottom:2px solid #16a34a;padding:6px 0;margin:18px 0 10px;display:flex;justify-content:space-between"><span>${title}</span><span style="font-weight:500;font-size:10px;color:#6b7280;text-transform:none;letter-spacing:0">${sub}</span></div>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prime Cut Report</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
+<div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
+  <div><div style="font-size:22px;font-weight:900">🥩 PRIME CUT BUTCHER</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">Premium Meat Shop — Nairobi, Kenya</div></div>
+  <div style="text-align:right"><div style="font-size:14px;font-weight:800">EXECUTIVE PERFORMANCE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Generated: ${dateStr} at ${timeStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Range: ${rangeLabel}</div></div>
+</div>
+<div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Revenue</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(totalRevenue)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${analytics.transactions} orders</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Profit</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(analytics.gross_profit||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">Margin: ${analytics.gross_margin||0}%</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Net Profit</div><div style="font-size:16px;font-weight:900;color:#1d4ed8;margin-top:3px">${fK(analytics.net_profit||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">After wastage</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Volume Sold</div><div style="font-size:16px;font-weight:900;color:#b45309;margin-top:3px">${fW(analytics.total_weight||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">AOV: ${fK(analytics.average_order_value||0)}</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Wastage Loss</div><div style="font-size:16px;font-weight:900;color:#be123c;margin-top:3px">${fK(analytics.wastage_cost||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${fW(analytics.wastage_weight||0)} lost</div></div>
+  <div style="flex:1;padding:14px 18px"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Discounts</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:3px">${fK(analytics.total_discount||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">Concessions</div></div>
+</div>
+<div style="padding:20px 28px">
+${sec("Payment Method Breakdown","Tender collection channels")}
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+  <div style="border:1.5px solid #e5e7eb;border-left:3px solid #16a34a;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">💵 Cash Tender</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(cashAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${cashCount} transactions · ${cashPercent}% share</div></div>
+  <div style="border:1.5px solid #e5e7eb;border-left:3px solid #15803d;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">📱 M-Pesa Mobile</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(mpesaAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${mpesaCount} transactions · ${mpesaPercent}% share</div></div>
+  <div style="border:1.5px solid #e5e7eb;border-left:3px solid #1d4ed8;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">💳 Card Payment</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(cardAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${cardCount} transactions · ${cardPercent}% share</div></div>
+</div>
+${(analytics.itemized_categories||[]).length>0?`${sec("Sales by Meat Category","All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Weight</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div></div>`:""}
+${(analytics.top_products||[]).length>0?`${sec("Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>Meat Cut</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
+${(analytics.category_breakdown||[]).length>0?`${sec("Category Performance","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Category</th><th ${thr}>Weight</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Share</th></tr></thead><tbody>${catHTML}</tbody></table>`:""}
+${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Staff</th><th ${thr}>Transactions</th><th ${thr}>Revenue</th><th ${thr}>Weight</th><th ${thr}>AOV</th></tr></thead><tbody>${cashierHTML}</tbody></table>`:""}
+${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between"><span>⚠️ Wastage & Loss Audit</span><span>Total: ${fK(analytics.wastage_cost||0)} · ${fW(analytics.wastage_weight||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Reason</th><th ${thr}>Incidents</th><th ${thr}>Weight</th><th ${thr}>Cost Loss</th></tr></thead><tbody>${wastageHTML}</tbody></table></div>`:""}
+</div>
+<div style="border-top:2px solid #e5e7eb;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;background:#f9fafb;margin-top:20px">
+  <div style="font-size:9px;color:#9ca3af">Report ID: PCB-${Date.now()}<br/>Prime Cut Butcher POS</div>
+  <div style="font-size:10px;font-weight:700;color:#374151;text-align:center">Confidential — Internal Use Only</div>
+  <div style="font-size:9px;color:#9ca3af;text-align:right">Range: ${rangeLabel}</div>
+</div>
+<script>window.onload=function(){window.print();};<\/script></body></html>`;
+    const win = window.open("", "_blank", "width=1100,height=750");
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   // Export to CSV Function
   const handleExportCSV = () => {
     if (!analytics) return;
@@ -140,8 +219,7 @@ export default function ReportsPage() {
     const rows = [
       ["PRIME CUT BUTCHER - PERFORMANCE & FINANCIAL REPORT"],
       [`Generated At:`, new Date().toLocaleString()],
-      [`Period:`, period.toUpperCase()],
-      [`Date Range:`, `${analytics.start_date || "N/A"} to ${analytics.end_date || "N/A"}`],
+      [`Date Range:`, `${analytics.start_date || startDate || "All Time"} to ${analytics.end_date || endDate || "All Time"}`],
       [],
       ["EXECUTIVE SUMMARY"],
       ["Metric", "Value"],
@@ -200,7 +278,7 @@ export default function ReportsPage() {
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `butcher_report_${period}_${new Date().toISOString().slice(0, 10)}.csv`
+      `butcher_report_${startDate || "all"}_${endDate || "time"}_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -234,251 +312,184 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Action Buttons: on mobile, balanced full-width grid */}
-        <div className="grid grid-cols-3 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto print:hidden">
+        {/* Action Buttons */}
+        <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto print:hidden">
           <button
             type="button"
             onClick={handleManualRefresh}
             className="h-10 px-2.5 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95"
-            title="Refresh analytics data"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-zinc-600 ${isRefreshing ? "animate-spin" : ""}`} />
-            <span>Sync</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Sync</span>
           </button>
-
           <button
             type="button"
             onClick={handleExportCSV}
             className="h-10 px-3 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 font-semibold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all active:scale-95"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>CSV</span>
+            <span className="hidden sm:inline">CSV</span>
           </button>
-
           <button
             type="button"
-            onClick={handlePrint}
+            onClick={handleGeneratePDF}
+            disabled={!analytics}
+            className="h-10 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
             className="h-10 px-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print</span>
+            <span>🖨️</span>
+            <span className="hidden sm:inline">Print</span>
           </button>
         </div>
       </div>
 
-      {/* ── RESPONSIVE FILTER BAR ── */}
+      {/* ── OPEN FILTER BAR ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden print:hidden">
-        {/* Presets and Filter toggles */}
-        <div className="p-3 sm:p-4 border-b border-zinc-100 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-zinc-50/50">
-          {/* Scrollable preset chips on phones */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
-              <Calendar className="w-3 h-3" /> Range:
-            </span>
-            {(
-              [
-                { key: "today", label: "Today" },
-                { key: "yesterday", label: "Yesterday" },
-                { key: "7days", label: "Past 7D" },
-                { key: "30days", label: "Past 30D" },
-                { key: "this_month", label: "This Month" },
-                { key: "all", label: "All Time" },
-                { key: "custom", label: "Custom" },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setPeriod(tab.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
-                  period === tab.key
-                    ? "bg-green-600 text-white shadow-xs"
-                    : "bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-100"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+        {/* Filter Controls Grid */}
+        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-white">
+          {/* From Date */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-zinc-400" /> From Date
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+            />
           </div>
 
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              onClick={() => setShowAdvancedFilters((v) => !v)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                showAdvancedFilters || activeFiltersCount > 0
-                  ? "bg-green-50 border-green-300 text-green-700"
-                  : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>More Filters</span>
-              {activeFiltersCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-green-600 text-white text-[9px] font-bold flex items-center justify-center">
-                  {activeFiltersCount}
-                </span>
-              )}
-              <ChevronDown
-                className={`w-3 h-3 transition-transform ${showAdvancedFilters ? "rotate-180" : ""}`}
-              />
-            </button>
+          {/* To Date */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-zinc-400" /> To Date
+            </label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+            />
+          </div>
 
-            {activeFiltersCount > 0 && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-all"
-              >
-                <X className="w-3 h-3" />
-                <span>Reset</span>
-              </button>
-            )}
+          {/* Payment Method */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+              <Banknote className="w-3 h-3 text-zinc-400" /> Payment Method
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+            >
+              <option value="all">All Payment Types</option>
+              <option value="cash">💵 Cash Only</option>
+              <option value="mpesa">📱 M-Pesa Only</option>
+              <option value="card">💳 Card Only</option>
+            </select>
+          </div>
+
+          {/* Meat Category */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+              <Layers className="w-3 h-3 text-zinc-400" /> Meat Category
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+            >
+              <option value="all">All Categories</option>
+              {(analytics?.filter_options?.categories || []).map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Cashier / Staff */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+              <Receipt className="w-3 h-3 text-zinc-400" /> Cashier / Staff
+            </label>
+            <select
+              value={cashierId}
+              onChange={(e) => setCashierId(e.target.value)}
+              className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+            >
+              <option value="all">All Staff Members</option>
+              {(analytics?.filter_options?.cashiers || []).map((usr) => (
+                <option key={usr.id} value={usr.id}>
+                  {usr.name} {usr.role ? `(${usr.role})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Custom Date Range & Advanced Filters */}
-        {(period === "custom" || showAdvancedFilters) && (
-          <div className="p-3 sm:p-4 bg-white border-b border-zinc-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-            {/* From Date */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                From Date
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setPeriod("custom");
-                }}
-                className="w-full h-10 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
-              />
-            </div>
-
-            {/* To Date */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                To Date
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setPeriod("custom");
-                }}
-                className="w-full h-10 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
-              />
-            </div>
-
-            {/* Payment Method Filter */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                Payment Method
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full h-10 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
-              >
-                <option value="all">All Payment Types</option>
-                <option value="cash">💵 Cash Only</option>
-                <option value="mpesa">📱 M-Pesa Only</option>
-                <option value="card">💳 Card Only</option>
-              </select>
-            </div>
-
-            {/* Category Filter */}
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                Meat Category
-              </label>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full h-10 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
-              >
-                <option value="all">All Categories</option>
-                {(analytics?.filter_options?.categories || []).map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Cashier Filter */}
-            {showAdvancedFilters && (
-              <div className="flex flex-col gap-1 sm:col-span-2 lg:col-span-2">
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                  Cashier Station
-                </label>
-                <select
-                  value={cashierId}
-                  onChange={(e) => setCashierId(e.target.value)}
-                  className="w-full h-10 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
-                >
-                  <option value="all">All Staff Members</option>
-                  {(analytics?.filter_options?.cashiers || []).map((usr) => (
-                    <option key={usr.id} value={usr.id}>
-                      {usr.name} {usr.role ? `(${usr.role})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Apply button if custom dates */}
-            {period === "custom" && (
-              <div className="flex items-end sm:col-span-2 lg:col-span-2">
-                <button
-                  type="button"
-                  onClick={handleApplyCustomDates}
-                  className="w-full h-10 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-                >
-                  Apply Date Range
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Active Filter Badges */}
+        {/* Active Filter Badges & Reset */}
         {activeFiltersCount > 0 && (
-          <div className="px-3 sm:px-4 py-2 bg-zinc-50/80 border-t border-zinc-100 flex items-center gap-1.5 flex-wrap text-xs">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Active:</span>
-            {period !== "today" && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-800 text-[11px] font-semibold">
-                {period.replace("_", " ").toUpperCase()}
-                <button onClick={() => setPeriod("today")} className="hover:text-green-950">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {paymentMethod !== "all" && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold">
-                {paymentMethod.toUpperCase()}
-                <button onClick={() => setPaymentMethod("all")}>
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {categoryId !== "all" && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
-                Category
-                <button onClick={() => setCategoryId("all")}>
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-            {cashierId !== "all" && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold">
-                Cashier
-                <button onClick={() => setCashierId("all")}>
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
+          <div className="px-3 sm:px-4 py-2 bg-zinc-50/80 border-t border-zinc-100 flex items-center justify-between gap-2 flex-wrap text-xs">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Active:</span>
+              {(startDate || endDate) && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-800 text-[11px] font-semibold">
+                  📅 {startDate && endDate ? `${startDate} → ${endDate}` : startDate ? `From ${startDate}` : `Up to ${endDate}`}
+                  <button
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    className="hover:text-green-950 ml-0.5"
+                    title="Clear date filter"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {paymentMethod !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold">
+                  💳 {paymentMethod.toUpperCase()}
+                  <button onClick={() => setPaymentMethod("all")} className="hover:text-blue-950 ml-0.5" title="Clear payment filter">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {categoryId !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
+                  🥩 {categoryName}
+                  <button onClick={() => setCategoryId("all")} className="hover:text-amber-950 ml-0.5" title="Clear category filter">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {cashierId !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold">
+                  👤 {cashierName}
+                  <button onClick={() => setCashierId("all")} className="hover:text-purple-950 ml-0.5" title="Clear staff filter">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-all"
+            >
+              <X className="w-3 h-3" />
+              <span>Reset All ({activeFiltersCount})</span>
+            </button>
           </div>
         )}
       </div>

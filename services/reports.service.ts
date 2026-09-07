@@ -79,6 +79,18 @@ export interface ReportAnalyticsData {
     profit: number;
     transactions: number;
   }>;
+  itemized_categories?: Array<{
+    category_name: string;
+    items: Array<{
+      name: string;
+      qty: number;
+      price: number;
+      discount: number;
+    }>;
+    subtotal_qty: number;
+    subtotal_price: number;
+    subtotal_discount: number;
+  }>;
   filter_options?: {
     categories: Array<{ id: number; name: string }>;
     cashiers: Array<{ id: number; name: string; role?: string }>;
