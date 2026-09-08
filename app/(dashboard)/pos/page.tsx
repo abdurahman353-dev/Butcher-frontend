@@ -16,8 +16,12 @@ import { ReceiptModal } from "@/components/pos/ReceiptModal";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { ShoppingBag, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSystemDialog } from "@/contexts/DialogContext";
 
 export default function PosPage() {
+  const router = useRouter();
+  const { confirm, alert } = useSystemDialog();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -104,7 +108,22 @@ export default function PosPage() {
     }
   };
 
-  const handleProceedCheckout = (preferredMethod: "cash" | "mpesa" | "card" = "cash") => {
+  const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "card" = "cash") => {
+    if (!isShiftOpen) {
+      const shouldOpen = await confirm({
+        title: "Cashier Shift Closed",
+        message:
+          "You must open your register shift and enter your opening cash float before making any orders so your drawer is balanced.\n\nWould you like to open your shift now?",
+        confirmText: "Open Shift Now",
+        cancelText: "Stay on POS",
+        type: "warning",
+      });
+      if (shouldOpen) {
+        router.push("/shift");
+      }
+      return;
+    }
+
     setInitialPaymentMethod(preferredMethod);
     setIsCheckoutOpen(true);
     setIsMobileCartOpen(false);
@@ -116,6 +135,15 @@ export default function PosPage() {
     mpesa_reference?: string;
     card_reference?: string;
   }) => {
+    if (!isShiftOpen) {
+      await alert({
+        title: "Shift Required",
+        message: "You must open your cashier shift before completing sales.",
+        type: "danger",
+      });
+      throw new Error("Shift is closed. Please open your shift first.");
+    }
+
     const sale = await posService.completeCheckout({
       items,
       payment_method: payload.payment_method,
@@ -182,6 +210,7 @@ export default function PosPage() {
           onRemoveItem={removeItem}
           onClearCart={clearCart}
           onProceedCheckout={handleProceedCheckout}
+          isShiftOpen={isShiftOpen}
         />
       </div>
 
@@ -254,6 +283,7 @@ export default function PosPage() {
                 setIsMobileCartOpen(false);
                 handleProceedCheckout(method);
               }}
+              isShiftOpen={isShiftOpen}
             />
           </div>
         </div>

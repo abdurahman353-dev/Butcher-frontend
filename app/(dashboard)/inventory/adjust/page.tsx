@@ -19,7 +19,7 @@ function StockAdjustForm() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(
-    preselectedProductId ? Number(preselectedProductId) : 1
+    preselectedProductId ? Number(preselectedProductId) : 0
   );
   const [adjustmentKg, setAdjustmentKg] = useState<string>("");
   const [reason, setReason] = useState<string>("Audit Discrepancy");
@@ -31,11 +31,20 @@ function StockAdjustForm() {
     async function load() {
       const res = await productsService.getProducts({ per_page: 100 });
       setProducts(res.data);
+      if (res.data.length > 0) {
+        setSelectedProductId((prev) => {
+          if (preselectedProductId && res.data.some((p) => p.id === Number(preselectedProductId))) {
+            return Number(preselectedProductId);
+          }
+          return res.data.some((p) => p.id === prev && prev > 0) ? prev : res.data[0].id;
+        });
+      }
     }
     load();
-  }, []);
+  }, [preselectedProductId]);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const activeProductId = selectedProductId || (products[0]?.id ?? 0);
+  const selectedProduct = products.find((p) => p.id === activeProductId);
   const adjNum = parseFloat(adjustmentKg) || 0;
   const newStock = selectedProduct ? roundTo(selectedProduct.current_stock + adjNum, 3) : 0;
 
@@ -83,7 +92,7 @@ function StockAdjustForm() {
     setIsSubmitting(true);
     try {
       const updated = await inventoryService.adjustStock({
-        product_id: selectedProductId,
+        product_id: activeProductId,
         adjustment_kg: adjNum,
         reason,
         notes,
@@ -135,7 +144,7 @@ function StockAdjustForm() {
             Product Cut <span className="text-rose-500">*</span>
           </label>
           <select
-            value={selectedProductId}
+            value={activeProductId}
             onChange={(e) => setSelectedProductId(Number(e.target.value))}
             className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
           >

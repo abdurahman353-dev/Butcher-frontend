@@ -529,7 +529,8 @@ export default function InventoryPage() {
                   <th className="py-3.5 px-3">Category</th>
                   <SortTh label="Available Weight" col="current_stock" className="text-right" />
                   <SortTh label="Min Threshold" col="min_stock" className="text-right" />
-                  <SortTh label="Cost / KG" col="price_per_kg" className="text-right" />
+                  <SortTh label="Selling Price / KG" col="price_per_kg" className="text-right" />
+                  <th className="py-3.5 px-3 text-right font-semibold text-zinc-500">Cost / KG</th>
                   <SortTh label="Est. Valuation" col="valuation" className="text-right" />
                   <th className="py-3.5 px-3 text-center">Status</th>
                   <th className="py-3.5 pr-4 text-center">Actions</th>
@@ -538,7 +539,7 @@ export default function InventoryPage() {
               <tbody className="divide-y divide-zinc-100">
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-10 text-center text-zinc-400 text-sm">
+                    <td colSpan={10} className="py-10 text-center text-zinc-400 text-sm">
                       No meat cuts match your filters.
                     </td>
                   </tr>
@@ -567,7 +568,10 @@ export default function InventoryPage() {
                         <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
                           {formatWeight(p.min_stock)}
                         </td>
-                        <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
+                        <td className="py-3 px-3 text-right font-bold text-green-700 tabular-nums text-xs">
+                          {formatCurrency(p.price_per_kg)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-semibold text-zinc-600 tabular-nums text-xs">
                           {p.buying_cost_per_kg ? formatCurrency(p.buying_cost_per_kg) : "—"}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">

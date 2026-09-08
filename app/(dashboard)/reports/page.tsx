@@ -19,11 +19,15 @@ import {
   Receipt,
   X,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   SlidersHorizontal,
   Layers,
   FileSpreadsheet,
   FileText,
 } from "lucide-react";
+import { Pagination } from "@/components/shared/Pagination";
+
 import {
   AreaChart,
   Area,
@@ -49,6 +53,18 @@ export default function ReportsPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<MetricView>("revenue");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Pagination states for report containers
+  const [topProductsPage, setTopProductsPage] = useState(1);
+  const [topProductsPerPage, setTopProductsPerPage] = useState(10);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [cashierPage, setCashierPage] = useState(1);
+  const [wastagePage, setWastagePage] = useState(1);
+
+  const CATEGORIES_PER_PAGE = 5;
+  const CASHIERS_PER_PAGE = 5;
+  const WASTAGE_PER_PAGE = 8;
+
 
   // Load cached analytics on mount
   useEffect(() => {
@@ -109,6 +125,15 @@ export default function ReportsPage() {
     setCashierId("all");
   };
 
+  // Reset pagination on filter change
+  useEffect(() => {
+    setTopProductsPage(1);
+    setCategoryPage(1);
+    setCashierPage(1);
+    setWastagePage(1);
+  }, [startDate, endDate, paymentMethod, categoryId, cashierId]);
+
+
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (startDate) count++;
@@ -147,6 +172,36 @@ export default function ReportsPage() {
     if (cashierId === "all") return null;
     return analytics?.filter_options?.cashiers?.find((c) => String(c.id) === String(cashierId))?.name || `Staff #${cashierId}`;
   }, [cashierId, analytics]);
+
+  // Derived paginated lists
+  const topProducts = useMemo(() => analytics?.top_products || [], [analytics?.top_products]);
+  const totalTopProductsPages = Math.max(1, Math.ceil(topProducts.length / topProductsPerPage));
+  const paginatedTopProducts = useMemo(() => {
+    const start = (topProductsPage - 1) * topProductsPerPage;
+    return topProducts.slice(start, start + topProductsPerPage);
+  }, [topProducts, topProductsPage, topProductsPerPage]);
+
+  const categories = useMemo(() => analytics?.category_breakdown || [], [analytics?.category_breakdown]);
+  const totalCategoryPages = Math.max(1, Math.ceil(categories.length / CATEGORIES_PER_PAGE));
+  const paginatedCategories = useMemo(() => {
+    const start = (categoryPage - 1) * CATEGORIES_PER_PAGE;
+    return categories.slice(start, start + CATEGORIES_PER_PAGE);
+  }, [categories, categoryPage]);
+
+  const cashiers = useMemo(() => analytics?.cashier_breakdown || [], [analytics?.cashier_breakdown]);
+  const totalCashierPages = Math.max(1, Math.ceil(cashiers.length / CASHIERS_PER_PAGE));
+  const paginatedCashiers = useMemo(() => {
+    const start = (cashierPage - 1) * CASHIERS_PER_PAGE;
+    return cashiers.slice(start, start + CASHIERS_PER_PAGE);
+  }, [cashiers, cashierPage]);
+
+  const wastageItems = useMemo(() => analytics?.wastage_breakdown || [], [analytics?.wastage_breakdown]);
+  const totalWastagePages = Math.max(1, Math.ceil(wastageItems.length / WASTAGE_PER_PAGE));
+  const paginatedWastage = useMemo(() => {
+    const start = (wastagePage - 1) * WASTAGE_PER_PAGE;
+    return wastageItems.slice(start, start + WASTAGE_PER_PAGE);
+  }, [wastageItems, wastagePage]);
+
 
   // PDF Generator
   const handleGeneratePDF = () => {
@@ -921,7 +976,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
             </p>
           </div>
           <span className="text-xs font-semibold text-zinc-500">
-            {analytics?.top_products?.length || 0} Cuts Recorded
+            {topProducts.length} Cuts Recorded
           </span>
         </div>
 
@@ -941,18 +996,18 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {!analytics?.top_products || analytics.top_products.length === 0 ? (
+              {paginatedTopProducts.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-zinc-400">
                     No sales recorded for the selected filter range.
                   </td>
                 </tr>
               ) : (
-                analytics.top_products.map((prod, idx) => (
+                paginatedTopProducts.map((prod, idx) => (
                   <tr key={prod.id || idx} className="hover:bg-zinc-50/60 transition-colors">
                     <td className="py-3 pl-4 font-bold text-zinc-400">
                       <span className="w-6 h-6 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center font-bold text-[10px]">
-                        {idx + 1}
+                        {(topProductsPage - 1) * topProductsPerPage + idx + 1}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-semibold text-zinc-900">{prod.name}</td>
@@ -992,22 +1047,46 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
             </tbody>
           </table>
         </div>
+
+        {/* Top cuts pagination */}
+        {topProducts.length > 0 && (
+          <div className="p-3 bg-zinc-50/60 border-t border-zinc-100">
+            <Pagination
+              currentPage={topProductsPage}
+              lastPage={totalTopProductsPages}
+              total={topProducts.length}
+              from={(topProductsPage - 1) * topProductsPerPage + 1}
+              to={Math.min(topProductsPage * topProductsPerPage, topProducts.length)}
+              onPageChange={(page) => setTopProductsPage(page)}
+              perPage={topProductsPerPage}
+              onPerPageChange={(per) => {
+                setTopProductsPerPage(per);
+                setTopProductsPage(1);
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── TWO-COLUMN DETAILED AUDITS: CATEGORY & CASHIERS ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Category Performance Breakdown */}
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-4">
-          <div>
-            <h2 className="text-sm font-bold text-zinc-900">Meat Category Performance</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">Revenue and weight distribution</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900">Meat Category Performance</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Revenue and weight distribution</p>
+            </div>
+            <span className="text-xs font-semibold text-zinc-500">
+              {categories.length} Categories
+            </span>
           </div>
 
           <div className="space-y-3">
-            {!analytics?.category_breakdown || analytics.category_breakdown.length === 0 ? (
+            {categories.length === 0 ? (
               <p className="text-xs text-zinc-400 py-4 text-center">No categories recorded.</p>
             ) : (
-              analytics.category_breakdown.map((cat) => (
+              paginatedCategories.map((cat) => (
                 <div key={cat.name} className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-zinc-900">{cat.name}</span>
@@ -1031,20 +1110,58 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               ))
             )}
           </div>
+
+          {categories.length > 0 && (
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-100 text-xs text-zinc-500">
+              <span>
+                Showing <span className="font-semibold text-zinc-800">{(categoryPage - 1) * CATEGORIES_PER_PAGE + 1}</span>-
+                <span className="font-semibold text-zinc-800">{Math.min(categoryPage * CATEGORIES_PER_PAGE, categories.length)}</span> of{" "}
+                <span className="font-semibold text-zinc-800">{categories.length}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCategoryPage((p) => Math.max(1, p - 1))}
+                  disabled={categoryPage <= 1}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-semibold text-zinc-700 px-1">
+                  {categoryPage} / {totalCategoryPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryPage((p) => Math.min(totalCategoryPages, p + 1))}
+                  disabled={categoryPage >= totalCategoryPages}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Cashier Station Performance Breakdown */}
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-4">
-          <div>
-            <h2 className="text-sm font-bold text-zinc-900">Staff / Cashier Audit</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">Orders rung up per station</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900">Staff / Cashier Audit</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Orders rung up per station</p>
+            </div>
+            <span className="text-xs font-semibold text-zinc-500">
+              {cashiers.length} Cashiers
+            </span>
           </div>
 
           <div className="space-y-3">
-            {!analytics?.cashier_breakdown || analytics.cashier_breakdown.length === 0 ? (
+            {cashiers.length === 0 ? (
               <p className="text-xs text-zinc-400 py-4 text-center">No cashier data recorded.</p>
             ) : (
-              analytics.cashier_breakdown.map((cashier) => (
+              paginatedCashiers.map((cashier) => (
                 <div
                   key={cashier.id || cashier.name}
                   className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl flex items-center justify-between"
@@ -1072,11 +1189,44 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               ))
             )}
           </div>
+
+          {cashiers.length > 0 && (
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-100 text-xs text-zinc-500">
+              <span>
+                Showing <span className="font-semibold text-zinc-800">{(cashierPage - 1) * CASHIERS_PER_PAGE + 1}</span>-
+                <span className="font-semibold text-zinc-800">{Math.min(cashierPage * CASHIERS_PER_PAGE, cashiers.length)}</span> of{" "}
+                <span className="font-semibold text-zinc-800">{cashiers.length}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCashierPage((p) => Math.max(1, p - 1))}
+                  disabled={cashierPage <= 1}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-semibold text-zinc-700 px-1">
+                  {cashierPage} / {totalCashierPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCashierPage((p) => Math.min(totalCashierPages, p + 1))}
+                  disabled={cashierPage >= totalCashierPages}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ── WASTAGE & LOSS AUDIT TRAIL SUMMARY ── */}
-      {analytics?.wastage_breakdown && analytics.wastage_breakdown.length > 0 && (
+      {wastageItems.length > 0 && (
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <div>
@@ -1089,12 +1239,12 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               </p>
             </div>
             <span className="text-xs font-bold text-rose-600">
-              Total: {formatCurrency(analytics.wastage_cost)} ({formatWeight(analytics.wastage_weight)})
+              Total: {formatCurrency(analytics?.wastage_cost || 0)} ({formatWeight(analytics?.wastage_weight || 0)})
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-2">
-            {analytics.wastage_breakdown.map((w) => (
+            {paginatedWastage.map((w) => (
               <div key={w.reason} className="p-3 rounded-xl bg-rose-50/50 border border-rose-100">
                 <span className="text-[11px] font-bold text-rose-700 uppercase">{w.reason}</span>
                 <div className="text-base font-black text-rose-600 mt-1 tabular-nums">
@@ -1106,6 +1256,39 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               </div>
             ))}
           </div>
+
+          {wastageItems.length > 0 && (
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-100 text-xs text-zinc-500">
+              <span>
+                Showing <span className="font-semibold text-zinc-800">{(wastagePage - 1) * WASTAGE_PER_PAGE + 1}</span>-
+                <span className="font-semibold text-zinc-800">{Math.min(wastagePage * WASTAGE_PER_PAGE, wastageItems.length)}</span> of{" "}
+                <span className="font-semibold text-zinc-800">{wastageItems.length}</span> reasons
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setWastagePage((p) => Math.max(1, p - 1))}
+                  disabled={wastagePage <= 1}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-semibold text-zinc-700 px-1">
+                  {wastagePage} / {totalWastagePages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setWastagePage((p) => Math.min(totalWastagePages, p + 1))}
+                  disabled={wastagePage >= totalWastagePages}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

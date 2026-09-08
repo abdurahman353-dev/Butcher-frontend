@@ -60,7 +60,7 @@ export default function ProductsPage() {
         });
       }
       if (cachedCats) setCategories(JSON.parse(cachedCats));
-    } catch {}
+    } catch { }
   }, []);
 
   // Modal State (Add or Edit)
@@ -471,17 +471,15 @@ export default function ProductsPage() {
                         <button
                           type="button"
                           onClick={() => handleToggleStatus(product)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
-                            product.is_active
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${product.is_active
                               ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
                               : "bg-zinc-100 text-zinc-500 border-zinc-200 hover:bg-zinc-200"
-                          }`}
+                            }`}
                           title={`Click to ${product.is_active ? "deactivate" : "activate"}`}
                         >
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              product.is_active ? "bg-green-600" : "bg-zinc-400"
-                            }`}
+                            className={`w-1.5 h-1.5 rounded-full ${product.is_active ? "bg-green-600" : "bg-zinc-400"
+                              }`}
                           />
                           <span>{product.is_active ? "Active" : "Inactive"}</span>
                         </button>

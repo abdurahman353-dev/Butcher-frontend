@@ -21,6 +21,7 @@ interface CartPaneProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "card") => void;
+  isShiftOpen?: boolean;
 }
 
 export function CartPane({
@@ -37,6 +38,7 @@ export function CartPane({
   onRemoveItem,
   onClearCart,
   onProceedCheckout,
+  isShiftOpen = true,
 }: CartPaneProps) {
   const { confirm } = useSystemDialog();
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
@@ -207,10 +209,16 @@ export function CartPane({
           className={`w-full py-3 px-4 rounded-lg font-semibold text-sm text-white flex items-center justify-center gap-2 transition-all ${
             items.length === 0
               ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
+              : !isShiftOpen
+              ? "bg-amber-600 hover:bg-amber-700 active:scale-[0.98]"
               : "bg-green-600 hover:bg-green-700 active:scale-[0.98]"
           }`}
         >
-          <span>Checkout ({formatCurrency(total)})</span>
+          <span>
+            {!isShiftOpen && items.length > 0
+              ? `Open Shift to Checkout (${formatCurrency(total)})`
+              : `Checkout (${formatCurrency(total)})`}
+          </span>
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>

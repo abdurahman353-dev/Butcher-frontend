@@ -18,7 +18,7 @@ function StockInForm() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(
-    preselectedProductId ? Number(preselectedProductId) : 1
+    preselectedProductId ? Number(preselectedProductId) : 0
   );
   const [quantity, setQuantity] = useState<string>("");
   const [buyingCost, setBuyingCost] = useState<string>("");
@@ -45,7 +45,8 @@ function StockInForm() {
     load();
   }, [preselectedProductId]);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const activeProductId = selectedProductId || (products[0]?.id ?? 0);
+  const selectedProduct = products.find((p) => p.id === activeProductId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +75,7 @@ function StockInForm() {
     setIsSubmitting(true);
     try {
       const updated = await inventoryService.stockIn({
-        product_id: selectedProductId,
+        product_id: activeProductId,
         quantity: qty,
         buying_cost: cost,
         notes,
@@ -126,7 +127,7 @@ function StockInForm() {
             Select Meat Cut <span className="text-rose-500">*</span>
           </label>
           <select
-            value={selectedProductId}
+            value={activeProductId}
             onChange={(e) => {
               const id = Number(e.target.value);
               setSelectedProductId(id);

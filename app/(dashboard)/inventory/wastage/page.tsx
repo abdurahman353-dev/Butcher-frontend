@@ -13,7 +13,7 @@ export default function WastagePage() {
   const { confirm, alert } = useSystemDialog();
   const [products, setProducts] = useState<Product[]>([]);
   const [wastageList, setWastageList] = useState<WastageRecord[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<number>(1);
+  const [selectedProductId, setSelectedProductId] = useState<number>(0);
   const [quantity, setQuantity] = useState<string>("");
   const [reason, setReason] = useState<WastageReason>("Spoilage");
   const [notes, setNotes] = useState<string>("");
@@ -27,8 +27,10 @@ export default function WastagePage() {
         inventoryService.getWastage(),
       ]);
       setProducts(prodsRes.data);
-      if (prodsRes.data.length > 0 && !selectedProductId) {
-        setSelectedProductId(prodsRes.data[0].id);
+      if (prodsRes.data.length > 0) {
+        setSelectedProductId((prev) =>
+          prodsRes.data.some((p) => p.id === prev) ? prev : prodsRes.data[0].id
+        );
       }
       setWastageList(wastageRes);
     } catch (e) {
@@ -40,7 +42,8 @@ export default function WastagePage() {
     loadData();
   }, []);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const activeProductId = selectedProductId || (products[0]?.id ?? 0);
+  const selectedProduct = products.find((p) => p.id === activeProductId);
   const numQty = parseFloat(quantity) || 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,7 +80,7 @@ export default function WastagePage() {
     setIsSubmitting(true);
     try {
       await inventoryService.recordWastage({
-        product_id: selectedProductId,
+        product_id: activeProductId,
         quantity: numQty,
         reason,
         notes,
@@ -141,7 +144,7 @@ export default function WastagePage() {
                 Meat Cut <span className="text-rose-500">*</span>
               </label>
               <select
-                value={selectedProductId}
+                value={activeProductId}
                 onChange={(e) => setSelectedProductId(Number(e.target.value))}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-rose-500 focus:ring-1 focus:ring-rose-500 shadow-2xs"
               >

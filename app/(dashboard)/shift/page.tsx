@@ -19,8 +19,8 @@ export default function ShiftPage() {
   const { shift, isShiftOpen, openShift, closeShift } = useShift();
   const { confirm, alert } = useSystemDialog();
 
-  // Open Shift Form State
-  const [openingFloat, setOpeningFloat] = useState<string>("5000");
+  // Open Shift Form State - strictly entered by cashier, no hardcodes
+  const [openingFloat, setOpeningFloat] = useState<string>("");
   const [openNotes, setOpenNotes] = useState("");
   const [isOpening, setIsOpening] = useState(false);
 
@@ -35,15 +35,15 @@ export default function ShiftPage() {
   const discrepancy = countedCash !== "" ? roundTo(numCounted - expectedCash, 2) : 0;
 
   const handleOpenShift = async () => {
-    const floatNum = parseFloat(openingFloat);
-    if (isNaN(floatNum) || floatNum < 0) {
+    if (!openingFloat.trim() || isNaN(parseFloat(openingFloat)) || parseFloat(openingFloat) < 0) {
       await alert({
-        title: "Invalid Float Amount",
-        message: "Please enter a valid non-negative opening cash float.",
+        title: "Cash Float Required",
+        message: "Please manually enter your starting cash float before opening the shift.",
         type: "warning",
       });
       return;
     }
+    const floatNum = parseFloat(openingFloat);
 
     const confirmed = await confirm({
       title: "Open Register Shift",
@@ -359,24 +359,13 @@ export default function ShiftPage() {
             </label>
             <input
               type="number"
+              step="any"
+              min="0"
               value={openingFloat}
               onChange={(e) => setOpeningFloat(e.target.value)}
-              placeholder="5000"
+              placeholder="Enter opening cash float (e.g. 2500)"
               className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xl font-bold text-green-700 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {[2000, 3000, 5000, 10000].map((fl) => (
-              <button
-                key={fl}
-                type="button"
-                onClick={() => setOpeningFloat(fl.toString())}
-                className="px-2.5 py-1.5 rounded-lg bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-xs font-semibold text-zinc-700 shadow-2xs"
-              >
-                {formatCurrency(fl)}
-              </button>
-            ))}
           </div>
 
           <div>
@@ -394,9 +383,9 @@ export default function ShiftPage() {
 
           <button
             type="button"
-            disabled={isOpening}
+            disabled={isOpening || !openingFloat.trim()}
             onClick={handleOpenShift}
-            className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
+            className="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
           >
             <Unlock className="w-4 h-4" />
             <span>{isOpening ? "Opening Shift..." : "Open Shift & Begin Selling"}</span>
