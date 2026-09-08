@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { productsService } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
 import { Product, WastageRecord, WastageReason } from "@/types";
 import { formatWeight, formatCurrency, formatDateTime } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
-import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function WastagePage() {
   const { confirm, alert } = useSystemDialog();
@@ -19,6 +19,8 @@ export default function WastagePage() {
   const [notes, setNotes] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [wastagePage, setWastagePage] = useState(1);
+  const WASTAGE_PER_PAGE = 10;
 
   const loadData = async () => {
     try {
@@ -240,28 +242,62 @@ export default function WastagePage() {
                       </td>
                     </tr>
                   ) : (
-                    wastageList.map((w) => (
-                      <tr key={w.id} className="hover:bg-zinc-50/50">
-                        <td className="py-3 pl-4 text-zinc-500">{formatDateTime(w.created_at)}</td>
-                        <td className="py-3 px-3 font-semibold text-zinc-900">{w.product_name}</td>
-                        <td className="py-3 px-3">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
-                            {w.reason}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right font-bold text-rose-600 tabular-nums">
-                          {formatWeight(w.quantity)}
-                        </td>
-                        <td className="py-3 px-3 text-right text-zinc-800 font-semibold tabular-nums">
-                          {formatCurrency(w.estimated_cost)}
-                        </td>
-                        <td className="py-3 pr-4 text-zinc-500">{w.reported_by}</td>
-                      </tr>
-                    ))
+                    wastageList
+                      .slice((wastagePage - 1) * WASTAGE_PER_PAGE, wastagePage * WASTAGE_PER_PAGE)
+                      .map((w) => (
+                        <tr key={w.id} className="hover:bg-zinc-50/50">
+                          <td className="py-3 pl-4 text-zinc-500">{formatDateTime(w.created_at)}</td>
+                          <td className="py-3 px-3 font-semibold text-zinc-900">{w.product_name}</td>
+                          <td className="py-3 px-3">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
+                              {w.reason}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-bold text-rose-600 tabular-nums">
+                            {formatWeight(w.quantity)}
+                          </td>
+                          <td className="py-3 px-3 text-right text-zinc-800 font-semibold tabular-nums">
+                            {formatCurrency(w.estimated_cost)}
+                          </td>
+                          <td className="py-3 pr-4 text-zinc-500">{w.reported_by}</td>
+                        </tr>
+                      ))
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Wastage Pagination */}
+            {wastageList.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-100 text-xs text-zinc-500">
+                <span>
+                  Showing <span className="font-semibold text-zinc-800">{(wastagePage - 1) * WASTAGE_PER_PAGE + 1}</span>–
+                  <span className="font-semibold text-zinc-800">{Math.min(wastagePage * WASTAGE_PER_PAGE, wastageList.length)}</span> of{" "}
+                  <span className="font-semibold text-zinc-800">{wastageList.length}</span> records
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setWastagePage((p) => Math.max(1, p - 1))}
+                    disabled={wastagePage <= 1}
+                    className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-2 font-semibold text-zinc-700">
+                    {wastagePage} / {Math.ceil(wastageList.length / WASTAGE_PER_PAGE)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWastagePage((p) => Math.min(Math.ceil(wastageList.length / WASTAGE_PER_PAGE), p + 1))}
+                    disabled={wastagePage >= Math.ceil(wastageList.length / WASTAGE_PER_PAGE)}
+                    className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

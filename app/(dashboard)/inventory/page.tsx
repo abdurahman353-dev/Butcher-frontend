@@ -18,6 +18,8 @@ import {
   PackageX,
   DollarSign,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ArrowUpDown,
   X,
   Filter,
@@ -48,6 +50,8 @@ export default function InventoryPage() {
   const [movTypeFilter, setMovTypeFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [stockPage, setStockPage] = useState(1);
+  const STOCK_PER_PAGE = 20;
 
   const fetchInventory = useCallback(async () => {
     try {
@@ -169,7 +173,15 @@ export default function InventoryPage() {
     setCategoryFilter("all");
     setSortKey("name");
     setSortDir("asc");
+    setStockPage(1);
   };
+
+  const paginatedProducts = useMemo(() => {
+    const start = (stockPage - 1) * STOCK_PER_PAGE;
+    return filteredProducts.slice(start, start + STOCK_PER_PAGE);
+  }, [filteredProducts, stockPage]);
+
+  const totalStockPages = Math.max(1, Math.ceil(filteredProducts.length / STOCK_PER_PAGE));
 
   const SortTh = ({
     label,
@@ -544,7 +556,7 @@ export default function InventoryPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((p) => {
+                  paginatedProducts.map((p) => {
                     const isOut = p.current_stock <= 0;
                     const isLow = !isOut && p.current_stock <= p.min_stock;
                     const stockStatus = isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
@@ -612,6 +624,36 @@ export default function InventoryPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Stock Levels Pagination */}
+          {filteredProducts.length > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-zinc-50/60 border-t border-zinc-100 text-xs text-zinc-500">
+              <span>
+                Showing <span className="font-semibold text-zinc-800">{(stockPage - 1) * STOCK_PER_PAGE + 1}</span>–
+                <span className="font-semibold text-zinc-800">{Math.min(stockPage * STOCK_PER_PAGE, filteredProducts.length)}</span> of{" "}
+                <span className="font-semibold text-zinc-800">{filteredProducts.length}</span> cuts
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStockPage((p) => Math.max(1, p - 1))}
+                  disabled={stockPage <= 1}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="px-2 font-semibold text-zinc-700">{stockPage} / {totalStockPages}</span>
+                <button
+                  type="button"
+                  onClick={() => setStockPage((p) => Math.min(totalStockPages, p + 1))}
+                  disabled={stockPage >= totalStockPages}
+                  className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-2xs"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* TAB 2: Stock Movements Audit Trail */
