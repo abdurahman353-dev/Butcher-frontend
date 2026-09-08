@@ -335,7 +335,7 @@ export default function DashboardPage() {
                   </td>
                 </tr>
               ) : (
-                summary.recent_sales.map((sale) => (
+                summary.recent_sales.slice(0, 3).map((sale) => (
                   <tr key={sale.id} className="hover:bg-zinc-50/60 transition-colors">
                     <td className="py-3 pl-3 font-mono font-semibold text-zinc-900">
                       <Link href={`/sales/${sale.id}`} className="hover:text-green-700 hover:underline">
