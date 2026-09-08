@@ -1,6 +1,15 @@
 import apiClient from "./api";
 import { Shift } from "@/types";
 
+export interface ShiftHistoryParams {
+  status?: string;
+  cashier_id?: string | number;
+  start_date?: string;
+  end_date?: string;
+  discrepancy?: string;
+  search?: string;
+}
+
 export const shiftsService = {
   async getCurrentShift(): Promise<Shift | null> {
     const res = await apiClient.get<Shift | null>("/shifts/current");
@@ -29,8 +38,9 @@ export const shiftsService = {
     return res.data;
   },
 
-  async getShiftHistory(): Promise<Shift[]> {
-    const res = await apiClient.get<Shift[]>("/shifts");
+  async getShiftHistory(params?: ShiftHistoryParams): Promise<Shift[]> {
+    const res = await apiClient.get<Shift[]>("/shifts", { params });
     return res.data;
   },
 };
+

@@ -15,7 +15,7 @@ const navigation = [
   { name: "Inventory", href: "/inventory", icon: Boxes },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
-  { name: "My Shift", href: "/shift", icon: Clock },
+  { name: "Shifts & Till", href: "/shift", icon: Clock },
   { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
 ];
 

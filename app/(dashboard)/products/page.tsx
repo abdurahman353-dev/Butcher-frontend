@@ -126,8 +126,8 @@ export default function ProductsPage() {
       category_id: categories[0]?.id || 1,
       price_per_kg: "",
       buying_cost_per_kg: "",
-      current_stock: "0",
-      min_stock: "10",
+      current_stock: "",
+      min_stock: "",
     });
     setIsModalOpen(true);
   };
@@ -162,6 +162,28 @@ export default function ProductsPage() {
       return;
     }
 
+    if (!editingProduct && formData.current_stock === "") {
+      const errMsg = "Please enter the initial stock quantity in KG.";
+      setModalError(errMsg);
+      await alert({
+        title: "Initial Stock Required",
+        message: errMsg,
+        type: "warning",
+      });
+      return;
+    }
+
+    if (formData.min_stock === "") {
+      const errMsg = "Please enter the minimum alert stock level in KG.";
+      setModalError(errMsg);
+      await alert({
+        title: "Minimum Stock Required",
+        message: errMsg,
+        type: "warning",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload: Partial<Product> = {
@@ -170,8 +192,8 @@ export default function ProductsPage() {
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
         buying_cost_per_kg: formData.buying_cost_per_kg ? parseFloat(formData.buying_cost_per_kg) : undefined,
-        current_stock: parseFloat(formData.current_stock) || 0,
-        min_stock: parseFloat(formData.min_stock) || 10,
+        current_stock: parseFloat(formData.current_stock),
+        min_stock: parseFloat(formData.min_stock),
         unit: "KG",
       };
 
@@ -420,6 +442,7 @@ export default function ProductsPage() {
                 <th className="py-3.5 px-3">SKU</th>
                 <th className="py-3.5 px-3">Category</th>
                 <th className="py-3.5 px-3 text-right">Selling Price / KG</th>
+                <th className="py-3.5 px-3 text-right">Cost Price / KG</th>
                 <th className="py-3.5 px-3 text-right">Current Stock</th>
                 <th className="py-3.5 px-3 text-right">Min Stock</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
@@ -429,7 +452,7 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-zinc-100">
               {paginated.data.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-zinc-400">
+                  <td colSpan={9} className="py-8 text-center text-zinc-400">
                     No meat products found matching your search.
                   </td>
                 </tr>
@@ -453,6 +476,9 @@ export default function ProductsPage() {
                       <td className="py-3 px-3 text-zinc-700">{product.category_name}</td>
                       <td className="py-3 px-3 text-right font-bold text-green-700 tabular-nums text-sm">
                         {formatCurrency(product.price_per_kg)}
+                      </td>
+                      <td className="py-3 px-3 text-right tabular-nums text-zinc-600 font-semibold">
+                        {product.buying_cost_per_kg ? formatCurrency(product.buying_cost_per_kg) : <span className="text-zinc-300 font-normal">—</span>}
                       </td>
                       <td className="py-3 px-3 text-right font-semibold tabular-nums">
                         <span className={isLow ? "text-amber-700" : "text-zinc-800"}>
@@ -631,28 +657,33 @@ export default function ProductsPage() {
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
                     {editingProduct ? "Current Stock (KG)" : "Initial Stock (KG)"}
+                    {!editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
                   </label>
                   <input
                     type="number"
                     step="0.001"
+                    min="0"
+                    required={!editingProduct}
                     value={formData.current_stock}
                     onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
-                    placeholder="42.5"
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-bold focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                    placeholder="e.g. 42.5"
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-bold placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Minimum Alert Stock (KG)
+                    Minimum Alert Stock (KG) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
                     step="0.001"
+                    min="0"
+                    required
                     value={formData.min_stock}
                     onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })}
-                    placeholder="10"
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                    placeholder="e.g. 5"
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>

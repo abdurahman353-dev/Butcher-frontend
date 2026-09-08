@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { reportsService, ReportAnalyticsData } from "@/services/reports.service";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { usePolling } from "@/hooks/usePolling";
@@ -60,6 +61,7 @@ export default function ReportsPage() {
   const [categoryPage, setCategoryPage] = useState(1);
   const [cashierPage, setCashierPage] = useState(1);
   const [wastagePage, setWastagePage] = useState(1);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const CATEGORIES_PER_PAGE = 5;
   const CASHIERS_PER_PAGE = 5;
@@ -86,11 +88,13 @@ export default function ReportsPage() {
 
       const data = await reportsService.getReportAnalytics(params);
       setAnalytics(data);
+      setFetchError(null);
       if (typeof window !== "undefined") {
         localStorage.setItem("butcher_cached_reports", JSON.stringify(data));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to load report analytics:", e);
+      setFetchError(e?.message || "Failed to load report analytics. Unable to reach server.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -406,6 +410,27 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
           </button>
         </div>
       </div>
+
+      {/* ── ERROR BANNER IF SERVER UNREACHABLE ── */}
+      {fetchError && !analytics && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-800 shadow-2xs print:hidden">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <p className="font-bold text-rose-900">Unable to load analytics report</p>
+              <p className="text-rose-700">{fetchError}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold flex items-center gap-1.5 self-start sm:self-auto shadow-2xs transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry Connection</span>
+          </button>
+        </div>
+      )}
 
       {/* ── COLLAPSIBLE FILTER CONSOLE (closed by default) ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden print:hidden">
@@ -1152,9 +1177,15 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               <h2 className="text-sm font-bold text-zinc-900">Staff / Cashier Audit</h2>
               <p className="text-xs text-zinc-500 mt-0.5">Orders rung up per station</p>
             </div>
-            <span className="text-xs font-semibold text-zinc-500">
-              {cashiers.length} Cashiers
-            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/shift"
+                className="text-xs font-semibold text-green-700 hover:text-green-800 flex items-center gap-1 transition-colors px-2 py-1 rounded-lg hover:bg-green-50"
+              >
+                <span>Shift History</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-3">
