@@ -1,21 +1,21 @@
-import apiClient, { ensureCsrfCookie } from "./api";
-import { User, UserRole } from "@/types";
+import apiClient, { tokenStore } from "./api";
+import { User } from "@/types";
 
 /**
- * Session-based authentication over httpOnly cookies.
+ * Token-based authentication via Laravel Sanctum API tokens.
  *
- * No authentication data is stored in localStorage/sessionStorage. The session
- * is held entirely on the server and conveyed via an httpOnly cookie, which is
- * not accessible to JavaScript and therefore immune to XSS token theft.
+ * The token is stored in localStorage and attached to every request as a
+ * Bearer token by the axios request interceptor in api.ts.
+ * No CSRF cookie or session management is required.
  */
 export const authService = {
   async login(identifier: string, password: string): Promise<User> {
-    // Obtain the CSRF token + establish a session before state-changing POST.
-    await ensureCsrfCookie();
-    const res = await apiClient.post<{ user: User }>("/auth/login", {
+    const res = await apiClient.post<{ token: string; user: User }>("/auth/login", {
       login: identifier,
       password,
     });
+    // Persist the token for future requests and page reloads.
+    tokenStore.set(res.data.token);
     return res.data.user;
   },
 
@@ -23,28 +23,29 @@ export const authService = {
     try {
       await apiClient.post("/auth/logout");
     } catch {
-      // Ignore network errors on logout; the cookie is cleared server-side.
+      // Ignore network errors on logout.
+    } finally {
+      tokenStore.clear();
     }
   },
 
   /**
-   * Fetch the currently authenticated user from the session cookie.
-   * Resolves to null when there is no valid session.
+   * Fetch the currently authenticated user using the stored token.
+   * Resolves to null when there is no valid token / session.
    */
   async getCurrentUser(): Promise<User | null> {
-    await ensureCsrfCookie();
+    if (!tokenStore.get()) return null;
     try {
       const res = await apiClient.get<User>("/auth/me");
       return res.data;
     } catch {
+      tokenStore.clear();
       return null;
     }
   },
 };
 
-export function roleGuard(user: User | null, allowedRoles: UserRole[]): boolean {
+export function roleGuard(user: User | null, allowedRoles: string[]): boolean {
   if (!user) return false;
-  if (allowedRoles.includes("admin") && user.role === "admin") return true;
-  if (allowedRoles.includes("cashier") && user.role === "cashier") return true;
-  return false;
+  return allowedRoles.includes(user.role);
 }
