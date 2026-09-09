@@ -37,7 +37,7 @@ export default function DashboardPage() {
     try {
       const cached = localStorage.getItem("butcher_cached_dashboard_summary");
       if (cached) setSummary(JSON.parse(cached));
-    } catch {}
+    } catch { }
   }, []);
 
   const fetchSummary = useCallback(async () => {
@@ -54,15 +54,15 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Real-time: poll every 10 seconds
-  usePolling(fetchSummary, 10000);
+  // Poll dashboard summary every 30 seconds to allow remote DB responses without socket overlap
+  usePolling(fetchSummary, 30000);
 
   const currentChartData =
     chartPeriod === "today"
       ? summary?.sales_chart.today || []
       : chartPeriod === "week"
-      ? summary?.sales_chart.week || []
-      : summary?.sales_chart.month || [];
+        ? summary?.sales_chart.week || []
+        : summary?.sales_chart.month || [];
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">
@@ -181,11 +181,10 @@ export default function DashboardPage() {
                   key={period}
                   type="button"
                   onClick={() => setChartPeriod(period)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${
-                    chartPeriod === period
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${chartPeriod === period
                       ? "bg-white text-zinc-900 shadow-2xs"
                       : "text-zinc-600 hover:text-zinc-900"
-                  }`}
+                    }`}
                 >
                   {period === "today" ? "Today" : period === "week" ? "7 Days" : "Monthly Trend"}
                 </button>

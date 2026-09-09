@@ -1,21 +1,25 @@
-import apiClient, { tokenStore } from "./api";
+import apiClient, { ensureCsrf } from "./api";
 import { User } from "@/types";
 
 /**
- * Token-based authentication via Laravel Sanctum API tokens.
- *
- * The token is stored in localStorage and attached to every request as a
- * Bearer token by the axios request interceptor in api.ts.
- * No CSRF cookie or session management is required.
+ * Sanctum SPA authentication.
+ * - Login: fetches CSRF cookie first, then posts credentials.
+ *   Backend responds with { user } only — no token in JSON.
+ *   The session cookie is set by the browser automatically (httpOnly).
+ * - getCurrentUser: calls /auth/me — 200 = authenticated, 401 = not.
+ *   No localStorage, no cached state — the session cookie is the source of truth.
+ * - Logout: backend invalidates the session; frontend clears React state only.
  */
 export const authService = {
   async login(identifier: string, password: string): Promise<User> {
-    const res = await apiClient.post<{ token: string; user: User }>("/auth/login", {
+    // Seed the XSRF-TOKEN cookie before the first mutating request
+    await ensureCsrf();
+
+    const res = await apiClient.post<{ user: User }>("/auth/login", {
       login: identifier,
       password,
     });
-    // Persist the token for future requests and page reloads.
-    tokenStore.set(res.data.token);
+
     return res.data.user;
   },
 
@@ -23,23 +27,20 @@ export const authService = {
     try {
       await apiClient.post("/auth/logout");
     } catch {
-      // Ignore network errors on logout.
-    } finally {
-      tokenStore.clear();
+      // Ignore — session may already be invalid
     }
   },
 
   /**
-   * Fetch the currently authenticated user using the stored token.
-   * Resolves to null when there is no valid token / session.
+   * Asks the backend if the current session is valid.
+   * Returns the User on success, null on 401.
+   * Never reads localStorage or cookies from JS.
    */
   async getCurrentUser(): Promise<User | null> {
-    if (!tokenStore.get()) return null;
     try {
       const res = await apiClient.get<User>("/auth/me");
       return res.data;
     } catch {
-      tokenStore.clear();
       return null;
     }
   },

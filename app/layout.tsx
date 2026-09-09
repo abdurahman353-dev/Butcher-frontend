@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
-      <body className={`${inter.variable} font-sans h-full antialiased bg-[#f5f5f5] text-zinc-900`}>
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans h-full antialiased bg-[#f5f5f5] text-zinc-900`} suppressHydrationWarning>
         <AuthProvider>
           <DialogProvider>
             {children}

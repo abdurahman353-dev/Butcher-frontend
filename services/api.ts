@@ -1,33 +1,19 @@
-import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from "axios";
+import axios, { AxiosError, AxiosInstance, AxiosResponse } from "axios";
 import { ApiError } from "@/types";
 
-// ─── Token Storage ────────────────────────────────────────────────────────────
-// Kept in memory for SSR safety; also persisted in localStorage for page reload.
-
-const TOKEN_KEY = "butcher_pos_token";
-
-export const tokenStore = {
-  get(): string | null {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem(TOKEN_KEY);
-  },
-  set(token: string): void {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(TOKEN_KEY, token);
-  },
-  clear(): void {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(TOKEN_KEY);
-  },
-};
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 // ─── Axios Instance ───────────────────────────────────────────────────────────
-// Uses relative baseURL so requests go through the Next.js proxy rewrite,
-// keeping the same origin (avoids CORS preflight on every call).
+// withCredentials: true → browser automatically sends the httpOnly session cookie.
+// xsrfCookieName / xsrfHeaderName → axios reads the XSRF-TOKEN cookie set by
+// Laravel and re-sends it as X-XSRF-TOKEN on every mutating request.
 
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: "/api",
-  timeout: 90000,
+  baseURL: `${BASE}/api`,
+  withCredentials: true,          // Send the httpOnly session cookie cross-origin
+  xsrfCookieName: "XSRF-TOKEN",  // Laravel Sanctum's default CSRF cookie name
+  xsrfHeaderName: "X-XSRF-TOKEN",// Laravel Sanctum's default CSRF header name
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -35,20 +21,24 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// ─── Request Interceptor ──────────────────────────────────────────────────────
-// Attach the Bearer token from storage to every outgoing request.
+// ─── CSRF Bootstrap ───────────────────────────────────────────────────────────
+// Call once before the first mutating request (login).
+// Laravel sets the XSRF-TOKEN cookie; axios picks it up automatically afterward.
 
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = tokenStore.get();
-  if (token && config.headers) {
-    config.headers["Authorization"] = `Bearer ${token}`;
-  }
-  return config;
-});
+let csrfFetched = false;
+
+export async function ensureCsrf(): Promise<void> {
+  if (csrfFetched) return;
+  await axios.get(`${BASE}/sanctum/csrf-cookie`, {
+    withCredentials: true,
+    headers: { "X-Requested-With": "XMLHttpRequest" },
+  });
+  csrfFetched = true;
+}
 
 // ─── Response Interceptor ─────────────────────────────────────────────────────
 
-async function handleRequestRejection(error: AxiosError): Promise<AxiosResponse> {
+async function handleRejection(error: AxiosError): Promise<AxiosResponse> {
   const apiError: ApiError = {
     message: "An unexpected error occurred. Please try again.",
     status_code: error.response?.status,
@@ -59,14 +49,16 @@ async function handleRequestRejection(error: AxiosError): Promise<AxiosResponse>
     const status = error.response.status;
 
     if (status === 401) {
-      // Token invalid or expired — clear it and redirect to login.
-      tokenStore.clear();
+      apiError.message = "Your session has expired. Please sign in again.";
       if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
         window.location.href = "/login?expired=1";
       }
-      apiError.message = "Your session has expired. Please sign in again.";
     } else if (status === 403) {
       apiError.message = "You do not have permission to perform this action.";
+    } else if (status === 419) {
+      // CSRF mismatch — reset and let the user retry
+      csrfFetched = false;
+      apiError.message = "Session expired. Please refresh the page and try again.";
     } else if (status === 422) {
       apiError.message = data?.message || "Validation failed. Please check the entered data.";
       apiError.errors = data?.errors;
@@ -88,7 +80,7 @@ async function handleRequestRejection(error: AxiosError): Promise<AxiosResponse>
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
-  handleRequestRejection
+  handleRejection,
 );
 
 export default apiClient;

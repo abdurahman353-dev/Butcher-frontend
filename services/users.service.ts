@@ -38,6 +38,14 @@ export const usersService = {
     return res.data;
   },
 
+  async toggleUserStatus(id: number): Promise<User> {
+    const res = await apiClient.patch<{ message: string; user: User }>(`/users/${id}/toggle-status`);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data.user;
+  },
+
   async deleteUser(id: number): Promise<void> {
     await apiClient.delete(`/users/${id}`);
     if (typeof window !== "undefined") {

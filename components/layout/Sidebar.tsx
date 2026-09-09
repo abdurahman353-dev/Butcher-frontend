@@ -65,6 +65,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
     { name: "Inventory", href: "/inventory", icon: Boxes },
     { name: "Customers", href: "/customers", icon: Users },
     { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
+    { name: "User Management", href: "/users", icon: UserCheck, adminOnly: true },
     { name: "Shifts & Till", href: "/shift", icon: Clock },
     { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
   ];

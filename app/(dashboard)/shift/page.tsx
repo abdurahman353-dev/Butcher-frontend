@@ -103,17 +103,9 @@ export default function ShiftPage() {
     }
   }, [statusFilter, cashierFilter, dateFrom, dateTo, discrepancyFilter, search]);
 
+  // Reload history only when filters change — no butcher:data-change listener
   useEffect(() => {
     loadHistory();
-
-    const handleDataChange = () => {
-      loadHistory();
-    };
-
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => {
-      window.removeEventListener("butcher:data-change", handleDataChange);
-    };
   }, [loadHistory]);
 
   const handleOpenShift = async () => {
@@ -173,8 +165,8 @@ export default function ShiftPage() {
       discrepancy === 0
         ? "Drawer is perfectly balanced."
         : discrepancy > 0
-        ? `Drawer has an overage of +${formatCurrency(discrepancy)}.`
-        : `Drawer has a shortage of -${formatCurrency(Math.abs(discrepancy))}.`;
+          ? `Drawer has an overage of +${formatCurrency(discrepancy)}.`
+          : `Drawer has a shortage of -${formatCurrency(Math.abs(discrepancy))}.`;
 
     const confirmed = await confirm({
       title: "Confirm Shift Closure",
@@ -441,16 +433,14 @@ export default function ShiftPage() {
             type="button"
             id="tab-active-shift"
             onClick={() => setActiveTab("active")}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "active"
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === "active"
                 ? "bg-white text-zinc-900 shadow-xs border border-zinc-200/80 font-bold"
                 : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"
-            }`}
+              }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
-                isShiftOpen ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
-              }`}
+              className={`w-2 h-2 rounded-full ${isShiftOpen ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
+                }`}
             />
             <span>Active Shift & Till</span>
             {isShiftOpen && (
@@ -464,20 +454,18 @@ export default function ShiftPage() {
             type="button"
             id="tab-shift-history"
             onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === "history"
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${activeTab === "history"
                 ? "bg-white text-zinc-900 shadow-xs border border-zinc-200/80 font-bold"
                 : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/50"
-            }`}
+              }`}
           >
             <History className="w-3.5 h-3.5 text-zinc-500" />
             <span>Shift History & Audit</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === "history"
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${activeTab === "history"
                   ? "bg-zinc-200 text-zinc-800"
                   : "bg-zinc-200/60 text-zinc-600"
-              }`}
+                }`}
             >
               {shiftsList.length}
             </span>
@@ -534,13 +522,12 @@ export default function ShiftPage() {
                 <div className="p-2 bg-white/70 rounded-lg">
                   <span className="text-zinc-500 block text-[10px] uppercase">Variance</span>
                   <strong
-                    className={`text-sm ${
-                      (closedSummary.difference ?? 0) === 0
+                    className={`text-sm ${(closedSummary.difference ?? 0) === 0
                         ? "text-green-700 font-bold"
                         : (closedSummary.difference ?? 0) > 0
-                        ? "text-blue-700 font-bold"
-                        : "text-rose-600 font-bold"
-                    }`}
+                          ? "text-blue-700 font-bold"
+                          : "text-rose-600 font-bold"
+                      }`}
                   >
                     {formatCurrency(closedSummary.difference ?? 0)}
                   </strong>
@@ -667,13 +654,12 @@ export default function ShiftPage() {
                 {/* Live Variance Calculation */}
                 {countedCash !== "" && (
                   <div
-                    className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
-                      discrepancy === 0
+                    className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${discrepancy === 0
                         ? "bg-green-50 border-green-200 text-green-800"
                         : discrepancy > 0
-                        ? "bg-blue-50 border-blue-200 text-blue-800"
-                        : "bg-rose-50 border-rose-200 text-rose-800"
-                    }`}
+                          ? "bg-blue-50 border-blue-200 text-blue-800"
+                          : "bg-rose-50 border-rose-200 text-rose-800"
+                      }`}
                   >
                     <span>
                       Drawer Balance:{" "}
@@ -836,13 +822,12 @@ export default function ShiftPage() {
                 <Scale className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
               </div>
               <div
-                className={`text-xl sm:text-2xl font-bold tabular-nums truncate ${
-                  stats.netVariance === 0
+                className={`text-xl sm:text-2xl font-bold tabular-nums truncate ${stats.netVariance === 0
                     ? "text-green-700"
                     : stats.netVariance > 0
-                    ? "text-blue-700"
-                    : "text-rose-600"
-                }`}
+                      ? "text-blue-700"
+                      : "text-rose-600"
+                  }`}
               >
                 {stats.netVariance >= 0 ? `+${formatCurrency(stats.netVariance)}` : formatCurrency(stats.netVariance)}
               </div>
@@ -850,8 +835,8 @@ export default function ShiftPage() {
                 {stats.netVariance === 0
                   ? "Drawers balanced"
                   : stats.netVariance > 0
-                  ? "Net cash surplus"
-                  : "Net cash shortage"}
+                    ? "Net cash surplus"
+                    : "Net cash shortage"}
               </p>
             </div>
           </div>
@@ -903,11 +888,10 @@ export default function ShiftPage() {
                 <button
                   type="button"
                   onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border shadow-2xs shrink-0 ${
-                    showAdvancedFilters || activeFiltersCount > 0
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border shadow-2xs shrink-0 ${showAdvancedFilters || activeFiltersCount > 0
                       ? "bg-green-50 text-green-800 border-green-200"
                       : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200"
-                  }`}
+                    }`}
                 >
                   <Filter className="w-3.5 h-3.5 text-green-700" />
                   <span>Filters</span>
@@ -1192,19 +1176,18 @@ export default function ShiftPage() {
                         <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Drawer Variance</span>
                         {isClosed ? (
                           <span
-                            className={`inline-block font-bold text-xs tabular-nums ${
-                              diff === 0
+                            className={`inline-block font-bold text-xs tabular-nums ${diff === 0
                                 ? "text-green-700"
                                 : diff > 0
-                                ? "text-blue-700"
-                                : "text-rose-600"
-                            }`}
+                                  ? "text-blue-700"
+                                  : "text-rose-600"
+                              }`}
                           >
                             {diff === 0
                               ? "Balanced (0.00)"
                               : diff > 0
-                              ? `+${formatCurrency(diff)}`
-                              : formatCurrency(diff)}
+                                ? `+${formatCurrency(diff)}`
+                                : formatCurrency(diff)}
                           </span>
                         ) : (
                           <span className="text-zinc-400 text-xs">Open till</span>
@@ -1331,19 +1314,18 @@ export default function ShiftPage() {
                           <td className="py-3 px-3 text-right tabular-nums">
                             {isClosed ? (
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  diff === 0
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${diff === 0
                                     ? "bg-green-50 text-green-700 border border-green-200"
                                     : diff > 0
-                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
+                                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                      : "bg-rose-50 text-rose-700 border border-rose-200"
+                                  }`}
                               >
                                 {diff === 0
                                   ? "Balanced"
                                   : diff > 0
-                                  ? `+${formatCurrency(diff)}`
-                                  : formatCurrency(diff)}
+                                    ? `+${formatCurrency(diff)}`
+                                    : formatCurrency(diff)}
                               </span>
                             ) : (
                               <span className="text-[10px] text-zinc-400">—</span>
