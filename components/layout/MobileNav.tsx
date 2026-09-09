@@ -35,13 +35,17 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
-        <div className="px-4 py-4 border-b border-zinc-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-green-600 flex items-center justify-center text-white text-sm">🥩</div>
+        <div className="h-14 px-4 border-b border-zinc-200 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/logo.png"
+              alt="Prime Cut Logo"
+              className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0"
+            />
             <span className="text-sm font-bold text-zinc-900">Prime Cut POS</span>
           </div>
           <button onClick={onClose} className="p-1 rounded text-zinc-400 hover:text-zinc-700">
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -58,18 +62,16 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
-                    : hasAlert
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${isActive
+                  ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
+                  : hasAlert
                     ? "text-rose-600 hover:bg-rose-50 hover:text-rose-800"
                     : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
-                }`}
+                  }`}
               >
                 <div className="relative shrink-0">
-                  <Icon className={`w-4 h-4 ${
-                    isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"
-                  }`} />
+                  <Icon className={`w-4 h-4 ${isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"
+                    }`} />
                   {hasAlert && (
                     <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center">
                       <span className="absolute inline-flex w-3 h-3 rounded-full bg-rose-500 opacity-75 animate-ping" />
