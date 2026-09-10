@@ -2,11 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { authService } from "@/services/auth.service";
+import { useAuth } from "@/hooks/useAuth";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [identifier, setIdentifier] = useState("admin@primecut.co.ke");
   const [password, setPassword] = useState("Admin@123");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,10 +23,14 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      await authService.login(identifier, password);
+      await login(identifier, password);
       router.push("/pos");
     } catch (err: any) {
-      setError(err.message || "Invalid credentials. Please try again.");
+      const msg =
+        err?.errors?.login?.[0] ||
+        err?.message ||
+        "Invalid credentials. Please try again.";
+      setError(/session|csrf|419/i.test(msg) ? msg : "Invalid credentials. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -42,8 +47,12 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-green-600 text-white text-2xl mb-4">
-            🥩
+          <div className="inline-flex items-center justify-center mb-3">
+            <img
+              src="/logo.png"
+              alt="Prime Cut Logo"
+              className="w-16 h-16 rounded-full object-cover border-2 border-amber-300 shadow-md"
+            />
           </div>
           <h1 className="text-xl font-bold text-zinc-900">Prime Cut POS</h1>
           <p className="text-sm text-zinc-500 mt-1">Sign in to your account</p>
@@ -105,7 +114,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
+          {/* <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-400">
             <span>Quick fill:</span>
             <div className="flex gap-3">
               <button onClick={() => fill("admin")} className="text-green-600 font-medium hover:underline">
@@ -115,7 +124,7 @@ export default function LoginPage() {
                 Cashier
               </button>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>

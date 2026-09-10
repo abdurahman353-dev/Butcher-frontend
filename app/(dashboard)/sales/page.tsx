@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { salesService } from "@/services/sales.service";
+import { reportsService } from "@/services/reports.service";
 import { Sale, PaginatedResponse } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -22,6 +23,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   FileSpreadsheet,
+  FileText,
   RefreshCw,
   SlidersHorizontal,
   ArrowUpDown,
@@ -71,7 +73,7 @@ export default function SalesPage() {
     try {
       const cached = localStorage.getItem("butcher_cached_sales");
       if (cached) setPaginated(JSON.parse(cached));
-    } catch {}
+    } catch { }
   }, []);
 
   const fetchSales = useCallback(async () => {
@@ -258,6 +260,76 @@ export default function SalesPage() {
     document.body.removeChild(link);
   };
 
+  // Download Day's Sales PDF Report
+  const handleDownloadDayPDF = async () => {
+    try {
+      setIsLoading(true);
+      const selectedDate = dateFrom || new Date().toISOString().slice(0, 10);
+      const analytics = await reportsService.getReportAnalytics({
+        start_date: selectedDate,
+        end_date: selectedDate,
+      });
+
+      const dateStr = new Date(selectedDate).toLocaleDateString("en-KE", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const timeStr = new Date().toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
+      const fK = (n: number) => `KSh ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const fW = (n: number) => `${Number(n).toFixed(2)} KG`;
+
+      const itemizedHTML = (analytics.itemized_categories || [])
+        .map(
+          (cat) => `
+        <div style="margin-bottom:14px">
+          <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+            <thead>
+              <tr style="background:#14532d"><th colspan="4" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:none">${cat.category_name}</th></tr>
+              <tr style="background:#dcfce7"><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d">Item / Cut</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Discount</th></tr>
+            </thead>
+            <tbody>${cat.items
+              .map(
+                (it) =>
+                  `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(it.price)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${it.discount > 0 ? fK(it.discount) : "-"}</td></tr>`
+              )
+              .join("")}</tbody>
+            <tfoot><tr style="background:#f0fdf4;border-top:2px solid #16a34a"><td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:700;color:#14532d">SUBTOTAL — ${cat.category_name}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${cat.subtotal_discount > 0 ? fK(cat.subtotal_discount) : "-"}</td></tr></tfoot>
+          </table>
+        </div>`
+        )
+        .join("");
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Sales PDF Report - ${selectedDate}</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
+<div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
+  <div><div style="font-size:22px;font-weight:900">🥩 PRIME CUT BUTCHER</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">Premium Meat Shop — Daily Sales PDF</div></div>
+  <div style="text-align:right"><div style="font-size:14px;font-weight:800">DAILY SALES EXECUTIVE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Report Date: ${dateStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Generated: ${timeStr}</div></div>
+</div>
+<div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Sales</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(analytics.revenue)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${analytics.transactions} orders</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Profit</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(analytics.gross_profit || 0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">Margin: ${analytics.gross_margin || 0}%</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Volume Sold</div><div style="font-size:16px;font-weight:900;color:#b45309;margin-top:3px">${fW(analytics.total_weight || 0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">AOV: ${fK(analytics.average_order_value || 0)}</div></div>
+</div>
+<div style="padding:20px 28px">
+  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#374151;border-bottom:2px solid #16a34a;padding:6px 0;margin:10px 0 10px">Itemized Cut Sales Ledger</div>
+  ${itemizedHTML || `<p style="padding:10px;color:#666">No sales transactions logged for ${selectedDate}.</p>`}
+</div>
+<script>window.onload=function(){window.print();};<\/script></body></html>`;
+
+      const win = window.open("", "_blank", "width=1100,height=750");
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+      }
+    } catch (e: any) {
+      console.error("Failed to generate day's PDF:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Selected Cashier Name for Badge
   const selectedCashierName = useMemo(() => {
     if (cashierFilter === "all") return null;
@@ -325,6 +397,15 @@ export default function SalesPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isLoading ? "animate-spin text-green-600" : ""}`} />
             <span className="hidden sm:inline">Sync</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadDayPDF}
+            className="h-10 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Day Sales PDF</span>
           </button>
 
           <button
@@ -436,18 +517,16 @@ export default function SalesPage() {
       {/* ── ADVANCED HIGH-CAPACITY FILTER CONSOLE ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden print:hidden">
         {/* Filter Console Header / Toggle */}
-        <div className={`p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/70 transition-colors ${
-          isFilterOpen || activeFiltersCount > 0 ? "border-b border-zinc-200" : ""
-        }`}>
-          <div 
+        <div className={`p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/70 transition-colors ${isFilterOpen || activeFiltersCount > 0 ? "border-b border-zinc-200" : ""
+          }`}>
+          <div
             onClick={() => setIsFilterOpen((v) => !v)}
             className="flex items-center gap-2.5 cursor-pointer select-none group flex-1"
           >
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-all shrink-0 ${
-              isFilterOpen || activeFiltersCount > 0 
-                ? "bg-green-500/10 text-green-700 border-green-600/20" 
-                : "bg-zinc-100 text-zinc-600 border-zinc-200"
-            }`}>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border transition-all shrink-0 ${isFilterOpen || activeFiltersCount > 0
+              ? "bg-green-500/10 text-green-700 border-green-600/20"
+              : "bg-zinc-100 text-zinc-600 border-zinc-200"
+              }`}>
               <Filter className="w-4 h-4 text-green-700" />
             </div>
             <div>
@@ -467,10 +546,10 @@ export default function SalesPage() {
                 )}
               </div>
               <p className="text-[11px] text-zinc-500">
-                {isFilterOpen 
-                  ? "Click to collapse filter console" 
-                  : activeFiltersCount > 0 
-                    ? `Active filters applied (${activeFiltersCount}). Click to expand filters.` 
+                {isFilterOpen
+                  ? "Click to collapse filter console"
+                  : activeFiltersCount > 0
+                    ? `Active filters applied (${activeFiltersCount}). Click to expand filters.`
                     : "Filter across tickets by date range, payment method, cashier, status, or amount."}
               </p>
             </div>
@@ -492,11 +571,10 @@ export default function SalesPage() {
             <button
               type="button"
               onClick={() => setIsFilterOpen((v) => !v)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 ${
-                isFilterOpen
-                  ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
-                  : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200"
-              }`}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all active:scale-95 ${isFilterOpen
+                ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
+                : "bg-white hover:bg-zinc-100 text-zinc-700 border-zinc-200"
+                }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>{isFilterOpen ? "Close Filters" : "Open Filters"}</span>

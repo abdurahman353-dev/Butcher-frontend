@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Product, Category, Customer, Sale, CartItem } from "@/types";
 import { productsService } from "@/services/products.service";
 import { customersService } from "@/services/customers.service";
 import { posService } from "@/services/pos.service";
 import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
-import { usePolling } from "@/hooks/usePolling";
 import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPane } from "@/components/pos/CartPane";
 import { WeightInput } from "@/components/shared/WeightInput";
@@ -27,6 +26,7 @@ export default function PosPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isFetchingRef = useRef(false);
 
   // Modals state
   const [selectedProductForWeight, setSelectedProductForWeight] = useState<Product | null>(null);
@@ -36,7 +36,6 @@ export default function PosPage() {
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
-  // Hooks
   const {
     items,
     subtotal,
@@ -53,42 +52,32 @@ export default function PosPage() {
 
   const { isShiftOpen, isLoading: isShiftLoading } = useShift();
 
-  useEffect(() => {
-    try {
-      const cachedProds = localStorage.getItem("butcher_cached_products");
-      const cachedCats = localStorage.getItem("butcher_cached_categories");
-      const cachedCusts = localStorage.getItem("butcher_cached_customers");
-      if (cachedProds) setProducts(JSON.parse(cachedProds));
-      if (cachedCats) setCategories(JSON.parse(cachedCats));
-      if (cachedCusts) setCustomers(JSON.parse(cachedCusts));
-    } catch {}
-  }, []);
-
+  // Fetch all POS data once — sequential to avoid overwhelming the PHP dev server
   const loadData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    setIsLoading(true);
     try {
-      const [cats, prodsRes, custsRes] = await Promise.all([
-        productsService.getCategories(),
-        productsService.getProducts({ per_page: 100, status: "active" }),
-        customersService.getCustomers({ per_page: 50 }),
-      ]);
+      const cats = await productsService.getCategories();
       setCategories(cats);
-      setProducts(prodsRes.data);
-      setCustomers(custsRes.data);
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("butcher_cached_categories", JSON.stringify(cats));
-        localStorage.setItem("butcher_cached_products", JSON.stringify(prodsRes.data));
-        localStorage.setItem("butcher_cached_customers", JSON.stringify(custsRes.data));
-      }
+      const prodsRes = await productsService.getProducts({ per_page: 200, status: "active" });
+      setProducts(prodsRes.data);
+
+      const custsRes = await customersService.getCustomers({ per_page: 50 });
+      setCustomers(custsRes.data);
     } catch (e) {
       console.error("Failed to load POS data:", e);
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, []);
 
-  // Poll every 10 seconds and on butcher:data-change
-  usePolling(loadData, 10000);
+  // Load once on mount — no polling
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSelectProduct = (product: Product) => {
     setSelectedProductForWeight(product);
@@ -156,6 +145,13 @@ export default function PosPage() {
 
     clearCart();
     setSelectedCustomer(null);
+
+    // Reload products after sale to reflect updated stock levels
+    productsService
+      .getProducts({ per_page: 200, status: "active" })
+      .then((r) => setProducts(r.data))
+      .catch(() => { });
+
     return sale;
   };
 
@@ -168,7 +164,7 @@ export default function PosPage() {
     <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] w-full overflow-hidden select-none relative bg-[#f8fafc]">
       {/* Left Column: Product Selection Grid */}
       <div className="flex-1 h-full overflow-hidden flex flex-col min-w-0">
-        {/* Shift Closed Warning Banner - displayed in flow without overlapping search */}
+        {/* Shift Closed Warning Banner */}
         {!isShiftLoading && !isShiftOpen && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-800 shadow-2xs shrink-0">
             <div className="flex items-center gap-2">
@@ -194,7 +190,7 @@ export default function PosPage() {
         />
       </div>
 
-      {/* Right Column: Desktop Current Sale Cart */}
+      {/* Right Column: Desktop Cart */}
       <div className="hidden lg:flex w-96 xl:w-[400px] h-full shrink-0">
         <CartPane
           items={items}
@@ -309,7 +305,7 @@ export default function PosPage() {
         </div>
       )}
 
-      {/* Weight Modal for Editing Existing Cart Item */}
+      {/* Weight Modal for Editing Cart Item */}
       {editingCartItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
