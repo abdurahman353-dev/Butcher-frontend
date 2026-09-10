@@ -26,6 +26,7 @@ export default function PosPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
 
   // Modals state
@@ -57,17 +58,20 @@ export default function PosPage() {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsLoading(true);
+    setLoadError(null);
     try {
       const cats = await productsService.getCategories();
-      setCategories(cats);
+      setCategories(Array.isArray(cats) ? cats : []);
 
       const prodsRes = await productsService.getProducts({ per_page: 200, status: "active" });
-      setProducts(prodsRes.data);
+      setProducts(Array.isArray(prodsRes?.data) ? prodsRes.data : []);
 
       const custsRes = await customersService.getCustomers({ per_page: 50 });
-      setCustomers(custsRes.data);
-    } catch (e) {
-      console.error("Failed to load POS data:", e);
+      setCustomers(Array.isArray(custsRes?.data) ? custsRes.data : []);
+    } catch (e: any) {
+      const msg = e?.message || "Failed to load POS catalog.";
+      console.error("Failed to load POS data:", msg, e);
+      setLoadError(msg);
     } finally {
       setIsLoading(false);
       isFetchingRef.current = false;
@@ -179,6 +183,23 @@ export default function PosPage() {
             >
               Open Shift
             </Link>
+          </div>
+        )}
+
+        {/* Catalog Load Failure Banner */}
+        {loadError && products.length === 0 && !isLoading && (
+          <div className="bg-red-50 border-b border-red-200 px-4 py-3 flex items-center justify-between text-xs text-red-800 shadow-2xs shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{loadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="px-3 py-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold rounded-lg transition-colors shrink-0"
+            >
+              Retry
+            </button>
           </div>
         )}
 

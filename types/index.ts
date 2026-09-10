@@ -58,7 +58,7 @@ export type PaymentMethod = "cash" | "mpesa" | "card";
 
 export type PaymentStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
-export type SaleStatus = "completed" | "refunded" | "cancelled";
+export type SaleStatus = "completed" | "partially_refunded" | "refunded" | "cancelled";
 
 export interface SaleItem {
   id: number;
@@ -70,6 +70,9 @@ export interface SaleItem {
   buying_cost_per_kg?: number;
   discount?: number;
   subtotal: number;
+  refunded_weight?: number;
+  is_refunded?: boolean;
+  refundable_weight?: number;
 }
 
 export interface Sale {
@@ -83,6 +86,7 @@ export interface Sale {
   subtotal: number;
   discount: number;
   total: number;
+  refunded_amount?: number;
   payment_method: PaymentMethod;
   payment_status: PaymentStatus;
   sale_status: SaleStatus;

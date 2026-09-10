@@ -61,9 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user && !PUBLIC_PATHS.includes(pathname)) {
       router.replace("/login");
     }
-    if (user && PUBLIC_PATHS.includes(pathname)) {
-      router.replace("/pos");
-    }
   }, [user, isLoading, pathname, router]);
 
   const login = useCallback(async (identifier: string, password: string) => {

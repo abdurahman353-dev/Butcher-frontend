@@ -44,6 +44,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  // If not authenticated, prevent dashboard children from mounting and firing API queries
+  if (!user) {
+    return (
+      <div className="h-screen w-full bg-zinc-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-zinc-200 border-t-green-600 animate-spin" />
+          <p className="text-sm text-zinc-500">Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Authorization: cashiers cannot access admin-only pages.
   const isAdminOnlyPath = ADMIN_ONLY_PATHS.some((p) => pathname.startsWith(p));
   if (isAdminOnlyPath && !isAdmin) {

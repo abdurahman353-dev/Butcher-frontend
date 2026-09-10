@@ -729,6 +729,7 @@ export default function SalesPage() {
                 >
                   <option value="all">All Statuses</option>
                   <option value="completed">Completed</option>
+                  <option value="partially_refunded">Partially Refunded</option>
                   <option value="refunded">Refunded</option>
                   <option value="cancelled">Cancelled</option>
                 </select>

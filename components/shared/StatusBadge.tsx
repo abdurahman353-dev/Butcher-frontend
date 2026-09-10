@@ -19,6 +19,9 @@ export function StatusBadge({ status, className = "", type = "sale" }: StatusBad
     } else if (normalized === "refunded") {
       styles = "bg-rose-50 text-rose-700 border-rose-200";
       label = "Refunded";
+    } else if (normalized === "partially_refunded" || normalized === "partial_refund") {
+      styles = "bg-amber-50 text-amber-700 border-amber-200";
+      label = "Partially Refunded";
     } else if (normalized === "pending" || normalized === "processing") {
       styles = "bg-amber-50 text-amber-700 border-amber-200";
       label = "Pending";

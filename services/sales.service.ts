@@ -19,4 +19,18 @@ export const salesService = {
     }
     return res.data;
   },
+
+  async partialRefundSale(
+    id: number,
+    data: {
+      reason: string;
+      items: Array<{ sale_item_id: number; refund_weight: number }>;
+    }
+  ): Promise<Sale> {
+    const res = await apiClient.post<Sale>(`/sales/${id}/partial-refund`, data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
 };
