@@ -33,4 +33,21 @@ export const salesService = {
     }
     return res.data;
   },
+
+  async settlePayment(
+    id: number,
+    data: {
+      payment_method: "cash" | "mpesa" | "card";
+      amount_received?: number;
+      mpesa_reference?: string;
+      card_reference?: string;
+      notes?: string;
+    }
+  ): Promise<Sale> {
+    const res = await apiClient.post<Sale>(`/sales/${id}/settle`, data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
 };

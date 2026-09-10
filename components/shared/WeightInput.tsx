@@ -53,7 +53,9 @@ export function WeightInput({
     setWeightStr((prev) => {
       if (prev === "0") return val;
       const parts = prev.split(".");
+      // Cap integer part at 4 digits (max 9999 KG) and decimal at 3 digits
       if (parts.length > 1 && parts[1].length >= 3) return prev;
+      if (parts.length === 1 && parts[0].length >= 4) return prev;
       return prev + val;
     });
   };
@@ -109,14 +111,14 @@ export function WeightInput({
           </div>
           <span className="text-xs text-zinc-400">Subtotal</span>
         </div>
-        <div className="flex items-baseline justify-between">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold tabular-nums text-zinc-900">
+        <div className="flex items-baseline justify-between gap-2 min-w-0">
+          <div className="flex items-baseline gap-1 min-w-0 shrink">
+            <span className="text-2xl font-bold tabular-nums text-zinc-900 truncate">
               {numericWeight > 0 ? numericWeight.toFixed(3) : "0.000"}
             </span>
-            <span className="text-sm font-bold text-zinc-400">KG</span>
+            <span className="text-sm font-bold text-zinc-400 shrink-0">KG</span>
           </div>
-          <span className="text-2xl font-bold text-green-700 tabular-nums">
+          <span className="text-lg font-bold text-green-700 tabular-nums shrink-0">
             {formatCurrency(subtotal)}
           </span>
         </div>

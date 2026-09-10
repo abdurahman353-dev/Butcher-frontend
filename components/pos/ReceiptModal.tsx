@@ -119,11 +119,40 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
             </div>
           </div>
 
+          {/* Pending Credit / Settled Status Banner */}
+          {sale.payment_status === "pending" || sale.payment_method === "credit" ? (
+            <div className="my-2 p-2.5 border-2 border-dashed border-red-600 rounded text-center bg-red-50 text-red-900">
+              <div className="font-black text-xs uppercase tracking-widest text-red-700">
+                *** PAY LATER / CREDIT BILL ***
+              </div>
+              <div className="text-[11px] font-bold mt-1">
+                OUTSTANDING DUE: {formatCurrency(sale.total)}
+              </div>
+              <div className="text-[9px] text-red-700 mt-0.5">
+                Payment is pending. Please retain this bill until settled.
+              </div>
+            </div>
+          ) : sale.settled_at ? (
+            <div className="my-2 p-2 border border-green-600 rounded text-center bg-green-50 text-green-900">
+              <div className="font-bold text-[11px] uppercase tracking-wider text-green-700">
+                *** PAID & SETTLED IN FULL ***
+              </div>
+              <div className="text-[10px] mt-0.5 text-gray-700">
+                Settled via {sale.payment_method.toUpperCase()} on {formatDateTime(sale.settled_at)}
+                {sale.settled_by ? ` (${sale.settled_by})` : ""}
+              </div>
+            </div>
+          ) : null}
+
           {/* Payment Details */}
           <div className="pt-2 border-t border-dashed border-gray-400 space-y-0.5 text-[11px]">
             <div className="flex justify-between">
               <span>Payment:</span>
-              <span className="font-bold uppercase">{sale.payment_method}</span>
+              <span className="font-bold uppercase">
+                {sale.payment_status === "pending" || sale.payment_method === "credit"
+                  ? "PAY LATER (CREDIT)"
+                  : sale.payment_method}
+              </span>
             </div>
 
             {sale.payment_method === "cash" && (
@@ -143,6 +172,12 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
               <div className="flex justify-between text-gray-700">
                 <span>M-Pesa Ref:</span>
                 <span className="font-mono">{sale.mpesa_reference}</span>
+              </div>
+            )}
+
+            {sale.notes && (
+              <div className="pt-1 text-[10px] text-gray-600 italic border-t border-dotted border-gray-300 mt-1">
+                Notes: {sale.notes}
               </div>
             )}
           </div>

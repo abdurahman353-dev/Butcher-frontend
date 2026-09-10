@@ -137,6 +137,10 @@ export function useCart() {
     }
   }, []);
 
+  const restoreItems = useCallback((newItems: CartItem[]) => {
+    setItems(newItems);
+  }, []);
+
   // Summary computations
   const subtotal = roundTo(
     items.reduce((acc, it) => acc + calculateSubtotal(it.weight, it.price_per_kg), 0),
@@ -167,5 +171,6 @@ export function useCart() {
     updateDiscount,
     removeItem,
     clearCart,
+    restoreItems,
   };
 }

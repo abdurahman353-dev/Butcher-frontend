@@ -55,7 +55,7 @@ export interface CartItem {
   notes?: string;
 }
 
-export type PaymentMethod = "cash" | "mpesa" | "card";
+export type PaymentMethod = "cash" | "mpesa" | "card" | "credit";
 
 export type PaymentStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
@@ -99,8 +99,23 @@ export interface Sale {
   refund_reason?: string;
   refunded_at?: string;
   refunded_by?: string;
+  settled_at?: string;
+  settled_by?: string;
   items: SaleItem[];
   created_at: string;
+}
+
+export interface HeldOrder {
+  id: string;
+  reference: string;
+  items: CartItem[];
+  customer: Customer | null;
+  subtotal: number;
+  totalDiscount: number;
+  total: number;
+  totalWeight: number;
+  createdAt: string;
+  notes?: string;
 }
 
 export interface Shift {
@@ -231,6 +246,7 @@ export interface PaginationParams {
   start_date?: string;
   end_date?: string;
   payment_method?: string;
+  payment_status?: string;
   cashier_id?: number | string;
   min_amount?: number | string;
   max_amount?: number | string;

@@ -1,19 +1,23 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Product, Category, Customer, Sale, CartItem } from "@/types";
+import { Product, Category, Customer, Sale, CartItem, HeldOrder } from "@/types";
 import { productsService } from "@/services/products.service";
 import { customersService } from "@/services/customers.service";
 import { posService } from "@/services/pos.service";
+import { salesService } from "@/services/sales.service";
 import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
+import { useHeldOrders } from "@/hooks/useHeldOrders";
 import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPane } from "@/components/pos/CartPane";
 import { WeightInput } from "@/components/shared/WeightInput";
 import { CheckoutModal } from "@/components/pos/CheckoutModal";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
+import { HeldOrdersModal } from "@/components/pos/HeldOrdersModal";
+import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
-import { ShoppingBag, AlertTriangle } from "lucide-react";
+import { ShoppingBag, AlertTriangle, Clock, Bookmark } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSystemDialog } from "@/contexts/DialogContext";
@@ -33,9 +37,18 @@ export default function PosPage() {
   const [selectedProductForWeight, setSelectedProductForWeight] = useState<Product | null>(null);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "card">("cash");
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "card" | "credit">("cash");
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+
+  // Held Orders State
+  const [isHeldOrdersOpen, setIsHeldOrdersOpen] = useState(false);
+
+  // Pay Later / Settle Modal State
+  const [unpaidSales, setUnpaidSales] = useState<Sale[]>([]);
+  const [unpaidCount, setUnpaidCount] = useState(0);
+  const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   const {
     items,
@@ -49,9 +62,31 @@ export default function PosPage() {
     adjustWeightBy,
     removeItem,
     clearCart,
+    restoreItems,
   } = useCart();
 
+  const {
+    heldOrders,
+    heldCount,
+    holdCurrentOrder,
+    removeHeldOrder,
+    clearAllHeldOrders,
+  } = useHeldOrders();
+
   const { isShiftOpen, isLoading: isShiftLoading } = useShift();
+
+  // Load unpaid / pay-later sales
+  const fetchUnpaidSales = useCallback(async () => {
+    try {
+      const res = await salesService.getSales({ payment_status: "pending", per_page: 50 });
+      if (res && Array.isArray(res.data)) {
+        setUnpaidSales(res.data);
+        setUnpaidCount(res.total || res.data.length);
+      }
+    } catch (e) {
+      console.error("Failed to load unpaid sales:", e);
+    }
+  }, []);
 
   // Fetch all POS data once — sequential to avoid overwhelming the PHP dev server
   const loadData = useCallback(async () => {
@@ -68,6 +103,8 @@ export default function PosPage() {
 
       const custsRes = await customersService.getCustomers({ per_page: 50 });
       setCustomers(Array.isArray(custsRes?.data) ? custsRes.data : []);
+
+      await fetchUnpaidSales();
     } catch (e: any) {
       const msg = e?.message || "Failed to load POS catalog.";
       console.error("Failed to load POS data:", msg, e);
@@ -76,9 +113,9 @@ export default function PosPage() {
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, []);
+  }, [fetchUnpaidSales]);
 
-  // Load once on mount — no polling
+  // Load once on mount
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -101,7 +138,56 @@ export default function PosPage() {
     }
   };
 
-  const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "card" = "cash") => {
+  // Hold current order so cashier can attend to other waiting customers
+  const handleHoldOrder = () => {
+    if (items.length === 0) return;
+    const defaultRef = selectedCustomer?.name
+      ? `Order - ${selectedCustomer.name}`
+      : `Bill #${heldCount + 1}`;
+
+    holdCurrentOrder({
+      items,
+      customer: selectedCustomer,
+      subtotal,
+      totalDiscount,
+      total,
+      totalWeight,
+      reference: defaultRef,
+    });
+
+    clearCart();
+    setSelectedCustomer(null);
+  };
+
+  // Resume a held order into the active cart
+  const handleResumeHeldOrder = (order: HeldOrder) => {
+    restoreItems(order.items);
+    setSelectedCustomer(order.customer);
+    removeHeldOrder(order.id);
+  };
+
+  // Start a new blank bill
+  const handleNewBill = async () => {
+    if (items.length > 0) {
+      const shouldHold = await confirm({
+        title: "Hold Current Bill?",
+        message:
+          "You have active cuts in your cart. Would you like to hold/save this order first before creating a fresh new bill?",
+        confirmText: "Hold & Start New Bill",
+        cancelText: "Discard & Start New Bill",
+        type: "info",
+      });
+
+      if (shouldHold) {
+        handleHoldOrder();
+        return;
+      }
+    }
+    clearCart();
+    setSelectedCustomer(null);
+  };
+
+  const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "card" | "credit" = "cash") => {
     if (!isShiftOpen) {
       const shouldOpen = await confirm({
         title: "Cashier Shift Closed",
@@ -123,10 +209,13 @@ export default function PosPage() {
   };
 
   const handleCompleteSale = async (payload: {
-    payment_method: "cash" | "mpesa" | "card";
+    payment_method: "cash" | "mpesa" | "card" | "credit";
     amount_received?: number;
     mpesa_reference?: string;
     card_reference?: string;
+    customer_name?: string;
+    customer_phone?: string;
+    notes?: string;
   }) => {
     if (!isShiftOpen) {
       await alert({
@@ -142,15 +231,18 @@ export default function PosPage() {
       payment_method: payload.payment_method,
       amount_received: payload.amount_received,
       customer_id: selectedCustomer?.id || null,
-      customer_name: selectedCustomer?.name || null,
-      customer_phone: selectedCustomer?.phone || null,
+      customer_name: payload.customer_name || selectedCustomer?.name || null,
+      customer_phone: payload.customer_phone || selectedCustomer?.phone || null,
       mpesa_reference: payload.mpesa_reference,
+      card_reference: payload.card_reference,
+      notes: payload.notes,
     });
 
     clearCart();
     setSelectedCustomer(null);
 
-    // Reload products after sale to reflect updated stock levels
+    // Refresh unpaid sales and catalog stock
+    fetchUnpaidSales();
     productsService
       .getProducts({ per_page: 200, status: "active" })
       .then((r) => setProducts(r.data))
@@ -162,6 +254,17 @@ export default function PosPage() {
   const handleNewSale = () => {
     setIsCheckoutOpen(false);
     clearCart();
+    setSelectedCustomer(null);
+  };
+
+  const handleOpenSettle = (sale?: Sale) => {
+    if (sale) {
+      setSaleToSettle(sale);
+      setIsSettleModalOpen(true);
+    } else if (unpaidSales.length > 0) {
+      setSaleToSettle(unpaidSales[0]);
+      setIsSettleModalOpen(true);
+    }
   };
 
   return (
@@ -228,6 +331,12 @@ export default function PosPage() {
           onClearCart={clearCart}
           onProceedCheckout={handleProceedCheckout}
           isShiftOpen={isShiftOpen}
+          heldCount={heldCount}
+          onOpenHeldOrders={() => setIsHeldOrdersOpen(true)}
+          onHoldOrder={handleHoldOrder}
+          onNewBill={handleNewBill}
+          unpaidCount={unpaidCount}
+          onOpenUnpaidOrders={() => handleOpenSettle()}
         />
       </div>
 
@@ -256,14 +365,27 @@ export default function PosPage() {
           </div>
         </button>
 
-        <button
-          type="button"
-          disabled={itemsCount === 0}
-          onClick={() => handleProceedCheckout()}
-          className="px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs active:scale-95 transition-all"
-        >
-          Checkout
-        </button>
+        <div className="flex items-center gap-2">
+          {heldCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsHeldOrdersOpen(true)}
+              className="px-2.5 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold flex items-center gap-1"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>{heldCount}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            disabled={itemsCount === 0}
+            onClick={() => handleProceedCheckout()}
+            className="px-5 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs active:scale-95 transition-all"
+          >
+            Checkout
+          </button>
+        </div>
       </div>
 
       {/* Mobile Cart Drawer */}
@@ -301,6 +423,24 @@ export default function PosPage() {
                 handleProceedCheckout(method);
               }}
               isShiftOpen={isShiftOpen}
+              heldCount={heldCount}
+              onOpenHeldOrders={() => {
+                setIsMobileCartOpen(false);
+                setIsHeldOrdersOpen(true);
+              }}
+              onHoldOrder={() => {
+                handleHoldOrder();
+                setIsMobileCartOpen(false);
+              }}
+              onNewBill={() => {
+                handleNewBill();
+                setIsMobileCartOpen(false);
+              }}
+              unpaidCount={unpaidCount}
+              onOpenUnpaidOrders={() => {
+                setIsMobileCartOpen(false);
+                handleOpenSettle();
+              }}
             />
           </div>
         </div>
@@ -363,6 +503,35 @@ export default function PosPage() {
           setTimeout(() => window.print(), 300);
         }}
         onNewSale={handleNewSale}
+      />
+
+      {/* Held Orders Modal */}
+      <HeldOrdersModal
+        isOpen={isHeldOrdersOpen}
+        onClose={() => setIsHeldOrdersOpen(false)}
+        heldOrders={heldOrders}
+        onResumeOrder={handleResumeHeldOrder}
+        onRemoveOrder={removeHeldOrder}
+        onNewBill={handleNewBill}
+        hasActiveCartItems={items.length > 0}
+      />
+
+      {/* Settle Payment Modal */}
+      <SettlePaymentModal
+        isOpen={isSettleModalOpen}
+        onClose={() => {
+          setIsSettleModalOpen(false);
+          setSaleToSettle(null);
+        }}
+        sale={saleToSettle}
+        onPaymentSettled={(updatedSale) => {
+          fetchUnpaidSales();
+        }}
+        onViewReceipt={(sale) => setViewingReceiptSale(sale)}
+        onPrintReceipt={(sale) => {
+          setViewingReceiptSale(sale);
+          setTimeout(() => window.print(), 300);
+        }}
       />
 
       {/* Receipt Modal */}

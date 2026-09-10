@@ -9,6 +9,7 @@ import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Pagination } from "@/components/shared/Pagination";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
+import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
 import { usePolling } from "@/hooks/usePolling";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import {
@@ -34,6 +35,7 @@ import {
   CreditCard,
   Layers,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 
 export default function SalesPage() {
@@ -67,6 +69,8 @@ export default function SalesPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAmountFilters, setShowAmountFilters] = useState(false);
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
+  const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -627,6 +631,20 @@ export default function SalesPage() {
                 >
                   All Time
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentFilter("credit");
+                    setCurrentPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${
+                    paymentFilter === "credit"
+                      ? "bg-amber-600 text-white border-amber-600 font-bold"
+                      : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200"
+                  }`}
+                >
+                  ⏳ Pay Later (Credit)
+                </button>
               </div>
             </div>
 
@@ -713,6 +731,7 @@ export default function SalesPage() {
                   <option value="cash">💵 Cash Only</option>
                   <option value="mpesa">📱 M-Pesa Only</option>
                   <option value="card">💳 Card Only</option>
+                  <option value="credit">⏳ Pay Later / Credit</option>
                 </select>
               </div>
 
@@ -1013,6 +1032,10 @@ export default function SalesPage() {
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 text-green-800 border border-green-200 text-[11px] font-bold">
                           <Smartphone className="w-3 h-3 text-green-600" /> M-Pesa
                         </span>
+                      ) : sale.payment_method === "credit" ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[11px] font-bold">
+                          <Clock className="w-3 h-3 text-amber-700" /> Pay Later
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
                           <CreditCard className="w-3 h-3 text-blue-600" /> Card
@@ -1037,12 +1060,33 @@ export default function SalesPage() {
 
                     {/* Status */}
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                      <StatusBadge status={sale.sale_status} type="sale" />
+                      <div className="flex flex-col items-center gap-1">
+                        <StatusBadge status={sale.sale_status} type="sale" />
+                        {sale.payment_status === "pending" && (
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                            Unpaid Due
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Actions */}
                     <td className="py-3.5 pr-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
+                        {sale.payment_status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSaleToSettle(sale);
+                              setIsSettleModalOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all active:scale-95"
+                            title="Collect payment on this bill"
+                          >
+                            <DollarSign className="w-3.5 h-3.5" />
+                            <span>Settle</span>
+                          </button>
+                        )}
                         <Link
                           href={`/sales/${sale.id}`}
                           className="p-1.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 hover:text-zinc-900 transition-all shadow-2xs active:scale-90"
@@ -1090,6 +1134,24 @@ export default function SalesPage() {
         isOpen={!!viewingReceiptSale}
         sale={viewingReceiptSale}
         onClose={() => setViewingReceiptSale(null)}
+      />
+
+      {/* Settle Payment Modal */}
+      <SettlePaymentModal
+        isOpen={isSettleModalOpen}
+        onClose={() => {
+          setIsSettleModalOpen(false);
+          setSaleToSettle(null);
+        }}
+        sale={saleToSettle}
+        onPaymentSettled={() => {
+          fetchSales();
+        }}
+        onViewReceipt={(s) => setViewingReceiptSale(s)}
+        onPrintReceipt={(s) => {
+          setViewingReceiptSale(s);
+          setTimeout(() => window.print(), 300);
+        }}
       />
     </div>
   );

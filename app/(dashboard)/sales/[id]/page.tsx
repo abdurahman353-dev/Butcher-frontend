@@ -8,6 +8,7 @@ import { Sale, SaleItem } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
+import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import {
   ArrowLeft,
@@ -21,6 +22,8 @@ import {
   Package,
   Layers,
   Info,
+  DollarSign,
+  Clock,
 } from "lucide-react";
 
 interface ItemRefundState {
@@ -37,6 +40,7 @@ export default function SaleDetailPage() {
   const [sale, setSale] = useState<Sale | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   // Refund Modal State
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
@@ -289,6 +293,17 @@ export default function SaleDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {sale.payment_status === "pending" && (
+            <button
+              type="button"
+              onClick={() => setIsSettleModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Settle Payment</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsReceiptOpen(true)}
@@ -310,6 +325,52 @@ export default function SaleDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Pay Later Pending Banner */}
+      {sale.payment_status === "pending" && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <h4 className="font-bold text-amber-900">Pay Later / Credit Sale — Payment Pending</h4>
+              <p className="text-amber-800">
+                Outstanding Balance: <strong className="text-amber-950 font-black">{formatCurrency(sale.total)}</strong>
+              </p>
+              {sale.customer_name && (
+                <p className="text-amber-700">
+                  Customer / Debtor: <strong>{sale.customer_name}</strong> {sale.customer_phone ? `(${sale.customer_phone})` : ""}
+                </p>
+              )}
+              {sale.notes && (
+                <p className="text-amber-700 italic">
+                  Notes: {sale.notes}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSettleModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 transition-colors shadow-xs active:scale-95"
+          >
+            Collect Payment
+          </button>
+        </div>
+      )}
+
+      {/* Settled Banner */}
+      {sale.settled_at && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-2xl flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-0.5">
+            <h4 className="font-bold text-green-900">Payment Settled in Full</h4>
+            <p className="text-green-700">
+              Paid via <strong>{sale.payment_method.toUpperCase()}</strong> on {formatDateTime(sale.settled_at)}
+              {sale.settled_by ? ` by ${sale.settled_by}` : ""}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Fully Refunded Banner if applicable */}
       {isFullyRefunded && (
@@ -747,6 +808,19 @@ export default function SaleDetailPage() {
         isOpen={isReceiptOpen}
         sale={sale}
         onClose={() => setIsReceiptOpen(false)}
+      />
+
+      {/* Settle Payment Modal */}
+      <SettlePaymentModal
+        isOpen={isSettleModalOpen}
+        onClose={() => setIsSettleModalOpen(false)}
+        sale={sale}
+        onPaymentSettled={(updated) => setSale(updated)}
+        onViewReceipt={() => setIsReceiptOpen(true)}
+        onPrintReceipt={() => {
+          setIsReceiptOpen(true);
+          setTimeout(() => window.print(), 300);
+        }}
       />
     </div>
   );

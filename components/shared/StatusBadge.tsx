@@ -22,6 +22,9 @@ export function StatusBadge({ status, className = "", type = "sale" }: StatusBad
     } else if (normalized === "partially_refunded" || normalized === "partial_refund") {
       styles = "bg-amber-50 text-amber-700 border-amber-200";
       label = "Partially Refunded";
+    } else if (normalized === "credit" || normalized === "unpaid" || normalized === "pay_later") {
+      styles = "bg-amber-50 text-amber-800 border-amber-300 font-bold";
+      label = "Pay Later (Due)";
     } else if (normalized === "pending" || normalized === "processing") {
       styles = "bg-amber-50 text-amber-700 border-amber-200";
       label = "Pending";

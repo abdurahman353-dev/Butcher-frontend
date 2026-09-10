@@ -5,7 +5,18 @@ import { CartItem, Customer } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { CartItemRow } from "./CartItemRow";
-import { ShoppingBag, Trash2, UserPlus, Banknote, Smartphone, ChevronRight } from "lucide-react";
+import {
+  ShoppingBag,
+  Trash2,
+  UserPlus,
+  Banknote,
+  Smartphone,
+  ChevronRight,
+  Clock,
+  PlusCircle,
+  PauseCircle,
+  Bookmark,
+} from "lucide-react";
 
 interface CartPaneProps {
   items: CartItem[];
@@ -20,8 +31,14 @@ interface CartPaneProps {
   onOpenWeightEdit: (item: CartItem) => void;
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
-  onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "card") => void;
+  onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "card" | "credit") => void;
   isShiftOpen?: boolean;
+  heldCount?: number;
+  onOpenHeldOrders?: () => void;
+  onHoldOrder?: () => void;
+  onNewBill?: () => void;
+  unpaidCount?: number;
+  onOpenUnpaidOrders?: () => void;
 }
 
 export function CartPane({
@@ -39,6 +56,12 @@ export function CartPane({
   onClearCart,
   onProceedCheckout,
   isShiftOpen = true,
+  heldCount = 0,
+  onOpenHeldOrders,
+  onHoldOrder,
+  onNewBill,
+  unpaidCount = 0,
+  onOpenUnpaidOrders,
 }: CartPaneProps) {
   const { confirm } = useSystemDialog();
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
@@ -58,7 +81,7 @@ export function CartPane({
 
   return (
     <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none">
-      {/* Header */}
+      {/* Header with Hold Order & Parked Bills */}
       <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
         <div>
           <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
@@ -66,24 +89,72 @@ export function CartPane({
             Current Order
           </h2>
           <span className="text-[11px] text-zinc-500">
-            {items.length} item{items.length !== 1 ? "s" : ""} • {formatWeight(totalWeight)}
+            {items.length} cut{items.length !== 1 ? "s" : ""} • {formatWeight(totalWeight)}
           </span>
         </div>
 
-        {items.length > 0 && (
-          <button
-            type="button"
-            onClick={handleClearClick}
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50"
-          >
-            <Trash2 className="w-3 h-3" />
-            Clear
-          </button>
-        )}
+        {/* Action badges: Held Orders, Hold Current, Clear */}
+        <div className="flex items-center gap-1.5">
+          {onOpenHeldOrders && (
+            <button
+              type="button"
+              onClick={onOpenHeldOrders}
+              title="View held & parked bills"
+              className={`h-7 px-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                heldCount > 0
+                  ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200"
+              }`}
+            >
+              <Clock className="w-3 h-3 text-amber-700" />
+              <span>Held</span>
+              {heldCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-bold">
+                  {heldCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {items.length > 0 && onHoldOrder && (
+            <button
+              type="button"
+              onClick={onHoldOrder}
+              title="Save/Hold this order and create a new bill"
+              className="h-7 px-2 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-amber-100 text-zinc-700 hover:text-amber-800 border border-zinc-200 flex items-center gap-1 transition-colors"
+            >
+              <PauseCircle className="w-3 h-3 text-amber-600" />
+              <span>Hold</span>
+            </button>
+          )}
+
+          {items.length > 0 && onNewBill && (
+            <button
+              type="button"
+              onClick={onNewBill}
+              title="Start a new blank bill"
+              className="h-7 px-2 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center gap-1 transition-colors"
+            >
+              <PlusCircle className="w-3 h-3" />
+              <span>New</span>
+            </button>
+          )}
+
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearClick}
+              title="Clear cart"
+              className="h-7 px-1.5 text-xs text-zinc-400 hover:text-red-600 transition-colors rounded hover:bg-red-50"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Customer Selector */}
-      <div className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-100 shrink-0">
+      {/* Customer Selector & Unpaid Bills Pill */}
+      <div className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="text-zinc-500">Customer:</span>
           <button
@@ -95,6 +166,23 @@ export function CartPane({
             <UserPlus className="w-3 h-3" />
           </button>
         </div>
+
+        {/* Unpaid / Pay Later alert link if any exist */}
+        {unpaidCount > 0 && onOpenUnpaidOrders && (
+          <div className="flex items-center justify-between pt-1 border-t border-zinc-200/60 text-[11px]">
+            <span className="text-amber-800 font-semibold flex items-center gap-1">
+              <Bookmark className="w-3 h-3 text-amber-600" />
+              {unpaidCount} Pay Later Bill{unpaidCount !== 1 ? "s" : ""} Pending
+            </span>
+            <button
+              type="button"
+              onClick={onOpenUnpaidOrders}
+              className="text-amber-700 hover:text-amber-900 font-bold underline"
+            >
+              Collect
+            </button>
+          </div>
+        )}
 
         {showCustomerSelect && (
           <div className="mt-2 p-1 bg-white border border-zinc-200 rounded-lg space-y-0.5 max-h-36 overflow-y-auto shadow-md">
@@ -141,6 +229,16 @@ export function CartPane({
             <p className="text-xs text-zinc-400 mt-1">
               Click a meat cut to weigh and add it to this sale.
             </p>
+            {heldCount > 0 && onOpenHeldOrders && (
+              <button
+                type="button"
+                onClick={onOpenHeldOrders}
+                className="mt-3 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 hover:bg-amber-100 transition-colors shadow-2xs"
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span>Resume 1 of {heldCount} held order{heldCount !== 1 ? "s" : ""}</span>
+              </button>
+            )}
           </div>
         ) : (
           items.map((item) => (
@@ -172,21 +270,21 @@ export function CartPane({
 
           <div className="pt-2 border-t border-zinc-100 flex items-baseline justify-between">
             <span className="text-sm font-bold text-zinc-700 uppercase tracking-wide">Total</span>
-            <span className="text-2xl font-bold text-zinc-900 tabular-nums">
+            <span className="text-2xl font-black text-zinc-900 tabular-nums">
               {formatCurrency(total)}
             </span>
           </div>
         </div>
 
-        {/* Quick pay buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Quick Pay Buttons: Cash, M-Pesa, Pay Later */}
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
             disabled={items.length === 0}
             onClick={() => onProceedCheckout("cash")}
-            className="py-2 px-3 rounded-lg border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-sm text-zinc-700 flex items-center justify-center gap-1.5 hover:bg-zinc-50 transition-colors"
+            className="py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 transition-colors"
           >
-            <Banknote className="w-4 h-4 text-green-600" />
+            <Banknote className="w-3.5 h-3.5 text-green-600" />
             Cash
           </button>
 
@@ -194,10 +292,20 @@ export function CartPane({
             type="button"
             disabled={items.length === 0}
             onClick={() => onProceedCheckout("mpesa")}
-            className="py-2 px-3 rounded-lg border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-sm text-zinc-700 flex items-center justify-center gap-1.5 hover:bg-zinc-50 transition-colors"
+            className="py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 transition-colors"
           >
-            <Smartphone className="w-4 h-4 text-green-600" />
+            <Smartphone className="w-3.5 h-3.5 text-green-600" />
             M-Pesa
+          </button>
+
+          <button
+            type="button"
+            disabled={items.length === 0}
+            onClick={() => onProceedCheckout("credit")}
+            className="py-2 px-2 rounded-xl border border-amber-200 bg-amber-50/60 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-amber-800 flex items-center justify-center gap-1 hover:bg-amber-100 transition-colors"
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-700" />
+            Pay Later
           </button>
         </div>
 
@@ -206,7 +314,7 @@ export function CartPane({
           type="button"
           disabled={items.length === 0}
           onClick={() => onProceedCheckout()}
-          className={`w-full py-3 px-4 rounded-lg font-semibold text-sm text-white flex items-center justify-center gap-2 transition-all ${
+          className={`w-full py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-white flex items-center justify-center gap-2 transition-all shadow-xs ${
             items.length === 0
               ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
               : !isShiftOpen
