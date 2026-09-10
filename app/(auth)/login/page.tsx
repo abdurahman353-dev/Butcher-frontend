@@ -85,20 +85,18 @@ export default function LoginPage() {
 
         {/* 1. Floating Brand Logo Card (Clean White Pill, just like Wafaa Clinic) */}
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 px-7 py-3.5 mb-5 flex items-center justify-center gap-3.5 border border-white/80 transition-transform hover:scale-[1.01]">
-          <div className="w-12 h-12 rounded-full overflow-hidden bg-amber-400 p-0.5 border-2 border-red-700 shadow-sm shrink-0 flex items-center justify-center">
-            <img
-              src="/logo.png"
-              alt="Prime Cut Logo"
-              className="w-full h-full object-cover"
-            />
-          </div>
+          <img
+            src="/logo.png"
+            alt="Prime Cut Logo"
+            className="w-13 h-13 object-contain drop-shadow-xs"
+          />
           <div className="text-left">
             <div className="flex items-center gap-1.5">
               <span className="text-base font-black text-zinc-900 tracking-tight leading-none">
                 PRIME CUT
               </span>
             </div>
-            <p className="text-[11px] font-bold tracking-wider text-red-600 uppercase mt-0.5">
+            <p className="text-[11px] font-bold tracking-wider text-red-600 uppercase mt-1">
               Butchery & Deli POS
             </p>
           </div>
@@ -107,29 +105,29 @@ export default function LoginPage() {
         {/* 2. Floating Crisp White Login Card */}
         <div className="w-full bg-white rounded-2xl shadow-2xl shadow-black/20 p-7 sm:p-8 border border-zinc-100">
 
-          {/* Quick Role Switcher Pills */}
-          <div className="flex items-center justify-center gap-2 mb-5 p-1 bg-zinc-100/80 rounded-xl">
+          {/* Role Switcher (Admin / Cashier - Red when selected) */}
+          <div className="flex items-center justify-center gap-2 mb-5 p-1 bg-zinc-100/90 rounded-xl">
             <button
               type="button"
               onClick={() => fill("admin")}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 selectedRole === "admin"
-                  ? "bg-white text-zinc-900 shadow-xs"
-                  : "text-zinc-500 hover:text-zinc-700"
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60"
               }`}
             >
-              Admin (Sarah)
+              Admin
             </button>
             <button
               type="button"
               onClick={() => fill("cashier")}
-              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 selectedRole === "cashier"
-                  ? "bg-white text-zinc-900 shadow-xs"
-                  : "text-zinc-500 hover:text-zinc-700"
+                  ? "bg-red-600 text-white shadow-xs"
+                  : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60"
               }`}
             >
-              Cashier (John)
+              Cashier
             </button>
           </div>
 
