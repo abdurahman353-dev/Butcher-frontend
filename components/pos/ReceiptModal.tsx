@@ -4,6 +4,7 @@ import React from "react";
 import { Sale } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
 import { Printer, X } from "lucide-react";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 interface ReceiptModalProps {
   sale: Sale | null;
@@ -12,6 +13,7 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
+  const { settings } = useShopSettings();
   if (!isOpen || !sale) return null;
 
   const handlePrint = () => {
@@ -51,10 +53,16 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
         <div id="thermal-receipt" className="p-6 text-xs leading-tight space-y-3 bg-white text-black">
           {/* Header */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
-            <div className="text-lg font-bold tracking-tight">🥩 PRIME CUT BUTCHERY</div>
-            <p className="text-[11px] text-gray-700">Argwings Kodhek Rd, Kilimani, Nairobi</p>
-            <p className="text-[10px] text-gray-600">Tel: +254 712 345 678 • PIN: P051283749Z</p>
-            <p className="text-[10px] font-semibold text-gray-800">Fresh Gourmet Meats • Halal Certified</p>
+            <div className="text-lg font-bold tracking-tight">🥩 {settings.shop_name.toUpperCase()}</div>
+            {settings.address && <p className="text-[11px] text-gray-700">{settings.address}</p>}
+            <p className="text-[10px] text-gray-600">
+              {settings.phone && `Tel: ${settings.phone}`}
+              {settings.phone && settings.tax_pin && " • "}
+              {settings.tax_pin && `PIN: ${settings.tax_pin}`}
+            </p>
+            {settings.receipt_header && (
+              <p className="text-[10px] font-semibold text-gray-800">{settings.receipt_header}</p>
+            )}
           </div>
 
           {/* Transaction Metadata */}
@@ -140,9 +148,11 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
             <div className="font-mono text-xs tracking-widest font-bold py-1 bg-gray-100 rounded">
               * {sale.sale_number} *
             </div>
-            <p className="text-[10px] text-gray-700 font-semibold">
-              Thank you for shopping with us!
-            </p>
+            {settings.receipt_footer ? (
+              <p className="text-[10px] text-gray-700 font-semibold">{settings.receipt_footer}</p>
+            ) : (
+              <p className="text-[10px] text-gray-700 font-semibold">Thank you for shopping with us!</p>
+            )}
             <p className="text-[9px] text-gray-500">Goods once sold cannot be returned without receipt.</p>
           </div>
         </div>

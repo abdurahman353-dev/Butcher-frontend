@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Pagination } from "@/components/shared/Pagination";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ShiftDetailsModal } from "@/components/shift/ShiftDetailsModal";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import {
   Clock,
   Banknote,
@@ -39,6 +40,7 @@ import {
 export default function ShiftPage() {
   const { shift, isShiftOpen, openShift, closeShift } = useShift();
   const { confirm, alert } = useSystemDialog();
+  const { settings } = useShopSettings();
 
   // Tab State: "active" for current till, "history" for all shifts
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
@@ -404,9 +406,10 @@ export default function ShiftPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
+    const prefix = (settings.shop_name || "shifts").toLowerCase().replace(/[^a-z0-9]/g, "_");
     link.setAttribute(
       "download",
-      `primecut_shifts_audit_${new Date().toISOString().slice(0, 10)}.csv`
+      `${prefix}_shifts_audit_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();

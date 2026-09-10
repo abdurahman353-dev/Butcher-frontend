@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Pagination } from "@/components/shared/Pagination";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
 import { usePolling } from "@/hooks/usePolling";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import {
   Search,
   Eye,
@@ -36,6 +37,7 @@ import {
 } from "lucide-react";
 
 export default function SalesPage() {
+  const { settings: shopSettings } = useShopSettings();
   const [paginated, setPaginated] = useState<PaginatedResponse<Sale>>({
     data: [],
     current_page: 1,
@@ -211,7 +213,7 @@ export default function SalesPage() {
     if (paginated.data.length === 0) return;
 
     const rows = [
-      ["PRIME CUT BUTCHER - TRANSACTION SALES AUDIT REPORT"],
+      [`${shopSettings.shop_name.toUpperCase()} - TRANSACTION SALES AUDIT REPORT`],
       [`Exported At:`, new Date().toLocaleString()],
       [
         `Active Date Range:`,
@@ -304,7 +306,7 @@ export default function SalesPage() {
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Sales PDF Report - ${selectedDate}</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">🥩 PRIME CUT BUTCHER</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">Premium Meat Shop — Daily Sales PDF</div></div>
+  <div><div style="font-size:22px;font-weight:900">🥩 ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || "Premium Meat Shop"} — Daily Sales PDF</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">DAILY SALES EXECUTIVE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Report Date: ${dateStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Generated: ${timeStr}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import {
   Mail,
   Lock,
@@ -17,13 +18,27 @@ import {
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
-  const [identifier, setIdentifier] = useState("admin@primecut.co.ke");
-  const [password, setPassword] = useState("Admin@123");
+  const { settings } = useShopSettings();
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
   const [selectedRole, setSelectedRole] = useState<"admin" | "cashier">("admin");
+  // SSR-safe: initialize with neutral value, update from localStorage after mount
+  const [cachedShopName, setCachedShopName] = useState("Butchery POS");
+
+  const shopDisplayName = (settings.shop_name && settings.shop_name !== "Butchery POS")
+    ? settings.shop_name
+    : (cachedShopName || "Butchery POS");
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("butcher_shop_name");
+      if (cached && cached.trim()) setCachedShopName(cached.trim());
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -46,6 +61,7 @@ export default function LoginPage() {
 
     try {
       await login(identifier.trim(), password);
+      window.dispatchEvent(new CustomEvent("butcher:auth-success"));
       router.push("/pos");
     } catch (err: any) {
       const msg =
@@ -58,15 +74,8 @@ export default function LoginPage() {
     }
   };
 
-  const fill = (role: "admin" | "cashier") => {
+  const switchRole = (role: "admin" | "cashier") => {
     setSelectedRole(role);
-    if (role === "admin") {
-      setIdentifier("admin@primecut.co.ke");
-      setPassword("Admin@123");
-    } else {
-      setIdentifier("cashier@primecut.co.ke");
-      setPassword("Cashier@123");
-    }
     setError(null);
   };
 
@@ -87,17 +96,20 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-xl shadow-black/10 px-7 py-3.5 mb-5 flex items-center justify-center gap-3.5 border border-white/80 transition-transform hover:scale-[1.01]">
           <img
             src="/logo.png"
-            alt="Prime Cut Logo"
+            alt="Shop Logo"
             className="w-13 h-13 object-contain drop-shadow-xs"
           />
           <div className="text-left">
             <div className="flex items-center gap-1.5">
-              <span className="text-base font-black text-zinc-900 tracking-tight leading-none">
-                PRIME CUT
+              <span
+                suppressHydrationWarning
+                className="text-base font-black text-zinc-900 tracking-tight leading-none"
+              >
+                {shopDisplayName.toUpperCase()}
               </span>
             </div>
             <p className="text-[11px] font-bold tracking-wider text-red-600 uppercase mt-1">
-              Butchery & Deli POS
+              Butchery &amp; Deli POS
             </p>
           </div>
         </div>
@@ -109,7 +121,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-center gap-2 mb-5 p-1 bg-zinc-100/90 rounded-xl">
             <button
               type="button"
-              onClick={() => fill("admin")}
+              onClick={() => switchRole("admin")}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 selectedRole === "admin"
                   ? "bg-red-600 text-white shadow-xs"
@@ -120,7 +132,7 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => fill("cashier")}
+              onClick={() => switchRole("cashier")}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 selectedRole === "cashier"
                   ? "bg-red-600 text-white shadow-xs"
@@ -151,7 +163,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-zinc-600 mb-1.5">
-                Email address
+                {selectedRole === "admin" ? "Admin username or email" : "Cashier username or email"}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
@@ -162,7 +174,7 @@ export default function LoginPage() {
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin@primecut.co.ke"
+                  placeholder={selectedRole === "admin" ? "admin (or email)" : "cashier (or email)"}
                   className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-zinc-300 rounded-xl text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
                 />
               </div>
@@ -195,13 +207,16 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-zinc-400">Prime Cut POS v2.4</span>
+              <span className="text-zinc-400">Butchery POS System</span>
               <button
                 type="button"
-                onClick={() => fill(selectedRole)}
+                onClick={() => {
+                  setIdentifier(selectedRole === "admin" ? "admin" : "cashier");
+                  setPassword(selectedRole === "admin" ? "Admin@123" : "Cashier@123");
+                }}
                 className="text-red-600 hover:text-red-700 font-medium hover:underline cursor-pointer"
               >
-                Reset fields
+                Demo login
               </button>
             </div>
 

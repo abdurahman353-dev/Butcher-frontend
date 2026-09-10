@@ -28,6 +28,7 @@ import {
   FileText,
 } from "lucide-react";
 import { Pagination } from "@/components/shared/Pagination";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 import {
   AreaChart,
@@ -42,6 +43,7 @@ import {
 type MetricView = "revenue" | "weight" | "profit";
 
 export default function ReportsPage() {
+  const { settings: shopSettings } = useShopSettings();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("all");
@@ -236,10 +238,10 @@ export default function ReportsPage() {
     const thr = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:right"`;
     const thc = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:center"`;
     const sec = (title: string, sub: string) => `<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#374151;border-bottom:2px solid #16a34a;padding:6px 0;margin:18px 0 10px;display:flex;justify-content:space-between"><span>${title}</span><span style="font-weight:500;font-size:10px;color:#6b7280;text-transform:none;letter-spacing:0">${sub}</span></div>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prime Cut Report</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${shopSettings.shop_name} Report</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">🥩 PRIME CUT BUTCHER</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">Premium Meat Shop — Nairobi, Kenya</div></div>
+  <div><div style="font-size:22px;font-weight:900">🥩 ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || "Premium Meat Shop"}</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">EXECUTIVE PERFORMANCE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Generated: ${dateStr} at ${timeStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Range: ${rangeLabel}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
@@ -264,7 +266,7 @@ ${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}
 ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between"><span>⚠️ Wastage & Loss Audit</span><span>Total: ${fK(analytics.wastage_cost||0)} · ${fW(analytics.wastage_weight||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Reason</th><th ${thr}>Incidents</th><th ${thr}>Weight</th><th ${thr}>Cost Loss</th></tr></thead><tbody>${wastageHTML}</tbody></table></div>`:""}
 </div>
 <div style="border-top:2px solid #e5e7eb;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;background:#f9fafb;margin-top:20px">
-  <div style="font-size:9px;color:#9ca3af">Report ID: PCB-${Date.now()}<br/>Prime Cut Butcher POS</div>
+  <div style="font-size:9px;color:#9ca3af">Report ID: PCB-${Date.now()}<br/>${shopSettings.shop_name} POS</div>
   <div style="font-size:10px;font-weight:700;color:#374151;text-align:center">Confidential — Internal Use Only</div>
   <div style="font-size:9px;color:#9ca3af;text-align:right">Range: ${rangeLabel}</div>
 </div>
@@ -278,7 +280,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
     if (!analytics) return;
 
     const rows = [
-      ["PRIME CUT BUTCHER - PERFORMANCE & FINANCIAL REPORT"],
+      [`${shopSettings.shop_name.toUpperCase()} - PERFORMANCE & FINANCIAL REPORT`],
       [`Generated At:`, new Date().toLocaleString()],
       [`Date Range:`, `${analytics.start_date || startDate || "All Time"} to ${analytics.end_date || endDate || "All Time"}`],
       [],

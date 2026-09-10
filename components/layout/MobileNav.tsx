@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { X, LayoutDashboard, ShoppingCart, Receipt, Package, Boxes, Users, BarChart3, Settings, Clock, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOutOfStock } from "@/hooks/useOutOfStock";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -28,6 +29,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const { user, isAdmin, logout } = useAuth();
   const outOfStockCount = useOutOfStock();
+  const { settings } = useShopSettings();
 
   if (!isOpen) return null;
 
@@ -39,10 +41,10 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           <div className="flex items-center gap-2.5">
             <img
               src="/logo.png"
-              alt="Prime Cut Logo"
+              alt={`${settings.shop_name} Logo`}
               className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0"
             />
-            <span className="text-sm font-bold text-zinc-900">Prime Cut POS</span>
+            <span suppressHydrationWarning className="text-sm font-bold text-zinc-900">{settings.shop_name}</span>
           </div>
           <button onClick={onClose} className="p-1 rounded text-zinc-400 hover:text-zinc-700">
             <X className="w-5 h-5" />

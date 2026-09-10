@@ -1,30 +1,21 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
 import { ShopSettings, User } from "@/types";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings, Save, CheckCircle2, UserPlus, Trash2, Shield, UserCheck, Key, RefreshCw, X } from "lucide-react";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { Settings, Save, CheckCircle2, UserPlus, Trash2, Shield, UserCheck, RefreshCw, X } from "lucide-react";
 
 export default function SettingsPage() {
   const { alert, confirm } = useSystemDialog();
   const { user: currentUser } = useAuth();
 
-  const [settings, setSettings] = useState<ShopSettings>({
-    shop_name: "Prime Cut Artisan Butchery",
-    phone: "+254 712 345 678",
-    email: "orders@primecut.co.ke",
-    address: "Ground Floor, Argwings Kodhek Rd, Kilimani, Nairobi",
-    tax_pin: "P051283749Z",
-    currency: "KSh",
-    receipt_header: "Fresh Gourmet Meats • Halal Certified",
-    receipt_footer: "Thank you for choosing Prime Cut! Fresh cuts daily.",
-    default_min_stock: 10,
-    tax_rate_percent: 0,
-    enable_mpesa_stk: true,
-  });
+  const { settings: globalSettings, saveSettings } = useShopSettings();
+
+  // Local copy of settings for editing in the form
+  const [settings, setSettings] = useState<ShopSettings>(globalSettings);
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -42,14 +33,12 @@ export default function SettingsPage() {
     password: "",
   });
 
-  const loadData = async () => {
-    try {
-      const data = await settingsService.getSettings();
-      setSettings(data);
-    } catch (e) {
-      console.error("Failed to load settings:", e);
-    }
+  // Sync local form when global settings load or change
+  useEffect(() => {
+    setSettings(globalSettings);
+  }, [globalSettings]);
 
+  const loadData = async () => {
     try {
       setIsLoadingStaff(true);
       const res = await usersService.getUsers({ per_page: 50 });
@@ -63,17 +52,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadData();
-
-    const handleDataChange = () => loadData();
-    window.addEventListener("butcher:data-change", handleDataChange);
-    return () => window.removeEventListener("butcher:data-change", handleDataChange);
   }, []);
+
 
   const handleSubmitSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await settingsService.updateSettings(settings);
+      // saveSettings updates the global context AND persists to backend
+      await saveSettings(settings);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (e: any) {
@@ -282,7 +269,7 @@ export default function SettingsPage() {
                 <input
                   type="email"
                   required
-                  placeholder="john.kamau@primecut.co.ke"
+                  placeholder="staff@example.com"
                   value={newStaff.email}
                   onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
                   className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
@@ -368,7 +355,7 @@ export default function SettingsPage() {
             <input
               type="text"
               required
-              value={settings.shop_name}
+              value={settings.shop_name ?? ""}
               onChange={(e) => setSettings({ ...settings, shop_name: e.target.value })}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />
@@ -379,7 +366,7 @@ export default function SettingsPage() {
               <label className="block font-semibold uppercase text-zinc-700 mb-1">Contact Phone</label>
               <input
                 type="text"
-                value={settings.phone}
+                value={settings.phone ?? ""}
                 onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
@@ -389,7 +376,7 @@ export default function SettingsPage() {
               <label className="block font-semibold uppercase text-zinc-700 mb-1">Email Address</label>
               <input
                 type="email"
-                value={settings.email}
+                value={settings.email ?? ""}
                 onChange={(e) => setSettings({ ...settings, email: e.target.value })}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
@@ -400,7 +387,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Physical Address</label>
             <input
               type="text"
-              value={settings.address}
+              value={settings.address ?? ""}
               onChange={(e) => setSettings({ ...settings, address: e.target.value })}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />
@@ -417,7 +404,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Receipt Top Tagline</label>
             <input
               type="text"
-              value={settings.receipt_header}
+              value={settings.receipt_header ?? ""}
               onChange={(e) => setSettings({ ...settings, receipt_header: e.target.value })}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />
@@ -427,7 +414,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Receipt Bottom Footer Note</label>
             <input
               type="text"
-              value={settings.receipt_footer}
+              value={settings.receipt_footer ?? ""}
               onChange={(e) => setSettings({ ...settings, receipt_footer: e.target.value })}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />

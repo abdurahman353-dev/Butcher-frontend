@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useOutOfStock } from "@/hooks/useOutOfStock";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 interface NavItem {
   name: string;
@@ -43,6 +44,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
   const { isShiftOpen } = useShift();
   const { confirm } = useSystemDialog();
   const outOfStockCount = useOutOfStock();
+  const { settings } = useShopSettings();
 
   const handleLogout = async () => {
     const confirmed = await confirm({
@@ -83,13 +85,13 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
         <div className="flex items-center gap-2.5 min-w-0">
           <img
             src="/logo.png"
-            alt="Prime Cut Logo"
+            alt={`${settings.shop_name} Logo`}
             className="w-9 h-9 rounded-full object-cover border border-amber-300 shadow-2xs shrink-0"
           />
           {!isCollapsed && (
             <div className="min-w-0">
-              <h1 className="text-sm font-black text-zinc-900 leading-tight tracking-tight truncate">
-                PRIME CUT
+              <h1 suppressHydrationWarning className="text-sm font-black text-zinc-900 leading-tight tracking-tight truncate">
+                {settings.shop_name.toUpperCase()}
               </h1>
               <p className="text-[10px] text-zinc-400 font-medium truncate">Butcher POS System</p>
             </div>

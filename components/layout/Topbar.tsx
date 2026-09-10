@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 const pageTitles: Record<string, string> = {
   "/": "Dashboard Overview",
@@ -37,13 +38,14 @@ export function Topbar({
   const pathname = usePathname();
   const { user } = useAuth();
   const { isShiftOpen } = useShift();
+  const { settings } = useShopSettings();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  const title = pageTitles[pathname] ?? "Prime Cut POS";
+  const title = pageTitles[pathname] ?? settings.shop_name;
 
   return (
     <header className="h-14 bg-white border-b border-zinc-200 flex items-center justify-between px-4 shrink-0 select-none">
