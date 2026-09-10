@@ -43,6 +43,13 @@ export default function ShiftPage() {
   // Tab State: "active" for current till, "history" for all shifts
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
 
+  // Live clock — ticks every second so active shift durations are real-time
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Open Shift Form State - strictly entered by cashier, no hardcodes
   const [openingFloat, setOpeningFloat] = useState<string>("");
   const [openNotes, setOpenNotes] = useState("");
@@ -218,14 +225,17 @@ export default function ShiftPage() {
 
   const getDuration = (openedAt: string, closedAt?: string | null) => {
     const start = new Date(openedAt).getTime();
-    const end = closedAt ? new Date(closedAt).getTime() : Date.now();
+    // Use live nowTick for open shifts so the counter ticks every second
+    const end = closedAt ? new Date(closedAt).getTime() : nowTick;
     if (isNaN(start) || isNaN(end) || end < start) return "—";
 
-    const diffMinutes = Math.floor((end - start) / (1000 * 60));
-    const hours = Math.floor(diffMinutes / 60);
-    const mins = diffMinutes % 60;
+    const diffSeconds = Math.floor((end - start) / 1000);
+    const hours = Math.floor(diffSeconds / 3600);
+    const mins = Math.floor((diffSeconds % 3600) / 60);
+    const secs = diffSeconds % 60;
 
-    if (hours === 0) return `${mins}m`;
+    if (hours === 0 && mins === 0) return `${secs}s`;
+    if (hours === 0) return `${mins}m ${secs}s`;
     return `${hours}h ${mins}m`;
   };
 
@@ -1143,17 +1153,25 @@ export default function ShiftPage() {
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-zinc-500">Opened:</span>
-                        <span className="text-zinc-700 font-medium">{formatDateTime(s.opened_at)}</span>
+                        <span className="text-zinc-700 font-semibold">{formatDateTime(s.opened_at)}</span>
                       </div>
-                      {isClosed && (
+                      {isClosed ? (
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-zinc-500">Closed:</span>
-                          <span className="text-zinc-700">{formatDateTime(s.closed_at)}</span>
+                          <span className="text-zinc-700 font-semibold">{formatDateTime(s.closed_at)}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-500">Closed:</span>
+                          <span className="text-emerald-600 font-semibold">Still Active</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-zinc-500">Duration:</span>
-                        <span className="font-semibold text-zinc-800">{getDuration(s.opened_at, s.closed_at)}</span>
+                        <span className={`font-bold tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-800"}`}>
+                          {getDuration(s.opened_at, s.closed_at)}
+                          {!isClosed && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block align-middle" />}
+                        </span>
                       </div>
                     </div>
 
@@ -1284,19 +1302,26 @@ export default function ShiftPage() {
 
                           {/* Opened / Closed Timestamps & Duration */}
                           <td className="py-3 px-3 text-zinc-600">
-                            <div className="font-medium text-zinc-800">
-                              {formatDateTime(s.opened_at)}
-                            </div>
-                            <div className="text-[10px] text-zinc-400 flex items-center gap-1">
-                              <span>Duration:</span>
-                              <strong className="text-zinc-600">
-                                {getDuration(s.opened_at, s.closed_at)}
-                              </strong>
-                              {isClosed && (
-                                <span className="text-zinc-400">
-                                  • Closed: {formatDateTime(s.closed_at)}
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="text-zinc-400 w-12 shrink-0">Opened:</span>
+                                <span className="font-semibold text-zinc-800">{formatDateTime(s.opened_at)}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="text-zinc-400 w-12 shrink-0">Closed:</span>
+                                {isClosed ? (
+                                  <span className="font-semibold text-zinc-800">{formatDateTime(s.closed_at)}</span>
+                                ) : (
+                                  <span className="text-emerald-600 font-semibold">Still Active</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px]">
+                                <span className="text-zinc-400 w-12 shrink-0">Duration:</span>
+                                <span className={`font-bold tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-600"}`}>
+                                  {getDuration(s.opened_at, s.closed_at)}
+                                  {!isClosed && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block align-middle" />}
                                 </span>
-                              )}
+                              </div>
                             </div>
                           </td>
 
