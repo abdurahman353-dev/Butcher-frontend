@@ -12,6 +12,7 @@ import { settingsService } from "@/services/settings.service";
 
 /** Key used to persist the shop name between sessions */
 const CACHE_KEY = "butcher_shop_name";
+const FULL_SETTINGS_CACHE_KEY = "butcher_shop_settings_cache";
 
 /** SSR-safe base defaults (no window access) */
 const DEFAULT_SETTINGS: ShopSettings = {
@@ -27,6 +28,24 @@ const DEFAULT_SETTINGS: ShopSettings = {
   tax_rate_percent: 0,
   enable_mpesa_stk: true,
 };
+
+/** Read the cached settings from localStorage after mount (client-only) */
+function getCachedSettings(): ShopSettings | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(FULL_SETTINGS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+        };
+      }
+    }
+  } catch { }
+  return null;
+}
 
 /** Read the cached shop name from localStorage after mount (client-only) */
 function getCachedShopName(): string {
@@ -64,16 +83,20 @@ export function ShopSettingsProvider({
 }: {
   children: React.ReactNode;
 }) {
-  // SSR-safe: start with DEFAULT_SETTINGS (matches server render), then
-  // immediately update shop_name from localStorage after mount to avoid flash
-  const [settings, setSettings] = useState<ShopSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<ShopSettings>(() => {
+    const cached = getCachedSettings();
+    if (cached) return cached;
+    const legacyName = getCachedShopName();
+    if (legacyName) return { ...DEFAULT_SETTINGS, shop_name: legacyName };
+    return DEFAULT_SETTINGS;
+  });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Update shop_name from localStorage on first client render (before API responds)
+  // Update from cache on client mount
   useEffect(() => {
-    const cached = getCachedShopName();
+    const cached = getCachedSettings();
     if (cached) {
-      setSettings((prev) => ({ ...prev, shop_name: cached }));
+      setSettings(cached);
     }
   }, []);
 
@@ -81,7 +104,7 @@ export function ShopSettingsProvider({
     try {
       const data = await settingsService.getSettings();
       if (data) {
-        setSettings({
+        const full: ShopSettings = {
           shop_name: data.shop_name ?? DEFAULT_SETTINGS.shop_name,
           phone: data.phone ?? "",
           email: data.email ?? "",
@@ -93,9 +116,12 @@ export function ShopSettingsProvider({
           default_min_stock: data.default_min_stock ?? 10,
           tax_rate_percent: data.tax_rate_percent ?? 0,
           enable_mpesa_stk: data.enable_mpesa_stk ?? true,
-        });
-        // Cache shop_name so login page + browser tab can use it
-        try { localStorage.setItem(CACHE_KEY, data.shop_name ?? ""); } catch {}
+        };
+        setSettings(full);
+        try {
+          localStorage.setItem(CACHE_KEY, full.shop_name);
+          localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(full));
+        } catch { }
       }
     } catch (e: any) {
       // 401 is expected on the login page (not yet authenticated) — don't warn
@@ -117,22 +143,39 @@ export function ShopSettingsProvider({
     const handleChange = () => reload();
     window.addEventListener("butcher:data-change", handleChange);
     window.addEventListener("butcher:auth-success", handleChange);
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === FULL_SETTINGS_CACHE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed) setSettings(parsed);
+        } catch { }
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       window.removeEventListener("butcher:data-change", handleChange);
       window.removeEventListener("butcher:auth-success", handleChange);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [reload]);
 
   const saveSettings = useCallback(
     async (updated: Partial<ShopSettings>) => {
-      const merged = { ...settings, ...updated };
-      // Optimistically update state so the UI reflects the change immediately
+      const merged: ShopSettings = { ...settings, ...updated };
+      // Optimistically update state and cache so receipts reflect changes instantly
       setSettings(merged);
+      try {
+        localStorage.setItem(CACHE_KEY, merged.shop_name);
+        localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(merged));
+      } catch { }
+
       try {
         const saved = await settingsService.updateSettings(merged);
         // Reconcile with what the server actually stored
         if (saved) {
-          setSettings({
+          const reconciled: ShopSettings = {
             shop_name: saved.shop_name ?? DEFAULT_SETTINGS.shop_name,
             phone: saved.phone ?? "",
             email: saved.email ?? "",
@@ -144,7 +187,12 @@ export function ShopSettingsProvider({
             default_min_stock: saved.default_min_stock ?? 10,
             tax_rate_percent: saved.tax_rate_percent ?? 0,
             enable_mpesa_stk: saved.enable_mpesa_stk ?? true,
-          });
+          };
+          setSettings(reconciled);
+          try {
+            localStorage.setItem(CACHE_KEY, reconciled.shop_name);
+            localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(reconciled));
+          } catch { }
         }
       } catch (e) {
         // Roll back optimistic update on failure

@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 
 export default function ShiftPage() {
-  const { shift, isShiftOpen, openShift, closeShift } = useShift();
+  const { shift, isShiftOpen, openShift, closeShift, isLoading: isShiftLoading } = useShift();
   const { confirm, alert } = useSystemDialog();
   const { settings } = useShopSettings();
 
@@ -549,8 +549,14 @@ export default function ShiftPage() {
             </div>
           )}
 
-          {/* Main Shift View: Either Open Active Shift or Open Shift Form */}
-          {isShiftOpen && shift ? (
+          {/* Main Shift View: Loading, Active Live Shift, or Open Shift Form */}
+          {isShiftLoading && !shift ? (
+            <div className="p-8 sm:p-12 bg-white border border-zinc-200 rounded-2xl sm:rounded-3xl max-w-lg mx-auto text-center space-y-3 shadow-xs">
+              <div className="w-8 h-8 rounded-full border-2 border-zinc-200 border-t-green-600 animate-spin mx-auto" />
+              <p className="text-sm font-bold text-zinc-900">Loading Till Session...</p>
+              <p className="text-xs text-zinc-500">Checking active shift status</p>
+            </div>
+          ) : isShiftOpen && shift ? (
             <div className="space-y-5 sm:space-y-6">
               {/* Active Shift Dashboard Card */}
               <div className="p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-5 shadow-xs">

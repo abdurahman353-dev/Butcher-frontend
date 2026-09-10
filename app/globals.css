@@ -46,12 +46,15 @@ body {
   outline-offset: 2px;
 }
 
-/* Thermal receipt print */
+/* Thermal receipt & slip print */
 @media print {
   body * { visibility: hidden; }
   #thermal-receipt,
-  #thermal-receipt * { visibility: visible; }
-  #thermal-receipt {
+  #thermal-receipt *,
+  #shift-slip,
+  #shift-slip * { visibility: visible; }
+  #thermal-receipt,
+  #shift-slip {
     position: absolute; left: 0; top: 0;
     width: 80mm; margin: 0; padding: 8px;
     background: white; color: black;

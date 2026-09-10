@@ -53,15 +53,19 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
         <div id="thermal-receipt" className="p-6 text-xs leading-tight space-y-3 bg-white text-black">
           {/* Header */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
-            <div className="text-lg font-bold tracking-tight">🥩 {settings.shop_name.toUpperCase()}</div>
-            {settings.address && <p className="text-[11px] text-gray-700">{settings.address}</p>}
-            <p className="text-[10px] text-gray-600">
-              {settings.phone && `Tel: ${settings.phone}`}
-              {settings.phone && settings.tax_pin && " • "}
-              {settings.tax_pin && `PIN: ${settings.tax_pin}`}
-            </p>
+            <div className="text-lg font-bold tracking-tight">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
+            {settings.address && <p className="text-[11px] text-gray-700 leading-snug">{settings.address}</p>}
+            {(settings.phone || settings.email || settings.tax_pin) && (
+              <div className="text-[10px] text-gray-600 space-y-0.5">
+                {settings.phone && <p>Tel: {settings.phone}</p>}
+                {settings.email && <p>Email: {settings.email}</p>}
+                {settings.tax_pin && <p>PIN: {settings.tax_pin}</p>}
+              </div>
+            )}
             {settings.receipt_header && (
-              <p className="text-[10px] font-semibold text-gray-800">{settings.receipt_header}</p>
+              <p className="text-[10px] font-semibold text-gray-800 whitespace-pre-line pt-1 border-t border-dotted border-gray-300 mt-1">
+                {settings.receipt_header}
+              </p>
             )}
           </div>
 
@@ -144,16 +148,20 @@ export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
           </div>
 
           {/* Barcode & Footer */}
-          <div className="text-center pt-3 border-t border-dashed border-gray-400 space-y-1">
+          <div className="text-center pt-3 border-t border-dashed border-gray-400 space-y-1.5">
             <div className="font-mono text-xs tracking-widest font-bold py-1 bg-gray-100 rounded">
               * {sale.sale_number} *
             </div>
             {settings.receipt_footer ? (
-              <p className="text-[10px] text-gray-700 font-semibold">{settings.receipt_footer}</p>
+              <p className="text-[10px] text-gray-800 font-semibold whitespace-pre-line pt-1">
+                {settings.receipt_footer}
+              </p>
             ) : (
-              <p className="text-[10px] text-gray-700 font-semibold">Thank you for shopping with us!</p>
+              <>
+                <p className="text-[10px] text-gray-700 font-semibold">Thank you for shopping with us!</p>
+                <p className="text-[9px] text-gray-500">Goods once sold cannot be returned without receipt.</p>
+              </>
             )}
-            <p className="text-[9px] text-gray-500">Goods once sold cannot be returned without receipt.</p>
           </div>
         </div>
       </div>

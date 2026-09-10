@@ -74,17 +74,24 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
         </div>
 
         {/* Printable Thermal Receipt / Slip Body */}
-        <div className="p-4 sm:p-6 text-xs leading-relaxed space-y-4 overflow-y-auto font-mono text-zinc-900 flex-1 print:p-0 print:overflow-visible">
+        <div id="shift-slip" className="p-4 sm:p-6 text-xs leading-relaxed space-y-4 overflow-y-auto font-mono text-zinc-900 flex-1 print:p-0 print:overflow-visible">
           {/* Header */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-zinc-300">
-            <div className="text-base sm:text-lg font-bold tracking-tight">🥩 {settings.shop_name.toUpperCase()}</div>
-            <p className="text-[11px] text-zinc-600">REGISTER SHIFT AUDIT / Z-REPORT</p>
-            {settings.address && <p className="text-[10px] text-zinc-500">{settings.address}</p>}
-            <p className="text-[10px] text-zinc-500">
-              {settings.phone && `Tel: ${settings.phone}`}
-              {settings.phone && settings.tax_pin && " • "}
-              {settings.tax_pin && `PIN: ${settings.tax_pin}`}
-            </p>
+            <div className="text-base sm:text-lg font-bold tracking-tight">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
+            <p className="text-[11px] text-zinc-600 font-bold tracking-wider">REGISTER SHIFT AUDIT / Z-REPORT</p>
+            {settings.address && <p className="text-[10px] text-zinc-600 leading-snug">{settings.address}</p>}
+            {(settings.phone || settings.email || settings.tax_pin) && (
+              <div className="text-[10px] text-zinc-500 space-y-0.5">
+                {settings.phone && <p>Tel: {settings.phone}</p>}
+                {settings.email && <p>Email: {settings.email}</p>}
+                {settings.tax_pin && <p>PIN: {settings.tax_pin}</p>}
+              </div>
+            )}
+            {settings.receipt_header && (
+              <p className="text-[10px] font-semibold text-zinc-700 pt-1 whitespace-pre-line border-t border-dotted border-zinc-200 mt-1">
+                {settings.receipt_header}
+              </p>
+            )}
           </div>
 
           {/* Shift Metadata */}
@@ -225,7 +232,12 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
 
           {/* Sign-off footer */}
           <div className="text-center pt-2 space-y-2 text-[10px] text-zinc-500">
-            <div className="flex justify-around pt-6 text-[10px]">
+            {settings.receipt_footer && (
+              <p className="text-[10px] text-zinc-700 font-semibold whitespace-pre-line pb-1">
+                {settings.receipt_footer}
+              </p>
+            )}
+            <div className="flex justify-around pt-4 text-[10px]">
               <div className="border-t border-zinc-400 px-4 pt-1">Cashier Signature</div>
               <div className="border-t border-zinc-400 px-4 pt-1">Supervisor Signature</div>
             </div>
