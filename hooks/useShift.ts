@@ -8,7 +8,23 @@ const SHIFT_STORAGE_KEY = "prime_cut_current_shift";
 
 // Module-level cache to share state across components and prevent flash on navigation
 let cachedShift: Shift | null = null;
-let cachedLoading = true;
+// cachedLoading: only true before the FIRST successful API fetch ever.
+// Pre-populate from localStorage so navigating back to /shift never flashes
+// the "open shift" form when a shift is already live.
+let cachedLoading: boolean = (() => {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = localStorage.getItem(SHIFT_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.status === "open") {
+        cachedShift = parsed;
+        return false; // We already have valid data — skip the loading flash
+      }
+    }
+  } catch { }
+  return true; // No cached data, show loading until first fetch completes
+})();
 const listeners = new Set<(shift: Shift | null) => void>();
 
 function getInitialShift(): Shift | null {

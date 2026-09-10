@@ -60,9 +60,13 @@ export default function LoginPage() {
     setSessionExpiredNotice(false);
 
     try {
-      await login(identifier.trim(), password);
+      const loggedInUser = await login(identifier.trim(), password);
       window.dispatchEvent(new CustomEvent("butcher:auth-success"));
-      router.push("/pos");
+      if (loggedInUser.must_change_password) {
+        router.push("/change-password");
+      } else {
+        router.push("/pos");
+      }
     } catch (err: any) {
       const msg =
         err?.errors?.login?.[0] ||

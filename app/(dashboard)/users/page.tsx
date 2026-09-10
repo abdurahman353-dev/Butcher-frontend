@@ -21,6 +21,8 @@ import {
     Phone,
     CheckCircle2,
     AlertTriangle,
+    Eye,
+    EyeOff,
 } from "lucide-react";
 
 export default function UsersManagementPage() {
@@ -43,6 +45,9 @@ export default function UsersManagementPage() {
         role: "cashier" as "admin" | "cashier",
         password: "",
     });
+    const [newUserConfirmPassword, setNewUserConfirmPassword] = useState("");
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
 
     const loadUsers = useCallback(async () => {
         try {
@@ -80,16 +85,29 @@ export default function UsersManagementPage() {
             });
             return;
         }
+        if (newUser.password.length < 8 || !/[A-Z]/.test(newUser.password) || !/[0-9]/.test(newUser.password) || !/[^A-Za-z0-9]/.test(newUser.password)) {
+            await alert({
+                title: "Password Too Weak",
+                message: "Password must be at least 8 characters and include an uppercase letter, a number, and a special character (e.g. @, !, #, $).",
+                type: "warning",
+            });
+            return;
+        }
+        if (newUser.password !== newUserConfirmPassword) {
+            await alert({ title: "Password Mismatch", message: "Passwords do not match. Please confirm the password correctly.", type: "warning" });
+            return;
+        }
 
         setIsSubmitting(true);
         try {
             await usersService.createUser(newUser);
             await alert({
                 title: "Staff Created",
-                message: `New ${newUser.role} "${newUser.name}" created successfully!`,
+                message: `New ${newUser.role} "${newUser.name}" created successfully! They will be prompted to set a new password on first login.`,
                 type: "success",
             });
             setNewUser({ name: "", email: "", phone: "", role: "cashier", password: "" });
+            setNewUserConfirmPassword("");
             setShowAddModal(false);
             loadUsers();
         } catch (e: any) {
@@ -499,14 +517,52 @@ export default function UsersManagementPage() {
 
                             <div>
                                 <label className="block font-semibold uppercase text-zinc-700 mb-1">Password *</label>
-                                <input
-                                    type="password"
-                                    required
-                                    placeholder="At least 8 characters"
-                                    value={newUser.password}
-                                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-mono text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showNewPassword ? "text" : "password"}
+                                        required
+                                        placeholder="At least 8 characters"
+                                        value={newUser.password}
+                                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                        className="w-full bg-white border border-zinc-200 rounded-xl px-3 pr-10 py-2.5 text-sm font-mono text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                                    />
+                                    <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Confirm Password *</label>
+                                <div className="relative">
+                                    <input
+                                        type={showNewConfirmPassword ? "text" : "password"}
+                                        required
+                                        placeholder="Repeat the password"
+                                        value={newUserConfirmPassword}
+                                        onChange={(e) => setNewUserConfirmPassword(e.target.value)}
+                                        className={`w-full bg-white border rounded-xl px-3 pr-10 py-2.5 text-sm font-mono text-zinc-900 focus:outline-hidden focus:ring-1 shadow-2xs ${
+                                            newUserConfirmPassword && newUserConfirmPassword !== newUser.password
+                                                ? "border-red-400 focus:ring-red-400"
+                                                : newUserConfirmPassword && newUserConfirmPassword === newUser.password
+                                                ? "border-green-500 focus:ring-green-500"
+                                                : "border-zinc-200 focus:border-green-600 focus:ring-green-500"
+                                        }`}
+                                    />
+                                    <button type="button" onClick={() => setShowNewConfirmPassword(!showNewConfirmPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                        {showNewConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                {newUserConfirmPassword && newUserConfirmPassword !== newUser.password && (
+                                    <p className="text-[10px] text-red-600 font-semibold mt-1">Passwords do not match.</p>
+                                )}
+                                {newUserConfirmPassword && newUserConfirmPassword === newUser.password && (
+                                    <p className="text-[10px] text-green-600 font-semibold mt-1 flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3" /> Passwords match!
+                                    </p>
+                                )}
                             </div>
 
                             <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100">
