@@ -1084,6 +1084,15 @@ function SalesLedger() {
                     {/* Date & Time */}
                     <td className="py-3.5 px-3 text-zinc-600 whitespace-nowrap">
                       <div className="font-medium text-zinc-800">{formatDateTime(sale.created_at)}</div>
+                      {sale.settled_at && sale.payment_status === "completed" && (
+                        <div
+                          className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 mt-0.5"
+                          title={`Payment settled on ${formatDateTime(sale.settled_at)}${sale.settled_by ? ` by ${sale.settled_by}` : ""}`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <span>Paid {formatDateTime(sale.settled_at)}</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Cashier */}
