@@ -26,6 +26,7 @@ import {
   Layers,
   FileSpreadsheet,
   FileText,
+  Clock,
 } from "lucide-react";
 import { Pagination } from "@/components/shared/Pagination";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
@@ -154,6 +155,7 @@ export default function ReportsPage() {
   const cashAmount = analytics?.payment_breakdown?.cash || 0;
   const mpesaAmount = analytics?.payment_breakdown?.mpesa || 0;
   const cardAmount = analytics?.payment_breakdown?.card || 0;
+  const creditAmount = analytics?.payment_breakdown?.credit ?? analytics?.pending_credit?.total ?? 0;
 
   const cashPercent =
     analytics?.payment_breakdown?.percentages?.cash ??
@@ -164,10 +166,14 @@ export default function ReportsPage() {
   const cardPercent =
     analytics?.payment_breakdown?.percentages?.card ??
     (totalRevenue > 0 ? Math.round((cardAmount / totalRevenue) * 100) : 0);
+  const creditPercent =
+    analytics?.payment_breakdown?.percentages?.credit ??
+    (totalRevenue > 0 ? Math.round((creditAmount / totalRevenue) * 100) : 0);
 
   const cashCount = analytics?.payment_breakdown?.counts?.cash ?? 0;
   const mpesaCount = analytics?.payment_breakdown?.counts?.mpesa ?? 0;
   const cardCount = analytics?.payment_breakdown?.counts?.card ?? 0;
+  const creditCount = analytics?.payment_breakdown?.counts?.credit ?? analytics?.pending_credit?.count ?? 0;
 
   // Category/cashier name for filter chips
   const categoryName = useMemo(() => {
@@ -527,6 +533,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
                 <option value="cash">💵 Cash Only</option>
                 <option value="mpesa">📱 M-Pesa Only</option>
                 <option value="card">💳 Card Only</option>
+                <option value="credit">⏳ Pay Later (Credit)</option>
               </select>
             </div>
 
@@ -630,7 +637,14 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               {formatCurrency(totalRevenue)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 pt-2 border-t border-zinc-100">
-              <span>{analytics?.transactions || 0} completed orders</span>
+              <span>
+                {analytics?.transactions || 0} completed {analytics?.transactions === 1 ? "order" : "orders"}
+                {(analytics?.pending_credit?.total || 0) > 0 && (
+                  <span className="text-amber-700 font-bold ml-1">
+                    · {analytics?.pending_credit?.count} pending ({formatCurrency(analytics?.pending_credit?.total || 0)})
+                  </span>
+                )}
+              </span>
               <span className="font-semibold text-zinc-700">
                 AOV: {formatCurrency(analytics?.average_order_value || 0)}
               </span>
@@ -987,6 +1001,33 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
                 />
               </div>
             </div>
+
+            {/* PAY LATER / CREDIT (UNPAID RECEIVABLES) */}
+            {creditCount > 0 && (
+              <div className="p-3 sm:p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-amber-900 flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800">
+                      <Clock className="w-3.5 h-3.5" />
+                    </div>
+                    <span>Pay Later (Due)</span>
+                  </span>
+                  <span className="font-bold text-amber-900 tabular-nums">
+                    {formatCurrency(creditAmount)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-amber-800">
+                  <span>{creditCount} pending {creditCount === 1 ? "order" : "orders"}</span>
+                  <span className="font-bold text-amber-900">Unsettled</span>
+                </div>
+                <div className="h-2 w-full bg-amber-200/60 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-600 rounded-full transition-all"
+                    style={{ width: `100%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

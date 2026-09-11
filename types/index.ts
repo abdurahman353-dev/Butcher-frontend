@@ -189,6 +189,10 @@ export interface DashboardSummary {
   today_sales: number;
   today_transactions: number;
   today_profit: number;
+  today_pending_credit?: number;
+  today_pending_count?: number;
+  all_pending_credit?: number;
+  all_pending_count?: number;
   current_stock_value: number;
   low_stock_count: number;
   sales_chart: {
@@ -226,6 +230,8 @@ export interface PaginatedResponse<T> {
     total_revenue: number;
     total_count: number;
     completed_count: number;
+    pending_revenue?: number;
+    pending_count?: number;
     refunded_count: number;
     refunded_amount: number;
     average_order_value: number;

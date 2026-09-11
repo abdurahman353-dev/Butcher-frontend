@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   Clock,
   CheckCircle2,
+  Receipt,
 } from "lucide-react";
 import {
   AreaChart,
@@ -89,6 +90,39 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* ── PAY LATER ALERT BANNER (ALL-TIME RECEIVABLES) ── */}
+      {((summary?.all_pending_count ?? summary?.today_pending_count ?? 0) > 0) && (() => {
+        const pendingCount = summary?.all_pending_count ?? summary?.today_pending_count ?? 0;
+        const pendingAmount = summary?.all_pending_credit ?? summary?.today_pending_credit ?? 0;
+        return (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded-2xl px-5 py-4 shadow-xs">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center border border-amber-200 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-amber-900">
+                  ⚠️ {pendingCount} Unpaid Pay Later {pendingCount === 1 ? "Order" : "Orders"} Outstanding
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {pendingAmount > 0
+                    ? `KSh ${Number(pendingAmount).toLocaleString("en-KE", { minimumFractionDigits: 2 })} awaiting collection across all shifts — unpaid credit orders will stay listed until settled.`
+                    : "Goods were delivered on credit but payment has not been collected yet."}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/sales?payment_status=pending"
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shrink-0 active:scale-95 shadow-xs"
+            >
+              <Receipt className="w-4 h-4" />
+              Settle Now
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        );
+      })()}
+
       {/* 4 Core Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Today's Sales */}
@@ -103,9 +137,16 @@ export default function DashboardPage() {
             <div className="text-xl sm:text-2xl font-bold text-zinc-900 tabular-nums tracking-tight">
               {formatCurrency(summary?.today_sales)}
             </div>
-            <p className="text-[11px] text-green-700 font-semibold mt-0.5 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> Live Gross Revenue
-            </p>
+            <div className="flex items-center justify-between text-[11px] mt-0.5">
+              <span className="text-green-700 font-semibold flex items-center gap-1">
+                <TrendingUp className="w-3 h-3" /> Live Gross Revenue
+              </span>
+              {((summary?.all_pending_count ?? summary?.today_pending_count ?? 0) > 0) && (
+                <span className="text-amber-700 font-bold">
+                  {summary?.all_pending_count ?? summary?.today_pending_count} Pay Later Due
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -347,12 +388,23 @@ export default function DashboardPage() {
                     </td>
                     <td className="py-3 text-zinc-800 font-medium">{sale.cashier_name}</td>
                     <td className="py-3 text-zinc-600">{sale.customer_name || "Walk-in"}</td>
-                    <td className="py-3 uppercase font-semibold text-zinc-700 text-[11px]">{sale.payment_method}</td>
+                    <td className="py-3 uppercase font-semibold text-zinc-700 text-[11px]">
+                      {sale.payment_method === "credit" ? (
+                        <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
+                          Pay Later
+                        </span>
+                      ) : (
+                        sale.payment_method
+                      )}
+                    </td>
                     <td className="py-3 text-right font-bold text-green-700 tabular-nums">
                       {formatCurrency(sale.total)}
                     </td>
                     <td className="py-3 pr-3 text-center">
-                      <StatusBadge status={sale.sale_status} type="sale" />
+                      <StatusBadge
+                        status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
+                        type="sale"
+                      />
                     </td>
                   </tr>
                 ))

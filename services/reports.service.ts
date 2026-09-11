@@ -16,6 +16,10 @@ export interface ReportAnalyticsData {
   end_date?: string;
   revenue: number;
   transactions: number;
+  pending_credit?: {
+    total: number;
+    count: number;
+  };
   gross_profit: number;
   estimated_profit: number;
   gross_margin: number;
@@ -27,15 +31,18 @@ export interface ReportAnalyticsData {
     cash: number;
     mpesa: number;
     card: number;
+    credit?: number;
     counts?: {
       cash: number;
       mpesa: number;
       card: number;
+      credit?: number;
     };
     percentages?: {
       cash: number;
       mpesa: number;
       card: number;
+      credit?: number;
     };
   };
   top_products: Array<{

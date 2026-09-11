@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { salesService } from "@/services/sales.service";
 import { reportsService } from "@/services/reports.service";
 import { Sale, PaginatedResponse } from "@/types";
@@ -38,8 +39,12 @@ import {
   Clock,
 } from "lucide-react";
 
-export default function SalesPage() {
+function SalesLedger() {
   const { settings: shopSettings } = useShopSettings();
+  const searchParams = useSearchParams();
+  const urlPaymentStatus = searchParams?.get("payment_status") || "all";
+  const urlPaymentMethod = searchParams?.get("payment_method") || "all";
+
   const [paginated, setPaginated] = useState<PaginatedResponse<Sale>>({
     data: [],
     current_page: 1,
@@ -50,12 +55,13 @@ export default function SalesPage() {
     to: 0,
   });
 
-  // Filter States
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  // Filter States - directly initialized from URL query params
+  const [isFilterOpen, setIsFilterOpen] = useState(urlPaymentStatus !== "all" || urlPaymentMethod !== "all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>(urlPaymentMethod);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>(urlPaymentStatus);
   const [statusFilter, setStatusFilter] = useState("all");
   const [cashierFilter, setCashierFilter] = useState("all");
   const [minAmount, setMinAmount] = useState("");
@@ -63,9 +69,22 @@ export default function SalesPage() {
   const [sortBy, setSortBy] = useState("created_at");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
 
+  // Sync when searchParams change
+  useEffect(() => {
+    const ps = searchParams?.get("payment_status") || "all";
+    const pm = searchParams?.get("payment_method") || "all";
+    setPaymentStatusFilter(ps);
+    setPaymentFilter(pm);
+    if (ps !== "all" || pm !== "all") {
+      setDateFrom("");
+      setDateTo("");
+      setCurrentPage(1);
+    }
+  }, [searchParams]);
+
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAmountFilters, setShowAmountFilters] = useState(false);
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
@@ -73,14 +92,18 @@ export default function SalesPage() {
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstMountRef = useRef(true);
 
-  // Load cached sales on mount
+  // Load cached sales ONLY if no specific URL filters are requested
   useEffect(() => {
+    if (urlPaymentStatus !== "all" || urlPaymentMethod !== "all") {
+      return;
+    }
     try {
       const cached = localStorage.getItem("butcher_cached_sales");
       if (cached) setPaginated(JSON.parse(cached));
     } catch { }
-  }, []);
+  }, [urlPaymentStatus, urlPaymentMethod]);
 
   const fetchSales = useCallback(async () => {
     try {
@@ -96,6 +119,7 @@ export default function SalesPage() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (paymentFilter !== "all") params.payment_method = paymentFilter;
+      if (paymentStatusFilter !== "all") params.payment_status = paymentStatusFilter;
       if (statusFilter !== "all") params.status = statusFilter;
       if (cashierFilter !== "all") params.cashier_id = cashierFilter;
       if (minAmount) params.min_amount = minAmount;
@@ -111,6 +135,7 @@ export default function SalesPage() {
         !dateFrom &&
         !dateTo &&
         paymentFilter === "all" &&
+        paymentStatusFilter === "all" &&
         statusFilter === "all" &&
         cashierFilter === "all"
       ) {
@@ -129,6 +154,7 @@ export default function SalesPage() {
     dateFrom,
     dateTo,
     paymentFilter,
+    paymentStatusFilter,
     statusFilter,
     cashierFilter,
     minAmount,
@@ -137,8 +163,13 @@ export default function SalesPage() {
     sortDirection,
   ]);
 
-  // Reactive Debounced Auto-Fetch on any filter or page change
+  // Reactive Debounced Auto-Fetch on any filter or page change (instant on mount)
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      fetchSales();
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchSales();
@@ -190,6 +221,7 @@ export default function SalesPage() {
     setDateFrom("");
     setDateTo("");
     setPaymentFilter("all");
+    setPaymentStatusFilter("all");
     setStatusFilter("all");
     setCashierFilter("all");
     setMinAmount("");
@@ -205,12 +237,13 @@ export default function SalesPage() {
     if (dateFrom) count++;
     if (dateTo) count++;
     if (paymentFilter !== "all") count++;
+    if (paymentStatusFilter !== "all") count++;
     if (statusFilter !== "all") count++;
     if (cashierFilter !== "all") count++;
     if (minAmount) count++;
     if (maxAmount) count++;
     return count;
-  }, [search, dateFrom, dateTo, paymentFilter, statusFilter, cashierFilter, minAmount, maxAmount]);
+  }, [search, dateFrom, dateTo, paymentFilter, paymentStatusFilter, statusFilter, cashierFilter, minAmount, maxAmount]);
 
   // Export Filtered Records to CSV
   const handleExportCSV = () => {
@@ -348,13 +381,25 @@ export default function SalesPage() {
   const summaryRevenue =
     paginated.summary?.total_revenue ??
     paginated.data
-      .filter((s) => s.sale_status === "completed")
+      .filter((s) => s.sale_status === "completed" && s.payment_status === "completed")
       .reduce((sum, s) => sum + Number(s.total || 0), 0);
 
-  const summaryCount = paginated.summary?.total_count ?? paginated.total;
+  // Total Transactions = only PAID/completed sales. Pending (Pay Later) orders
+  // are shown as a subtitle note and must NOT inflate this headline count.
+  const summaryCount = paginated.summary?.completed_count ?? paginated.data.filter((s) => s.payment_status === "completed").length;
   const completedCount =
     paginated.summary?.completed_count ??
-    paginated.data.filter((s) => s.sale_status === "completed").length;
+    paginated.data.filter((s) => s.sale_status === "completed" && s.payment_status === "completed").length;
+
+  const pendingRevenue =
+    paginated.summary?.pending_revenue ??
+    paginated.data
+      .filter((s) => s.payment_status === "pending" && s.sale_status !== "refunded" && s.sale_status !== "cancelled")
+      .reduce((sum, s) => sum + Number(s.total || 0), 0);
+
+  const pendingCount =
+    paginated.summary?.pending_count ??
+    paginated.data.filter((s) => s.payment_status === "pending" && s.sale_status !== "refunded" && s.sale_status !== "cancelled").length;
 
   const aov =
     paginated.summary?.average_order_value ??
@@ -450,7 +495,14 @@ export default function SalesPage() {
               {formatCurrency(summaryRevenue)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1.5 pt-1.5 border-t border-zinc-100">
-              <span>{completedCount} completed orders</span>
+              <span>
+                {completedCount} completed {completedCount === 1 ? "order" : "orders"}
+                {pendingCount > 0 && (
+                  <span className="text-amber-700 font-bold ml-1">
+                    · {pendingCount} pending ({formatCurrency(pendingRevenue)})
+                  </span>
+                )}
+              </span>
               <span className="font-semibold text-green-700">Gross Sales</span>
             </div>
           </div>
@@ -471,8 +523,13 @@ export default function SalesPage() {
               {summaryCount.toLocaleString()}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-1.5 pt-1.5 border-t border-zinc-100">
-              <span>Matching current filters</span>
-              <span className="font-semibold text-blue-700">Ledger Count</span>
+              <span>
+                Paid sales only
+                {pendingCount > 0 && (
+                  <span className="text-amber-600 font-bold ml-1">· {pendingCount} unpaid</span>
+                )}
+              </span>
+              <span className="font-semibold text-blue-700">Collected</span>
             </div>
           </div>
         </div>
@@ -634,22 +691,25 @@ export default function SalesPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPaymentFilter("credit");
+                    setPaymentStatusFilter("pending");
+                    setPaymentFilter("all");
+                    setDateFrom("");
+                    setDateTo("");
                     setCurrentPage(1);
                   }}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${
-                    paymentFilter === "credit"
-                      ? "bg-amber-600 text-white border-amber-600 font-bold"
-                      : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200"
+                    paymentStatusFilter === "pending"
+                      ? "bg-amber-600 text-white border-amber-600 font-bold shadow-2xs"
+                      : "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 font-medium"
                   }`}
                 >
-                  ⏳ Pay Later (Credit)
+                  ⏳ Unpaid Pay Later {pendingCount > 0 ? `(${pendingCount})` : ""}
                 </button>
               </div>
             </div>
 
             {/* Primary Filter Grid */}
-            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 sm:gap-3 bg-white">
+            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5 sm:gap-3 bg-white">
               {/* Search Query: spans 2 cols */}
               <div className="sm:col-span-2 flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
@@ -732,6 +792,25 @@ export default function SalesPage() {
                   <option value="mpesa">📱 M-Pesa Only</option>
                   <option value="card">💳 Card Only</option>
                   <option value="credit">⏳ Pay Later / Credit</option>
+                </select>
+              </div>
+
+              {/* Payment Status (Pay Later / Pending vs Paid) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-zinc-400" /> Pay Status
+                </label>
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(e) => {
+                    setPaymentStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                >
+                  <option value="all">All Pay Statuses</option>
+                  <option value="pending">⏳ Pending (Pay Later)</option>
+                  <option value="completed">✅ Paid / Completed</option>
                 </select>
               </div>
 
@@ -884,6 +963,15 @@ export default function SalesPage() {
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-semibold">
                   💳 {paymentFilter.toUpperCase()}
                   <button onClick={() => setPaymentFilter("all")} className="hover:text-blue-950 ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {paymentStatusFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-amber-900 text-[11px] font-bold">
+                  ⏳ {paymentStatusFilter === "pending" ? "UNPAID (PAY LATER)" : "PAID ONLY"}
+                  <button onClick={() => setPaymentStatusFilter("all")} className="hover:text-amber-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -1061,10 +1149,13 @@ export default function SalesPage() {
                     {/* Status */}
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">
                       <div className="flex flex-col items-center gap-1">
-                        <StatusBadge status={sale.sale_status} type="sale" />
+                        <StatusBadge
+                          status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
+                          type="sale"
+                        />
                         {sale.payment_status === "pending" && (
-                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                            Unpaid Due
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Pay Later (Due)
                           </span>
                         )}
                       </div>
@@ -1154,5 +1245,13 @@ export default function SalesPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function SalesPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-zinc-400 font-semibold text-sm">Loading sales ledger...</div>}>
+      <SalesLedger />
+    </Suspense>
   );
 }

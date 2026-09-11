@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usersService } from "@/services/users.service";
 import { useSystemDialog } from "@/contexts/DialogContext";
+import { EndShiftModal } from "@/components/pos/EndShiftModal";
 import {
   User,
   Mail,
@@ -22,6 +23,7 @@ export default function ProfilePage() {
   const { user, logout } = useAuth();
   const { alert } = useSystemDialog();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
 
   // Password change form state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -81,12 +83,18 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = async () => {
+  // Open end-of-shift check before logging out
+  const handleEndShiftClick = () => {
+    setIsShiftModalOpen(true);
+  };
+
+  const handleConfirmLogout = async () => {
     setIsLoggingOut(true);
     try {
       await logout();
     } finally {
       setIsLoggingOut(false);
+      setIsShiftModalOpen(false);
     }
   };
 
@@ -98,6 +106,12 @@ export default function ProfilePage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto space-y-6 select-none">
+      <EndShiftModal
+        isOpen={isShiftModalOpen}
+        onClose={() => setIsShiftModalOpen(false)}
+        onConfirmLogout={handleConfirmLogout}
+        isLoggingOut={isLoggingOut}
+      />
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-200 pb-4">
         <div className="flex items-center gap-2.5">
@@ -298,12 +312,12 @@ export default function ProfilePage() {
           <button
             type="button"
             id="profile-logout-btn"
-            onClick={handleLogout}
+            onClick={handleEndShiftClick}
             disabled={isLoggingOut}
             className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-bold text-xs rounded-xl transition-all shadow-xs"
           >
             <LogOut className="w-4 h-4" />
-            <span>{isLoggingOut ? "Signing out..." : "Sign Out"}</span>
+            <span>End Shift &amp; Sign Out</span>
           </button>
         </div>
       </div>

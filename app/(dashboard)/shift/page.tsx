@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useShift } from "@/hooks/useShift";
 import { shiftsService } from "@/services/shifts.service";
-import { Shift } from "@/types";
+import { Shift, Sale } from "@/types";
+import apiClient from "@/services/api";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { roundTo } from "@/lib/math";
 import { useSystemDialog } from "@/contexts/DialogContext";
@@ -35,6 +36,7 @@ import {
   FileSpreadsheet,
   ArrowUpDown,
   RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function ShiftPage() {
@@ -86,6 +88,10 @@ export default function ShiftPage() {
   // Modal State
   const [selectedShiftForModal, setSelectedShiftForModal] = useState<Shift | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // Pending Pay Later Orders state (loaded when shift close is attempted)
+  const [pendingPayLaterOrders, setPendingPayLaterOrders] = useState<Sale[]>([]);
+  const [showPendingWarning, setShowPendingWarning] = useState(false);
 
   const numCounted = parseFloat(countedCash) || 0;
   const expectedCash = shift ? shift.opening_cash + shift.cash_sales : 0;
@@ -170,6 +176,43 @@ export default function ShiftPage() {
       return;
     }
 
+    // ── STEP 1: Check for unpaid Pay Later orders before allowing close ──
+    try {
+      const res = await apiClient.get<{ data: Sale[] }>("/sales", {
+        params: { payment_status: "pending", per_page: 100 },
+      });
+      const all: Sale[] = Array.isArray(res.data)
+        ? (res.data as unknown as Sale[])
+        : res.data?.data ?? [];
+      const unpaid = all.filter(
+        (s) =>
+          s.payment_status === "pending" &&
+          s.sale_status !== "refunded" &&
+          s.sale_status !== "cancelled"
+      );
+      if (unpaid.length > 0) {
+        setPendingPayLaterOrders(unpaid);
+        setShowPendingWarning(true);
+        return; // Block shift close — show warning modal instead
+      }
+    } catch {
+      // Network error — warn and block
+      await alert({
+        title: "Cannot Verify Pending Orders",
+        message:
+          "Could not check for unpaid Pay Later orders (network error). Please verify manually that all Pay Later orders have been settled before closing the shift.",
+        type: "warning",
+      });
+      return;
+    }
+
+    // ── STEP 2: Proceed with normal confirm dialog ──
+    await doCloseShift();
+  };
+
+  // Separated so it can be called both from handleCloseShift (no pending) and
+  // from the "Close Anyway" action in the pending warning modal.
+  const doCloseShift = async () => {
     const diffText =
       discrepancy === 0
         ? "Drawer is perfectly balanced."
@@ -193,6 +236,7 @@ export default function ShiftPage() {
     try {
       const closed = await closeShift(numCounted, closeNotes);
       setClosedSummary(closed);
+      setShowPendingWarning(false);
       await loadHistory();
       await alert({
         title: "Shift Closed & Reconciled",
@@ -424,7 +468,115 @@ export default function ShiftPage() {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto select-none">
+
+      {/* ── PAY LATER PENDING WARNING MODAL ── */}
+      {showPendingWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden">
+            {/* Header */}
+            <div className="px-5 pt-5 pb-4 border-b border-amber-200 bg-amber-50">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-zinc-900">
+                    ⚠️ Cannot Close Shift — Unpaid Orders
+                  </h2>
+                  <p className="text-xs text-zinc-600 mt-0.5">
+                    You have <span className="font-bold text-amber-700">{pendingPayLaterOrders.length} Pay Later {pendingPayLaterOrders.length === 1 ? "order" : "orders"}</span> that have not been paid.
+                    Collect payment before closing your shift.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Order list */}
+            <div className="px-5 py-4 max-h-72 overflow-y-auto space-y-2">
+              {/* Total owed */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-amber-700 tracking-wide">Total Outstanding</p>
+                  <p className="text-xl font-black text-amber-900 tabular-nums">
+                    {formatCurrency(pendingPayLaterOrders.reduce((s, o) => s + Number(o.total || 0), 0))}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase text-amber-700 tracking-wide">Orders</p>
+                  <p className="text-xl font-black text-amber-900">{pendingPayLaterOrders.length}</p>
+                </div>
+              </div>
+
+              {pendingPayLaterOrders.map((sale) => (
+                <div
+                  key={sale.id}
+                  className="flex items-center justify-between bg-white border border-zinc-200 rounded-xl px-3 py-2.5 gap-3"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-zinc-100 text-zinc-500 flex items-center justify-center shrink-0">
+                      <User className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-zinc-900 truncate">
+                        {sale.customer_name || "Walk-in Customer"}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+                        <Receipt className="w-3 h-3 shrink-0" />
+                        <span className="font-mono">{sale.sale_number}</span>
+                        <span>·</span>
+                        <span>{formatDateTime(sale.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-black text-amber-700 tabular-nums">
+                      {formatCurrency(sale.total)}
+                    </p>
+                    <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full uppercase">
+                      Pay Later
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-5 pt-3 border-t border-zinc-100 flex flex-col gap-2">
+              <a
+                href="/sales?payment_method=credit&payment_status=pending"
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl transition-all"
+              >
+                <Receipt className="w-4 h-4" />
+                Go Settle Pending Orders
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPendingWarning(false)}
+                  className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold text-xs rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => { setShowPendingWarning(false); await doCloseShift(); }}
+                  disabled={isClosing}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white font-bold text-xs rounded-xl transition-all"
+                >
+                  Close Shift Anyway
+                </button>
+              </div>
+              <p className="text-[10px] text-center text-zinc-400">
+                ⚠️ Closing anyway means these amounts remain as outstanding receivables.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header & Professional Inline Tab Switcher */}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 pb-4">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 flex items-center justify-center border border-green-200/60 shrink-0">

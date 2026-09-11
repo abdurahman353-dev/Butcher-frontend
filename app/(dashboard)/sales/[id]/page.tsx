@@ -286,7 +286,10 @@ export default function SaleDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-zinc-900 font-mono">{sale.sale_number}</h1>
-              <StatusBadge status={sale.sale_status} type="sale" />
+              <StatusBadge
+                status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
+                type="sale"
+              />
             </div>
             <p className="text-xs text-zinc-500 mt-0.5">Recorded on {formatDateTime(sale.created_at)}</p>
           </div>
@@ -442,9 +445,9 @@ export default function SaleDetailPage() {
 
         <div className="p-4 bg-white border border-zinc-200 rounded-xl space-y-1 shadow-xs">
           <span className="text-[10px] uppercase font-semibold text-zinc-500 block">Payment Method</span>
-          <p className="text-sm font-bold text-green-700 uppercase flex items-center gap-1.5">
+          <p className={`text-sm font-bold uppercase flex items-center gap-1.5 ${sale.payment_method === 'credit' ? 'text-amber-700' : 'text-green-700'}`}>
             <CreditCard className="w-3.5 h-3.5" />
-            {sale.payment_method}
+            {sale.payment_method === 'credit' ? 'Pay Later (Credit)' : sale.payment_method}
           </p>
           {sale.mpesa_reference && (
             <p className="text-[10px] text-zinc-500 font-mono">Ref: {sale.mpesa_reference}</p>
