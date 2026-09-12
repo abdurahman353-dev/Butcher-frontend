@@ -5,6 +5,7 @@ import { usersService } from "@/services/users.service";
 import { User } from "@/types";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useAuth } from "@/hooks/useAuth";
+import { Pagination } from "@/components/shared/Pagination";
 import {
     Users,
     UserPlus,
@@ -36,6 +37,24 @@ export default function UsersManagementPage() {
     const [roleFilter, setRoleFilter] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [perPage, setPerPage] = useState(10);
+    const [paginated, setPaginated] = useState({
+        current_page: 1,
+        last_page: 1,
+        per_page: 10,
+        total: 0,
+        from: 0,
+        to: 0,
+    });
+    const [stats, setStats] = useState({
+        total: 0,
+        active_cashiers: 0,
+        suspended: 0,
+        admins: 0,
+    });
+
     const [showAddModal, setShowAddModal] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newUser, setNewUser] = useState({
@@ -49,18 +68,42 @@ export default function UsersManagementPage() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
 
+    // Reset to page 1 whenever filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, roleFilter, statusFilter]);
+
     const loadUsers = useCallback(async () => {
         try {
             setIsLoading(true);
-            const res = await usersService.getUsers({ per_page: 100 });
-            setUsers(res.data);
+            const params: any = {
+                page: currentPage,
+                per_page: perPage,
+            };
+            if (search.trim()) params.search = search.trim();
+            if (roleFilter !== "all") params.role = roleFilter;
+            if (statusFilter !== "all") params.status = statusFilter;
+
+            const res: any = await usersService.getUsers(params);
+            setUsers(res.data || []);
+            setPaginated({
+                current_page: res.current_page ?? currentPage,
+                last_page: res.last_page ?? 1,
+                per_page: res.per_page ?? perPage,
+                total: res.total ?? (res.data || []).length,
+                from: res.from ?? 0,
+                to: res.to ?? 0,
+            });
+            if (res.stats) {
+                setStats(res.stats);
+            }
         } catch (e: any) {
             console.error("Failed to load staff list:", e);
         } finally {
             setIsLoading(false);
             setIsRefreshing(false);
         }
-    }, []);
+    }, [currentPage, perPage, search, roleFilter, statusFilter]);
 
     useEffect(() => {
         loadUsers();
@@ -199,30 +242,13 @@ export default function UsersManagementPage() {
     };
 
     // Filtered Users List
-    const filteredUsers = useMemo(() => {
-        return users.filter((u) => {
-            const matchesSearch =
-                u.name.toLowerCase().includes(search.toLowerCase()) ||
-                u.email.toLowerCase().includes(search.toLowerCase()) ||
-                (u.phone && u.phone.includes(search));
-
-            const matchesRole = roleFilter === "all" || u.role === roleFilter;
-
-            const isActive = u.is_active !== false;
-            const matchesStatus =
-                statusFilter === "all" ||
-                (statusFilter === "active" && isActive) ||
-                (statusFilter === "suspended" && !isActive);
-
-            return matchesSearch && matchesRole && matchesStatus;
-        });
-    }, [users, search, roleFilter, statusFilter]);
+    const filteredUsers = users;
 
     // Statistics
-    const totalStaff = users.length;
-    const activeCashiers = users.filter((u) => u.role === "cashier" && u.is_active !== false).length;
-    const suspendedCount = users.filter((u) => u.is_active === false).length;
-    const superAdmins = users.filter((u) => u.role === "admin").length;
+    const totalStaff = stats.total || paginated.total || users.length;
+    const activeCashiers = stats.active_cashiers;
+    const suspendedCount = stats.suspended;
+    const superAdmins = stats.admins;
 
     return (
         <div className="p-3 sm:p-5 lg:p-8 space-y-5 max-w-7xl mx-auto select-none">
@@ -444,6 +470,23 @@ export default function UsersManagementPage() {
                         </table>
                     </div>
                 )}
+
+                {/* Server-Side Pagination */}
+                <div className="p-3 bg-zinc-50/70 border-t border-zinc-200">
+                    <Pagination
+                        currentPage={paginated.current_page}
+                        lastPage={paginated.last_page}
+                        total={paginated.total}
+                        from={paginated.from}
+                        to={paginated.to}
+                        perPage={perPage}
+                        onPageChange={(page) => setCurrentPage(page)}
+                        onPerPageChange={(newPerPage) => {
+                            setPerPage(newPerPage);
+                            setCurrentPage(1);
+                        }}
+                    />
+                </div>
             </div>
 
             {/* ── ADD CASHIER MODAL ── */}
