@@ -65,35 +65,35 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         </div>
 
         {/* Thermal Receipt Body */}
-        <div id="thermal-receipt" className="p-6 text-xs leading-tight space-y-3 bg-white text-black">
+        <div id="thermal-receipt" className="p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold">
           {/* Header */}
-          <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
-            <div className="text-lg font-bold tracking-tight">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
-            {settings.address && <p className="text-[11px] text-gray-700 leading-snug">{settings.address}</p>}
+          <div className="text-center space-y-1 pb-3 border-b-2 border-dashed border-black">
+            <div className="text-lg font-black tracking-tight text-black">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
+            {settings.address && <p className="text-xs font-bold text-black leading-snug">{settings.address}</p>}
             {(settings.phone || settings.email || settings.tax_pin) && (
-              <div className="text-[10px] text-gray-600 space-y-0.5">
+              <div className="text-[11px] font-bold text-black space-y-0.5">
                 {settings.phone && <p>Tel: {settings.phone}</p>}
                 {settings.email && <p>Email: {settings.email}</p>}
                 {settings.tax_pin && <p>PIN: {settings.tax_pin}</p>}
               </div>
             )}
             {settings.receipt_header && (
-              <p className="text-[10px] font-semibold text-gray-800 whitespace-pre-line pt-1 border-t border-dotted border-gray-300 mt-1">
+              <p className="text-xs font-black text-black whitespace-pre-line pt-1 border-t-2 border-dashed border-black mt-1">
                 {settings.receipt_header}
               </p>
             )}
           </div>
 
           {/* Transaction Metadata */}
-          <div className="space-y-0.5 text-[11px] pb-2 border-b border-dashed border-gray-400">
-            <div className="flex justify-between font-bold">
+          <div className="space-y-1 text-xs pb-2 border-b-2 border-dashed border-black text-black">
+            <div className="flex justify-between font-black text-sm">
               <span>RECEIPT: #{sale.sale_number}</span>
               <span>{sale.sale_status.toUpperCase()}</span>
             </div>
-            <div className="flex justify-between text-gray-700">
+            <div className="flex justify-between font-bold text-xs text-black">
               <span>Date: {formatDateTime(sale.created_at)}</span>
             </div>
-            <div className="flex justify-between text-gray-700">
+            <div className="flex justify-between font-bold text-xs text-black">
               <span>Cashier: {sale.cashier_name}</span>
               <span>Customer: {sale.customer_name || "Walk-in"}</span>
             </div>
@@ -102,12 +102,12 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           {/* Line Items */}
           <div className="space-y-2 py-1">
             {sale.items.map((item) => (
-              <div key={item.id} className="space-y-0.5">
-                <div className="flex justify-between font-bold">
+              <div key={item.id} className="space-y-0.5 text-black">
+                <div className="flex justify-between font-black text-xs">
                   <span>{item.product_name}</span>
                   <span>{formatCurrency(item.subtotal)}</span>
                 </div>
-                <div className="text-[10px] text-gray-600">
+                <div className="text-xs font-bold text-black">
                   {formatWeight(item.weight)} × {formatCurrency(item.price_per_kg)}/KG
                 </div>
               </div>
@@ -115,20 +115,20 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           </div>
 
           {/* Totals */}
-          <div className="pt-2 border-t border-dashed border-gray-400 space-y-1">
-            <div className="flex justify-between text-[11px]">
+          <div className="pt-2 border-t-2 border-dashed border-black space-y-1 text-black">
+            <div className="flex justify-between text-xs font-bold">
               <span>Subtotal:</span>
-              <span className="font-semibold">{formatCurrency(sale.subtotal)}</span>
+              <span className="font-black">{formatCurrency(sale.subtotal)}</span>
             </div>
 
             {sale.discount > 0 && (
-              <div className="flex justify-between text-[11px]">
+              <div className="flex justify-between text-xs font-bold">
                 <span>Discount:</span>
                 <span>-{formatCurrency(sale.discount)}</span>
               </div>
             )}
 
-            <div className="flex justify-between text-sm font-bold pt-1 border-t border-gray-800">
+            <div className="flex justify-between text-sm sm:text-base font-black pt-1 border-t-2 border-black">
               <span>TOTAL:</span>
               <span>{formatCurrency(sale.total)}</span>
             </div>
@@ -136,23 +136,23 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
 
           {/* Pending Credit / Settled Status Banner */}
           {sale.payment_status === "pending" || sale.payment_method === "credit" ? (
-            <div className="my-2 p-2.5 border-2 border-dashed border-red-600 rounded text-center bg-red-50 text-red-900">
-              <div className="font-black text-xs uppercase tracking-widest text-red-700">
+            <div className="my-2 p-2 border-2 border-dashed border-black rounded text-center text-black">
+              <div className="font-black text-xs uppercase tracking-wider text-black">
                 *** PAY LATER / CREDIT BILL ***
               </div>
-              <div className="text-[11px] font-bold mt-1">
+              <div className="text-xs font-black mt-0.5 text-black">
                 OUTSTANDING DUE: {formatCurrency(sale.total)}
               </div>
-              <div className="text-[9px] text-red-700 mt-0.5">
+              <div className="text-[11px] font-bold text-black mt-0.5">
                 Payment is pending. Please retain this bill until settled.
               </div>
             </div>
           ) : sale.settled_at ? (
-            <div className="my-2 p-2 border border-green-600 rounded text-center bg-green-50 text-green-900">
-              <div className="font-bold text-[11px] uppercase tracking-wider text-green-700">
-                *** PAID & SETTLED IN FULL ***
+            <div className="my-2 p-2 border-2 border-dashed border-black rounded text-center text-black">
+              <div className="font-black text-xs uppercase tracking-wider text-black">
+                *** PAID &amp; SETTLED IN FULL ***
               </div>
-              <div className="text-[10px] mt-0.5 text-gray-700">
+              <div className="text-[11px] font-bold mt-0.5 text-black">
                 Settled via {sale.payment_method.toUpperCase()} on {formatDateTime(sale.settled_at)}
                 {sale.settled_by ? ` (${sale.settled_by})` : ""}
               </div>
@@ -160,10 +160,10 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           ) : null}
 
           {/* Payment Details */}
-          <div className="pt-2 border-t border-dashed border-gray-400 space-y-0.5 text-[11px]">
-            <div className="flex justify-between">
+          <div className="pt-2 border-t-2 border-dashed border-black space-y-0.5 text-xs text-black">
+            <div className="flex justify-between font-bold">
               <span>Payment:</span>
-              <span className="font-bold uppercase">
+              <span className="font-black uppercase">
                 {sale.payment_status === "pending" || sale.payment_method === "credit"
                   ? "PAY LATER (CREDIT)"
                   : sale.payment_method}
@@ -172,11 +172,11 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
 
             {sale.payment_method === "cash" && (
               <>
-                <div className="flex justify-between text-gray-700">
+                <div className="flex justify-between font-bold text-black">
                   <span>Amount Received:</span>
-                  <span>{formatCurrency(sale.amount_received || sale.total)}</span>
+                  <span className="font-black">{formatCurrency(sale.amount_received || sale.total)}</span>
                 </div>
-                <div className="flex justify-between font-bold">
+                <div className="flex justify-between font-black text-sm text-black">
                   <span>Change:</span>
                   <span>{formatCurrency(sale.change_given || 0)}</span>
                 </div>
@@ -184,32 +184,32 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             )}
 
             {sale.payment_method === "mpesa" && sale.mpesa_reference && (
-              <div className="flex justify-between text-gray-700">
+              <div className="flex justify-between font-bold text-black">
                 <span>M-Pesa Ref:</span>
-                <span className="font-mono">{sale.mpesa_reference}</span>
+                <span className="font-mono font-black">{sale.mpesa_reference}</span>
               </div>
             )}
 
             {sale.notes && (
-              <div className="pt-1 text-[10px] text-gray-600 italic border-t border-dotted border-gray-300 mt-1">
+              <div className="pt-1 text-[11px] font-bold text-black border-t-2 border-dashed border-black mt-1">
                 Notes: {sale.notes}
               </div>
             )}
           </div>
 
           {/* Barcode & Footer */}
-          <div className="text-center pt-3 border-t border-dashed border-gray-400 space-y-1.5">
-            <div className="font-mono text-xs tracking-widest font-bold py-1 bg-gray-100 rounded">
+          <div className="text-center pt-3 border-t-2 border-dashed border-black space-y-1.5 text-black">
+            <div className="font-mono text-sm tracking-widest font-black py-1 border-2 border-black rounded text-black">
               * {sale.sale_number} *
             </div>
             {settings.receipt_footer ? (
-              <p className="text-[10px] text-gray-800 font-semibold whitespace-pre-line pt-1">
+              <p className="text-xs text-black font-black whitespace-pre-line pt-1">
                 {settings.receipt_footer}
               </p>
             ) : (
               <>
-                <p className="text-[10px] text-gray-700 font-semibold">Thank you for shopping with us!</p>
-                <p className="text-[9px] text-gray-500">Goods once sold cannot be returned without receipt.</p>
+                <p className="text-xs text-black font-black">Thank you for shopping with us!</p>
+                <p className="text-[11px] text-black font-bold">Goods once sold cannot be returned without receipt.</p>
               </>
             )}
           </div>

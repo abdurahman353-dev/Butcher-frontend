@@ -22,24 +22,33 @@ const PRINT_STYLES = `
     html, body {
       margin: 0 !important;
       padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
     }
   }
-  * {
+  *, *::before, *::after {
     box-sizing: border-box;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    -webkit-text-stroke: 0.2px #000000 !important;
+    text-shadow: none !important;
   }
   body {
     margin: 0 auto;
-    padding: 6px 4px;
-    background: #ffffff;
-    color: #000000;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 11px;
+    padding: 6px 2px;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Consolas', 'Segoe UI', Arial, 'Courier New', Courier, monospace;
+    font-size: 12px;
+    font-weight: 700;
     line-height: 1.35;
-    width: 76mm;
+    width: 72mm;
     max-width: 100%;
     word-break: break-word;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
   }
   p { margin: 0; }
   .flex { display: flex; }
@@ -47,74 +56,84 @@ const PRINT_STYLES = `
   .items-center { align-items: center; }
   .items-baseline { align-items: baseline; }
   .text-center { text-align: center; }
-  .font-bold { font-weight: bold; }
-  .font-semibold { font-weight: 600; }
-  .font-black { font-weight: 900; }
-  .text-lg { font-size: 16px; }
-  .text-base { font-size: 14px; }
-  .text-sm { font-size: 13px; }
-  .text-xs { font-size: 11px; }
-  .text-\\[11px\\] { font-size: 11px; }
-  .text-\\[10px\\] { font-size: 10px; }
-  .text-\\[9px\\] { font-size: 9px; }
+
+  /* Font Weights - High contrast for thermal paper */
+  .font-normal { font-weight: 600 !important; }
+  .font-medium { font-weight: 700 !important; }
+  .font-semibold { font-weight: 800 !important; }
+  .font-bold { font-weight: 800 !important; }
+  .font-extrabold { font-weight: 900 !important; }
+  .font-black { font-weight: 900 !important; }
+
+  /* Font Sizes - Slightly larger and bolder for thermal print head */
+  .text-2xl { font-size: 20px !important; font-weight: 900 !important; }
+  .text-xl { font-size: 18px !important; font-weight: 900 !important; }
+  .text-lg { font-size: 16px !important; font-weight: 900 !important; }
+  .text-base { font-size: 14px !important; font-weight: 800 !important; }
+  .text-sm { font-size: 13px !important; font-weight: 700 !important; }
+  .text-xs { font-size: 12px !important; font-weight: 700 !important; }
+  .text-\\[11px\\] { font-size: 11.5px !important; font-weight: 700 !important; }
+  .text-\\[10px\\] { font-size: 11px !important; font-weight: 700 !important; }
+  .text-\\[9px\\] { font-size: 10.5px !important; font-weight: 700 !important; }
+
   .leading-snug { line-height: 1.35; }
   .leading-tight { line-height: 1.25; }
+  .leading-relaxed { line-height: 1.45; }
   .uppercase { text-transform: uppercase; }
   .italic { font-style: italic; }
-  .tracking-tight { letter-spacing: -0.025em; }
+  .tracking-tight { letter-spacing: -0.02em; }
   .tracking-wider { letter-spacing: 0.05em; }
   .tracking-widest { letter-spacing: 0.1em; }
   .whitespace-pre-line { white-space: pre-line; }
   .tabular-nums { font-variant-numeric: tabular-nums; }
-  .font-mono { font-family: 'Courier New', Courier, monospace; }
-  .space-y-0\\.5 > * + * { margin-top: 2px; }
+  .font-mono { font-family: 'Consolas', 'Courier New', Courier, monospace; }
+
+  /* Spacing */
+  .space-y-0\\.5 > * + * { margin-top: 3px; }
   .space-y-1 > * + * { margin-top: 4px; }
+  .space-y-1\\.5 > * + * { margin-top: 6px; }
   .space-y-2 > * + * { margin-top: 8px; }
   .space-y-3 > * + * { margin-top: 12px; }
   .space-y-4 > * + * { margin-top: 16px; }
   .pt-1 { padding-top: 4px; } .pt-2 { padding-top: 8px; }
   .pt-3 { padding-top: 12px; } .pt-4 { padding-top: 16px; }
-  .pb-2 { padding-bottom: 8px; } .pb-3 { padding-bottom: 12px; }
-  .p-2 { padding: 8px; } .p-2\\.5 { padding: 10px; } .p-4 { padding: 16px; } .p-6 { padding: 20px; }
+  .pb-1 { padding-bottom: 4px; } .pb-2 { padding-bottom: 8px; } .pb-3 { padding-bottom: 12px; }
+  .p-2 { padding: 8px; } .p-2\\.5 { padding: 10px; } .p-4 { padding: 14px; } .p-6 { padding: 16px; }
   .px-4 { padding-left: 16px; padding-right: 16px; }
   .mt-0\\.5 { margin-top: 2px; }
   .mt-1 { margin-top: 4px; }
   .my-2 { margin-top: 8px; margin-bottom: 8px; }
   .py-1 { padding-top: 4px; padding-bottom: 4px; }
-  .border { border: 1px solid; }
-  .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
-  .border-t { border-top-width: 1px; border-top-style: solid; }
-  .border-dashed { border-style: dashed; }
-  .border-dotted { border-style: dotted; }
-  .border-2 { border-width: 2px; }
-  .border-gray-300 { border-color: #d1d5db; }
-  .border-gray-400 { border-color: #9ca3af; }
-  .border-gray-800 { border-color: #1f2937; }
-  .border-zinc-100 { border-color: #f4f4f5; }
-  .border-zinc-200 { border-color: #e4e4e7; }
-  .border-zinc-300 { border-color: #d4d4d8; }
-  .border-zinc-400 { border-color: #a1a1aa; }
-  .border-green-200 { border-color: #bbf7d0; }
-  .border-green-600 { border-color: #16a34a; }
-  .border-red-600 { border-color: #dc2626; }
-  .border-blue-200 { border-color: #bfdbfe; }
-  .border-rose-200 { border-color: #fecdd3; }
-  .border-amber-200 { border-color: #fde68a; }
-  .rounded { border-radius: 4px; } .rounded-xl { border-radius: 12px; }
-  .bg-white { background: white; } .bg-gray-100 { background: #f3f4f6; }
-  .bg-green-50 { background: #f0fdf4; } .bg-red-50 { background: #fef2f2; }
-  .bg-zinc-50 { background: #fafafa; } .bg-amber-50 { background: #fffbeb; }
-  .bg-blue-50 { background: #eff6ff; } .bg-rose-50 { background: #fff1f2; }
-  .text-gray-500 { color: #6b7280; } .text-gray-600 { color: #4b5563; }
-  .text-gray-700 { color: #374151; } .text-gray-800 { color: #1f2937; }
-  .text-zinc-400 { color: #a1a1aa; } .text-zinc-500 { color: #71717a; }
-  .text-zinc-600 { color: #52525b; } .text-zinc-700 { color: #3f3f46; }
-  .text-zinc-800 { color: #27272a; } .text-zinc-900 { color: #18181b; }
-  .text-green-600 { color: #16a34a; } .text-green-700 { color: #15803d; }
-  .text-green-800 { color: #166534; } .text-green-900 { color: #14532d; }
-  .text-red-700 { color: #b91c1c; } .text-red-900 { color: #7f1d1d; }
-  .text-amber-800 { color: #92400e; } .text-blue-800 { color: #1e40af; }
-  .text-rose-800 { color: #9f1239; }
+
+  /* Borders - All 100% pitch black, dashed/solid, never dithered */
+  .border { border: 1.5px solid #000000 !important; }
+  .border-b { border-bottom: 1.5px solid #000000 !important; }
+  .border-t { border-top: 1.5px solid #000000 !important; }
+  .border-b-2 { border-bottom: 2px solid #000000 !important; }
+  .border-t-2 { border-top: 2px solid #000000 !important; }
+  .border-dashed { border-style: dashed !important; }
+  .border-dotted { border-style: dashed !important; }
+  .border-2 { border-width: 2px !important; }
+
+  /* Force ALL border color utilities to pure solid black */
+  [class*="border-"] {
+    border-color: #000000 !important;
+  }
+
+  .rounded { border-radius: 4px; } .rounded-xl { border-radius: 8px; }
+
+  /* Backgrounds: Force transparent or white so thermal printers don't dither gray patterns */
+  [class*="bg-"] {
+    background-color: transparent !important;
+  }
+  .bg-white { background-color: #ffffff !important; }
+
+  /* Force ALL text color utilities to solid 100% black */
+  [class*="text-"] {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+  }
+
   [class*="print:hidden"] { display: none !important; }
   .shrink-0 { flex-shrink: 0; }
 `;
@@ -182,9 +201,9 @@ export function printElementInWindow(elementId: string, title = "Receipt"): void
     title +
     "</title><style>" +
     PRINT_STYLES +
-    "</style></head><body>" +
+    "</style></head><body><div class=\"space-y-3 font-bold\">" +
     content +
-    "</body></html>";
+    "</div></body></html>";
 
   iframeDoc.open();
   iframeDoc.write(html);

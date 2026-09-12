@@ -75,136 +75,124 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
         </div>
 
         {/* Printable Thermal Receipt / Slip Body */}
-        <div id="shift-slip" className="p-4 sm:p-6 text-xs leading-relaxed space-y-4 overflow-y-auto font-mono text-zinc-900 flex-1 print:p-0 print:overflow-visible">
+        <div id="shift-slip" className="p-4 sm:p-6 text-xs leading-relaxed space-y-4 overflow-y-auto font-mono text-black font-bold flex-1 print:p-0 print:overflow-visible">
           {/* Header */}
-          <div className="text-center space-y-1 pb-3 border-b border-dashed border-zinc-300">
-            <div className="text-base sm:text-lg font-bold tracking-tight">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
-            <p className="text-[11px] text-zinc-600 font-bold tracking-wider">REGISTER SHIFT AUDIT / Z-REPORT</p>
-            {settings.address && <p className="text-[10px] text-zinc-600 leading-snug">{settings.address}</p>}
+          <div className="text-center space-y-1 pb-3 border-b-2 border-dashed border-black">
+            <div className="text-base sm:text-lg font-black tracking-tight text-black">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
+            <p className="text-xs font-black tracking-wider text-black">REGISTER SHIFT AUDIT / Z-REPORT</p>
+            {settings.address && <p className="text-xs font-bold text-black leading-snug">{settings.address}</p>}
             {(settings.phone || settings.email || settings.tax_pin) && (
-              <div className="text-[10px] text-zinc-500 space-y-0.5">
+              <div className="text-[11px] font-bold text-black space-y-0.5">
                 {settings.phone && <p>Tel: {settings.phone}</p>}
                 {settings.email && <p>Email: {settings.email}</p>}
                 {settings.tax_pin && <p>PIN: {settings.tax_pin}</p>}
               </div>
             )}
             {settings.receipt_header && (
-              <p className="text-[10px] font-semibold text-zinc-700 pt-1 whitespace-pre-line border-t border-dotted border-zinc-200 mt-1">
+              <p className="text-xs font-black text-black pt-1 whitespace-pre-line border-t-2 border-dashed border-black mt-1">
                 {settings.receipt_header}
               </p>
             )}
           </div>
 
           {/* Shift Metadata */}
-          <div className="space-y-1.5 pb-3 border-b border-dashed border-zinc-300 text-[11px]">
+          <div className="space-y-1.5 pb-3 border-b-2 border-dashed border-black text-xs text-black">
             <div className="flex justify-between">
-              <span className="text-zinc-500">SHIFT NUMBER:</span>
-              <span className="font-bold text-zinc-900">#{shift.id}</span>
+              <span className="font-bold text-black">SHIFT NUMBER:</span>
+              <span className="font-black text-black">#{shift.id}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">STATUS:</span>
-              <span
-                className={`font-bold uppercase ${
-                  shift.status === "open" ? "text-green-600" : "text-zinc-700"
-                }`}
-              >
+              <span className="font-bold text-black">STATUS:</span>
+              <span className="font-black uppercase text-black">
                 {shift.status === "open" ? "● OPEN / ACTIVE" : "CLOSED & RECONCILED"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">CASHIER:</span>
-              <span className="font-semibold text-zinc-900">{shift.cashier_name || `User #${shift.cashier_id}`}</span>
+              <span className="font-bold text-black">CASHIER:</span>
+              <span className="font-black text-black">{shift.cashier_name || `User #${shift.cashier_id}`}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-zinc-500">OPENED AT:</span>
-              <span className="text-zinc-800">{formatDateTime(shift.opened_at)}</span>
+              <span className="font-bold text-black">OPENED AT:</span>
+              <span className="font-black text-black">{formatDateTime(shift.opened_at)}</span>
             </div>
             {shift.closed_at && (
               <div className="flex justify-between">
-                <span className="text-zinc-500">CLOSED AT:</span>
-                <span className="text-zinc-800">{formatDateTime(shift.closed_at)}</span>
+                <span className="font-bold text-black">CLOSED AT:</span>
+                <span className="font-black text-black">{formatDateTime(shift.closed_at)}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-zinc-500">DURATION:</span>
-              <span className="font-semibold text-zinc-800">{getDuration(shift.opened_at, shift.closed_at)}</span>
+              <span className="font-bold text-black">DURATION:</span>
+              <span className="font-black text-black">{getDuration(shift.opened_at, shift.closed_at)}</span>
             </div>
           </div>
 
           {/* Starting Float */}
-          <div className="pb-3 border-b border-dashed border-zinc-300">
+          <div className="pb-3 border-b-2 border-dashed border-black">
             <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-zinc-700">OPENING CASH FLOAT:</span>
-              <span className="font-bold text-zinc-900 text-sm tabular-nums">
+              <span className="font-bold text-black">OPENING CASH FLOAT:</span>
+              <span className="font-black text-black text-sm tabular-nums">
                 {formatCurrency(shift.opening_cash)}
               </span>
             </div>
           </div>
 
           {/* Sales by Tender */}
-          <div className="space-y-2 pb-3 border-b border-dashed border-zinc-300">
-            <div className="text-[11px] font-bold uppercase text-zinc-500">SALES BY TENDER METHOD</div>
+          <div className="space-y-2 pb-3 border-b-2 border-dashed border-black text-black">
+            <div className="text-xs font-black uppercase text-black">SALES BY TENDER METHOD</div>
             <div className="flex justify-between text-xs items-center">
-              <span className="flex items-center gap-1.5 text-zinc-600">
-                <Banknote className="w-3.5 h-3.5 text-green-600 print:hidden" />
+              <span className="flex items-center gap-1.5 font-bold text-black">
+                <Banknote className="w-3.5 h-3.5 text-black print:hidden" />
                 <span>Cash Sales:</span>
               </span>
-              <span className="font-semibold text-zinc-900 tabular-nums">
+              <span className="font-black text-black tabular-nums">
                 {formatCurrency(shift.cash_sales)}
               </span>
             </div>
             <div className="flex justify-between text-xs items-center">
-              <span className="flex items-center gap-1.5 text-zinc-600">
-                <Smartphone className="w-3.5 h-3.5 text-green-600 print:hidden" />
+              <span className="flex items-center gap-1.5 font-bold text-black">
+                <Smartphone className="w-3.5 h-3.5 text-black print:hidden" />
                 <span>M-Pesa Sales:</span>
               </span>
-              <span className="font-semibold text-zinc-900 tabular-nums">
+              <span className="font-black text-black tabular-nums">
                 {formatCurrency(shift.mpesa_sales)}
               </span>
             </div>
             <div className="flex justify-between text-xs items-center">
-              <span className="flex items-center gap-1.5 text-zinc-600">
-                <CreditCard className="w-3.5 h-3.5 text-blue-600 print:hidden" />
+              <span className="flex items-center gap-1.5 font-bold text-black">
+                <CreditCard className="w-3.5 h-3.5 text-black print:hidden" />
                 <span>Card Sales:</span>
               </span>
-              <span className="font-semibold text-zinc-900 tabular-nums">
+              <span className="font-black text-black tabular-nums">
                 {formatCurrency(shift.card_sales)}
               </span>
             </div>
-            <div className="pt-2 border-t border-zinc-200 flex justify-between text-xs items-center">
-              <span className="font-bold text-zinc-900">TOTAL SHIFT REVENUE:</span>
-              <span className="font-bold text-base text-zinc-900 tabular-nums">
+            <div className="pt-2 border-t-2 border-black flex justify-between text-xs items-center">
+              <span className="font-black text-black">TOTAL SHIFT REVENUE:</span>
+              <span className="font-black text-base text-black tabular-nums">
                 {formatCurrency(shift.total_sales)}
               </span>
             </div>
           </div>
 
           {/* Drawer Reconciliation (For Closed or Current) */}
-          <div className="space-y-2 pb-3 border-b border-dashed border-zinc-300">
-            <div className="text-[11px] font-bold uppercase text-zinc-500">DRAWER CASH RECONCILIATION</div>
+          <div className="space-y-2 pb-3 border-b-2 border-dashed border-black text-black">
+            <div className="text-xs font-black uppercase text-black">DRAWER CASH RECONCILIATION</div>
             <div className="flex justify-between text-xs">
-              <span className="text-zinc-600">Expected Cash (Float + Cash):</span>
-              <span className="font-semibold text-zinc-900 tabular-nums">
+              <span className="font-bold text-black">Expected Cash (Float + Cash):</span>
+              <span className="font-black text-black tabular-nums">
                 {formatCurrency(shift.expected_cash)}
               </span>
             </div>
             {isClosed ? (
               <>
                 <div className="flex justify-between text-xs">
-                  <span className="text-zinc-600">Counted Physical Cash:</span>
-                  <span className="font-bold text-zinc-900 tabular-nums">
+                  <span className="font-bold text-black">Counted Physical Cash:</span>
+                  <span className="font-black text-black tabular-nums">
                     {formatCurrency(shift.counted_cash ?? 0)}
                   </span>
                 </div>
-                <div
-                  className={`p-2.5 rounded-xl border text-xs font-bold flex justify-between items-center ${
-                    discrepancy === 0
-                      ? "bg-green-50 border-green-200 text-green-800"
-                      : discrepancy > 0
-                      ? "bg-blue-50 border-blue-200 text-blue-800"
-                      : "bg-rose-50 border-rose-200 text-rose-800"
-                  }`}
-                >
+                <div className="p-2 border-2 border-dashed border-black rounded text-xs font-black flex justify-between items-center text-black">
                   <span>
                     DRAWER VARIANCE:{" "}
                     {discrepancy === 0 ? "BALANCED" : discrepancy > 0 ? "OVERAGE (+)" : "SHORTAGE (-)"}
@@ -215,7 +203,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
                 </div>
               </>
             ) : (
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+              <div className="p-2 border-2 border-dashed border-black rounded text-xs font-bold text-black">
                 ● Shift is currently active. Physical cash count pending drawer close.
               </div>
             )}
@@ -223,26 +211,26 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
 
           {/* Notes / Comments */}
           {shift.notes && (
-            <div className="space-y-1 pb-3 border-b border-dashed border-zinc-300 text-[11px]">
-              <span className="text-zinc-500 font-bold uppercase block">AUDIT COMMENTS:</span>
-              <p className="text-zinc-800 italic bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
+            <div className="space-y-1 pb-3 border-b-2 border-dashed border-black text-xs text-black">
+              <span className="font-black uppercase block text-black">AUDIT COMMENTS:</span>
+              <p className="font-bold text-black border-2 border-dashed border-black p-2 rounded">
                 "{shift.notes}"
               </p>
             </div>
           )}
 
           {/* Sign-off footer */}
-          <div className="text-center pt-2 space-y-2 text-[10px] text-zinc-500">
+          <div className="text-center pt-2 space-y-2 text-xs text-black font-bold">
             {settings.receipt_footer && (
-              <p className="text-[10px] text-zinc-700 font-semibold whitespace-pre-line pb-1">
+              <p className="text-xs text-black font-black whitespace-pre-line pb-1">
                 {settings.receipt_footer}
               </p>
             )}
-            <div className="flex justify-around pt-4 text-[10px]">
-              <div className="border-t border-zinc-400 px-4 pt-1">Cashier Signature</div>
-              <div className="border-t border-zinc-400 px-4 pt-1">Supervisor Signature</div>
+            <div className="flex justify-around pt-4 text-xs font-black">
+              <div className="border-t-2 border-black px-4 pt-1">Cashier Signature</div>
+              <div className="border-t-2 border-black px-4 pt-1">Supervisor Signature</div>
             </div>
-            <p className="pt-2 text-[9px] text-zinc-400">Generated by {settings.shop_name} POS System</p>
+            <p className="pt-2 text-[11px] text-black font-bold">Generated by {settings.shop_name} POS System</p>
           </div>
         </div>
 
