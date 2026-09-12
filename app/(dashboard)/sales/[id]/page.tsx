@@ -40,6 +40,7 @@ export default function SaleDetailPage() {
   const [sale, setSale] = useState<Sale | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
   // Refund Modal State
@@ -810,7 +811,11 @@ export default function SaleDetailPage() {
       <ReceiptModal
         isOpen={isReceiptOpen}
         sale={sale}
-        onClose={() => setIsReceiptOpen(false)}
+        onClose={() => {
+          setIsReceiptOpen(false);
+          setAutoPrintReceipt(false);
+        }}
+        autoPrint={autoPrintReceipt}
       />
 
       {/* Settle Payment Modal */}
@@ -819,10 +824,13 @@ export default function SaleDetailPage() {
         onClose={() => setIsSettleModalOpen(false)}
         sale={sale}
         onPaymentSettled={(updated) => setSale(updated)}
-        onViewReceipt={() => setIsReceiptOpen(true)}
-        onPrintReceipt={() => {
+        onViewReceipt={() => {
+          setAutoPrintReceipt(false);
           setIsReceiptOpen(true);
-          setTimeout(() => window.print(), 300);
+        }}
+        onPrintReceipt={() => {
+          setAutoPrintReceipt(true);
+          setIsReceiptOpen(true);
         }}
       />
     </div>

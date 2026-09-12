@@ -1,23 +1,38 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { Sale } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
 import { Printer, X } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { printElementInWindow } from "@/lib/printWindow";
 
 interface ReceiptModalProps {
   sale: Sale | null;
   isOpen: boolean;
   onClose: () => void;
+  /** When true, automatically trigger print after the modal mounts */
+  autoPrint?: boolean;
 }
 
-export function ReceiptModal({ sale, isOpen, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: ReceiptModalProps) {
   const { settings } = useShopSettings();
+
+  // Auto-print when the modal opens with autoPrint=true
+  // Using a short timeout so the DOM has fully painted before we snapshot innerHTML
+  useEffect(() => {
+    if (isOpen && sale && autoPrint) {
+      const timer = setTimeout(() => {
+        printElementInWindow("thermal-receipt", `Receipt #${sale.sale_number}`);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, sale, autoPrint]);
+
   if (!isOpen || !sale) return null;
 
   const handlePrint = () => {
-    window.print();
+    printElementInWindow("thermal-receipt", `Receipt #${sale?.sale_number ?? ""}`);
   };
 
   return (

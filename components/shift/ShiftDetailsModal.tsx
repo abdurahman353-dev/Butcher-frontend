@@ -5,6 +5,7 @@ import { Shift } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { Printer, X, Clock, Banknote, Smartphone, CreditCard, ShieldCheck } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { printElementInWindow } from "@/lib/printWindow";
 
 interface ShiftDetailsModalProps {
   shift: Shift | null;
@@ -17,7 +18,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
   if (!isOpen || !shift) return null;
 
   const handlePrint = () => {
-    window.print();
+    printElementInWindow("shift-slip", `Shift #${shift?.id ?? ""} Z-Report`);
   };
 
   const getDuration = (openedAt: string, closedAt?: string | null) => {

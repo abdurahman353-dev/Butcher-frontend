@@ -88,6 +88,7 @@ function SalesLedger() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAmountFilters, setShowAmountFilters] = useState(false);
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
 
@@ -1233,7 +1234,11 @@ function SalesLedger() {
       <ReceiptModal
         isOpen={!!viewingReceiptSale}
         sale={viewingReceiptSale}
-        onClose={() => setViewingReceiptSale(null)}
+        onClose={() => {
+          setViewingReceiptSale(null);
+          setAutoPrintReceipt(false);
+        }}
+        autoPrint={autoPrintReceipt}
       />
 
       {/* Settle Payment Modal */}
@@ -1247,10 +1252,13 @@ function SalesLedger() {
         onPaymentSettled={() => {
           fetchSales();
         }}
-        onViewReceipt={(s) => setViewingReceiptSale(s)}
-        onPrintReceipt={(s) => {
+        onViewReceipt={(s) => {
+          setAutoPrintReceipt(false);
           setViewingReceiptSale(s);
-          setTimeout(() => window.print(), 300);
+        }}
+        onPrintReceipt={(s) => {
+          setAutoPrintReceipt(true);
+          setViewingReceiptSale(s);
         }}
       />
     </div>

@@ -39,6 +39,7 @@ export default function PosPage() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "card" | "credit">("cash");
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
   // Held Orders State
@@ -497,10 +498,13 @@ export default function PosPage() {
         customer={selectedCustomer}
         initialMethod={initialPaymentMethod}
         onCompleteSale={handleCompleteSale}
-        onViewReceipt={(sale) => setViewingReceiptSale(sale)}
-        onPrintReceipt={(sale) => {
+        onViewReceipt={(sale) => {
+          setAutoPrintReceipt(false);
           setViewingReceiptSale(sale);
-          setTimeout(() => window.print(), 300);
+        }}
+        onPrintReceipt={(sale) => {
+          setAutoPrintReceipt(true);
+          setViewingReceiptSale(sale);
         }}
         onNewSale={handleNewSale}
       />
@@ -527,10 +531,13 @@ export default function PosPage() {
         onPaymentSettled={(updatedSale) => {
           fetchUnpaidSales();
         }}
-        onViewReceipt={(sale) => setViewingReceiptSale(sale)}
-        onPrintReceipt={(sale) => {
+        onViewReceipt={(sale) => {
+          setAutoPrintReceipt(false);
           setViewingReceiptSale(sale);
-          setTimeout(() => window.print(), 300);
+        }}
+        onPrintReceipt={(sale) => {
+          setAutoPrintReceipt(true);
+          setViewingReceiptSale(sale);
         }}
       />
 
@@ -538,7 +545,11 @@ export default function PosPage() {
       <ReceiptModal
         isOpen={!!viewingReceiptSale}
         sale={viewingReceiptSale}
-        onClose={() => setViewingReceiptSale(null)}
+        onClose={() => {
+          setViewingReceiptSale(null);
+          setAutoPrintReceipt(false);
+        }}
+        autoPrint={autoPrintReceipt}
       />
     </div>
   );
