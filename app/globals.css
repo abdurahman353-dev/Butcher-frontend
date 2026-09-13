@@ -72,4 +72,19 @@ body {
     -webkit-text-stroke: 0.25px #000000;
     text-rendering: geometricPrecision;
   }
+  #thermal-receipt .border,
+  #thermal-receipt .border-2,
+  #thermal-receipt .border-t,
+  #thermal-receipt .border-t-2,
+  #thermal-receipt .border-b,
+  #thermal-receipt .border-b-2,
+  #shift-slip .border,
+  #shift-slip .border-2,
+  #shift-slip .border-t,
+  #shift-slip .border-t-2,
+  #shift-slip .border-b,
+  #shift-slip .border-b-2 {
+    border-style: solid !important;
+    border-color: #000000 !important;
+  }
 }

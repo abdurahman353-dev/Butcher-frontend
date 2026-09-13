@@ -56,6 +56,11 @@ const PRINT_STYLES = `
   .items-center { align-items: center; }
   .items-baseline { align-items: baseline; }
   .text-center { text-align: center; }
+  .grid { display: grid; }
+  .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gap-1 { gap: 4px; }
+  .gap-2 { gap: 8px; }
+  .w-full { width: 100%; }
 
   /* Font Weights - High contrast for thermal paper */
   .font-normal { font-weight: 600 !important; }
@@ -93,27 +98,43 @@ const PRINT_STYLES = `
   .space-y-1 > * + * { margin-top: 4px; }
   .space-y-1\\.5 > * + * { margin-top: 6px; }
   .space-y-2 > * + * { margin-top: 8px; }
+  .space-y-2\\.5 > * + * { margin-top: 10px; }
   .space-y-3 > * + * { margin-top: 12px; }
   .space-y-4 > * + * { margin-top: 16px; }
-  .pt-1 { padding-top: 4px; } .pt-2 { padding-top: 8px; }
+  .pt-0\\.5 { padding-top: 2px; }
+  .pt-1 { padding-top: 4px; } .pt-1\\.5 { padding-top: 6px; } .pt-2 { padding-top: 8px; }
   .pt-3 { padding-top: 12px; } .pt-4 { padding-top: 16px; }
   .pb-1 { padding-bottom: 4px; } .pb-2 { padding-bottom: 8px; } .pb-3 { padding-bottom: 12px; }
-  .p-2 { padding: 8px; } .p-2\\.5 { padding: 10px; } .p-4 { padding: 14px; } .p-6 { padding: 16px; }
+  .p-1 { padding: 4px; } .p-2 { padding: 8px; } .p-2\\.5 { padding: 10px; } .p-4 { padding: 14px; } .p-6 { padding: 16px; }
+  .px-2 { padding-left: 8px; padding-right: 8px; }
+  .px-2\\.5 { padding-left: 10px; padding-right: 10px; }
   .px-4 { padding-left: 16px; padding-right: 16px; }
+  .py-0\\.5 { padding-top: 2px; padding-bottom: 2px; }
+  .py-1 { padding-top: 4px; padding-bottom: 4px; }
+  .py-1\\.5 { padding-top: 6px; padding-bottom: 6px; }
   .mt-0\\.5 { margin-top: 2px; }
   .mt-1 { margin-top: 4px; }
+  .mt-1\\.5 { margin-top: 6px; }
+  .my-1 { margin-top: 4px; margin-bottom: 4px; }
+  .my-1\\.5 { margin-top: 6px; margin-bottom: 6px; }
   .my-2 { margin-top: 8px; margin-bottom: 8px; }
-  .py-1 { padding-top: 4px; padding-bottom: 4px; }
 
-  /* Borders - All 100% pitch black, dashed/solid, never dithered */
+  /* Borders - 100% pitch black, solid dark lines, never dotted or dashed */
+  .border, .border-2, .border-b, .border-t, .border-b-2, .border-t-2 {
+    border-style: solid !important;
+    border-color: #000000 !important;
+  }
   .border { border: 1.5px solid #000000 !important; }
+  .border-2 { border: 2px solid #000000 !important; }
   .border-b { border-bottom: 1.5px solid #000000 !important; }
-  .border-t { border-top: 1.5px solid #000000 !important; }
   .border-b-2 { border-bottom: 2px solid #000000 !important; }
+  .border-t { border-top: 1.5px solid #000000 !important; }
   .border-t-2 { border-top: 2px solid #000000 !important; }
-  .border-dashed { border-style: dashed !important; }
-  .border-dotted { border-style: dashed !important; }
-  .border-2 { border-width: 2px !important; }
+
+  /* Guarantee NO dashed or dotted lines anywhere */
+  .border-dashed, .border-dotted {
+    border-style: solid !important;
+  }
 
   /* Force ALL border color utilities to pure solid black */
   [class*="border-"] {

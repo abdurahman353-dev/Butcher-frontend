@@ -77,8 +77,8 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
         {/* Printable Thermal Receipt / Slip Body */}
         <div id="shift-slip" className="p-4 sm:p-6 text-xs leading-relaxed space-y-4 overflow-y-auto font-mono text-black font-bold flex-1 print:p-0 print:overflow-visible">
           {/* Header */}
-          <div className="text-center space-y-1 pb-3 border-b-2 border-dashed border-black">
-            <div className="text-base sm:text-lg font-black tracking-tight text-black">🥩 {settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
+          <div className="text-center space-y-1 pb-3 border-b-2 border-black">
+            <div className="text-base sm:text-lg font-black tracking-tight text-black uppercase">{settings.shop_name ? settings.shop_name.toUpperCase() : "BUTCHERY POS"}</div>
             <p className="text-xs font-black tracking-wider text-black">REGISTER SHIFT AUDIT / Z-REPORT</p>
             {settings.address && <p className="text-xs font-bold text-black leading-snug">{settings.address}</p>}
             {(settings.phone || settings.email || settings.tax_pin) && (
@@ -89,14 +89,14 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
               </div>
             )}
             {settings.receipt_header && (
-              <p className="text-xs font-black text-black pt-1 whitespace-pre-line border-t-2 border-dashed border-black mt-1">
+              <p className="text-xs font-black text-black pt-1 whitespace-pre-line border-t-2 border-black mt-1">
                 {settings.receipt_header}
               </p>
             )}
           </div>
 
           {/* Shift Metadata */}
-          <div className="space-y-1.5 pb-3 border-b-2 border-dashed border-black text-xs text-black">
+          <div className="space-y-1.5 pb-3 border-b-2 border-black text-xs text-black">
             <div className="flex justify-between">
               <span className="font-bold text-black">SHIFT NUMBER:</span>
               <span className="font-black text-black">#{shift.id}</span>
@@ -128,7 +128,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
           </div>
 
           {/* Starting Float */}
-          <div className="pb-3 border-b-2 border-dashed border-black">
+          <div className="pb-3 border-b-2 border-black">
             <div className="flex justify-between items-center text-xs">
               <span className="font-bold text-black">OPENING CASH FLOAT:</span>
               <span className="font-black text-black text-sm tabular-nums">
@@ -138,7 +138,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
           </div>
 
           {/* Sales by Tender */}
-          <div className="space-y-2 pb-3 border-b-2 border-dashed border-black text-black">
+          <div className="space-y-2 pb-3 border-b-2 border-black text-black">
             <div className="text-xs font-black uppercase text-black">SALES BY TENDER METHOD</div>
             <div className="flex justify-between text-xs items-center">
               <span className="flex items-center gap-1.5 font-bold text-black">
@@ -176,7 +176,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
           </div>
 
           {/* Drawer Reconciliation (For Closed or Current) */}
-          <div className="space-y-2 pb-3 border-b-2 border-dashed border-black text-black">
+          <div className="space-y-2 pb-3 border-b-2 border-black text-black">
             <div className="text-xs font-black uppercase text-black">DRAWER CASH RECONCILIATION</div>
             <div className="flex justify-between text-xs">
               <span className="font-bold text-black">Expected Cash (Float + Cash):</span>
@@ -192,7 +192,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
                     {formatCurrency(shift.counted_cash ?? 0)}
                   </span>
                 </div>
-                <div className="p-2 border-2 border-dashed border-black rounded text-xs font-black flex justify-between items-center text-black">
+                <div className="p-2 border-2 border-black rounded text-xs font-black flex justify-between items-center text-black">
                   <span>
                     DRAWER VARIANCE:{" "}
                     {discrepancy === 0 ? "BALANCED" : discrepancy > 0 ? "OVERAGE (+)" : "SHORTAGE (-)"}
@@ -203,7 +203,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
                 </div>
               </>
             ) : (
-              <div className="p-2 border-2 border-dashed border-black rounded text-xs font-bold text-black">
+              <div className="p-2 border-2 border-black rounded text-xs font-bold text-black">
                 ● Shift is currently active. Physical cash count pending drawer close.
               </div>
             )}
@@ -211,9 +211,9 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
 
           {/* Notes / Comments */}
           {shift.notes && (
-            <div className="space-y-1 pb-3 border-b-2 border-dashed border-black text-xs text-black">
+            <div className="space-y-1 pb-3 border-b-2 border-black text-xs text-black">
               <span className="font-black uppercase block text-black">AUDIT COMMENTS:</span>
-              <p className="font-bold text-black border-2 border-dashed border-black p-2 rounded">
+              <p className="font-bold text-black border-2 border-black p-2 rounded">
                 "{shift.notes}"
               </p>
             </div>
