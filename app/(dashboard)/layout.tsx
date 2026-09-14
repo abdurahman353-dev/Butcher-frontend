@@ -7,7 +7,7 @@ import { Topbar } from "@/components/layout/Topbar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
 
-const ADMIN_ONLY_PATHS = ["/settings", "/reports"];
+const ADMIN_ONLY_PATHS = ["/settings", "/reports", "/users"];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

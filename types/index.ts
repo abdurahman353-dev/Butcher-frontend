@@ -1,9 +1,20 @@
-/**
+﻿/**
  * Butcher POS System - Core TypeScript API Contracts & Domain Models
  * Designed for 1-to-1 mapping with Laravel Eloquent models & API resources.
  */
 
 export type UserRole = "admin" | "cashier";
+
+export interface Company {
+  id: number;
+  name: string;
+  slug: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  tax_pin?: string;
+  status: "active" | "suspended";
+}
 
 export interface User {
   id: number;
@@ -14,9 +25,10 @@ export interface User {
   avatar?: string;
   is_active?: boolean;
   must_change_password?: boolean;
+  company_id?: number;
+  company?: Company;
   created_at?: string;
 }
-
 export interface Category {
   id: number;
   name: string;
@@ -276,3 +288,4 @@ export interface ApiError {
   errors?: Record<string, string[]>;
   status_code?: number;
 }
+

@@ -64,6 +64,8 @@ export default function LoginPage() {
       window.dispatchEvent(new CustomEvent("butcher:auth-success"));
       if (loggedInUser.must_change_password) {
         router.push("/change-password");
+      } else if (loggedInUser.role === "admin") {
+        router.push("/");
       } else {
         router.push("/pos");
       }
@@ -167,7 +169,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-zinc-600 mb-1.5">
-                {selectedRole === "admin" ? "Admin username or email" : "Cashier username or email"}
+                {selectedRole === "admin" ? "Admin email or phone" : "Cashier email or phone"}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
@@ -178,7 +180,7 @@ export default function LoginPage() {
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={selectedRole === "admin" ? "admin (or email)" : "cashier (or email)"}
+                  placeholder={selectedRole === "admin" ? "admin@primecut.co.ke" : "cashier@primecut.co.ke"}
                   className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-zinc-300 rounded-xl text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
                 />
               </div>
@@ -215,7 +217,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setIdentifier(selectedRole === "admin" ? "admin" : "cashier");
+                  setIdentifier(selectedRole === "admin" ? "admin@primecut.co.ke" : "cashier@primecut.co.ke");
                   setPassword(selectedRole === "admin" ? "Admin@123" : "Cashier@123");
                 }}
                 className="text-red-600 hover:text-red-700 font-medium hover:underline cursor-pointer"

@@ -72,6 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await authService.logout();
     setUser(null);
+    try {
+      localStorage.removeItem("butcher_shop_name");
+      localStorage.removeItem("butcher_shop_settings_cache");
+    } catch {}
     router.replace("/login");
   }, [router]);
 
