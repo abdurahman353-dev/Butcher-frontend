@@ -1,21 +1,73 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Shift } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
-import { Printer, X, Clock, Banknote, Smartphone, CreditCard, ShieldCheck } from "lucide-react";
+import { Printer, X, Clock, Banknote, Smartphone, CreditCard, Pencil, Check, AlertTriangle } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { printElementInWindow } from "@/lib/printWindow";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/services/api";
 
 interface ShiftDetailsModalProps {
   shift: Shift | null;
   isOpen: boolean;
   onClose: () => void;
+  /** Called with the updated shift after a successful admin adjustment */
+  onShiftUpdated?: (updated: Shift) => void;
 }
 
-export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalProps) {
+export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: ShiftDetailsModalProps) {
   const { settings } = useShopSettings();
+  const { isAdmin } = useAuth();
+
+  const [editing, setEditing] = useState(false);
+  const [countedInput, setCountedInput] = useState("");
+  const [notesInput, setNotesInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   if (!isOpen || !shift) return null;
+
+  const isClosed = shift.status === "closed";
+
+  const openEdit = () => {
+    setCountedInput(String(shift.counted_cash ?? ""));
+    setNotesInput("");
+    setSaveError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setSaveError(null);
+  };
+
+  const saveAdjustment = async () => {
+    const val = parseFloat(countedInput);
+    if (isNaN(val) || val < 0) {
+      setSaveError("Enter a valid amount (0 or more).");
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await api.patch(`/shifts/${shift.id}/adjust`, {
+        counted_cash: val,
+        notes: notesInput.trim() || undefined,
+      });
+      const updated: Shift = res.data?.data ?? res.data;
+      setEditing(false);
+      onShiftUpdated?.(updated);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Failed to save. Try again.";
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handlePrint = () => {
     printElementInWindow("shift-slip", `Shift #${shift?.id ?? ""} Z-Report`);
@@ -34,7 +86,6 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
     return `${hours}h ${mins}m`;
   };
 
-  const isClosed = shift.status === "closed";
   const discrepancy = shift.difference ?? 0;
 
   return (
@@ -234,7 +285,69 @@ export function ShiftDetailsModal({ shift, isOpen, onClose }: ShiftDetailsModalP
           </div>
         </div>
 
-        {/* Modal Footer Controls (Hidden when printing) */}
+        {/* ── Admin: Adjust Counted Cash Panel ── */}
+        {isAdmin && isClosed && (
+          <div className="shrink-0 print:hidden border-t border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+            {!editing ? (
+              <button
+                type="button"
+                onClick={openEdit}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Admin: Correct Counted Cash Amount
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Correcting counted cash will recalculate the drawer variance.
+                </p>
+                <div>
+                  <label className="text-[10px] font-black text-amber-800 block mb-1 uppercase">Corrected Counted Cash</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={countedInput}
+                    onChange={(e) => setCountedInput(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-amber-800 block mb-1 uppercase">Reason / Note (optional)</label>
+                  <input
+                    type="text"
+                    value={notesInput}
+                    onChange={(e) => setNotesInput(e.target.value)}
+                    placeholder="e.g. Cashier miscounted notes"
+                    className="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                {saveError && <p className="text-[11px] text-red-600 font-bold">{saveError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    disabled={saving}
+                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-white border border-zinc-300 text-zinc-600 hover:bg-zinc-50 transition-colors"
+                  >Cancel</button>
+                  <button
+                    type="button"
+                    onClick={saveAdjustment}
+                    disabled={saving}
+                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60"
+                  >
+                    {saving ? <span>Saving…</span> : (<><Check className="w-3.5 h-3.5" />Save Correction</>)}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Modal Footer Controls */}
         <div className="p-3 sm:p-4 bg-zinc-50 border-t border-zinc-200 flex items-center justify-end gap-2 shrink-0 print:hidden">
           <button
             type="button"

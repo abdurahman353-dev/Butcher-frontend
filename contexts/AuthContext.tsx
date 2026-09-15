@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isInitialized: !isLoading,
     isLoading,
-    isAdmin: user?.role === "admin",
+    isAdmin: user?.role === "admin" || user?.role === "superadmin",
     isCashier: user?.role === "cashier",
     login,
     logout,

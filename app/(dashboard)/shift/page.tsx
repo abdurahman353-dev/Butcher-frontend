@@ -1568,6 +1568,14 @@ export default function ShiftPage() {
           setIsDetailsModalOpen(false);
           setSelectedShiftForModal(null);
         }}
+        onShiftUpdated={(updated) => {
+          // Patch the in-memory list so the row reflects the corrected values
+          setShiftsList((prev) =>
+            prev.map((s) => (s.id === updated.id ? updated : s))
+          );
+          // Keep the modal open with updated data
+          setSelectedShiftForModal(updated);
+        }}
       />
     </div>
   );
