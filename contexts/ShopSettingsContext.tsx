@@ -90,6 +90,7 @@ export function ShopSettingsProvider({
     if (legacyName) return { ...DEFAULT_SETTINGS, shop_name: legacyName };
     return DEFAULT_SETTINGS;
   });
+  const hasLoadedRef = React.useRef(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Update from cache on client mount
@@ -101,7 +102,9 @@ export function ShopSettingsProvider({
   }, []);
 
   const reload = useCallback(async () => {
-    setIsLoading(true);
+    if (!hasLoadedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const data = await settingsService.getSettings();
       if (data) {
@@ -130,6 +133,7 @@ export function ShopSettingsProvider({
         console.warn("[ShopSettingsContext] Failed to load settings:", e);
       }
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, []);

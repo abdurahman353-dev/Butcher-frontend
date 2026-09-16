@@ -17,15 +17,25 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isFormInitialized, setIsFormInitialized] = useState(false);
 
-  // Sync local form when global settings load or change
+  // Sync local form when global settings load, but NEVER overwrite if user is actively editing
   useEffect(() => {
-    setSettings(globalSettings);
-  }, [globalSettings]);
+    if (!isDirty && !isLoading) {
+      setSettings(globalSettings);
+      setIsFormInitialized(true);
+    }
+  }, [globalSettings, isDirty, isLoading]);
 
-  if (isLoading) {
+  if (isLoading && !isFormInitialized) {
     return <PageSkeleton variant="settings" title="Store & System Settings" />;
   }
+
+  const updateField = (field: keyof ShopSettings, value: any) => {
+    setIsDirty(true);
+    setSettings((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleSubmitSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +43,7 @@ export default function SettingsPage() {
     try {
       // saveSettings updates the global context AND persists to backend
       await saveSettings(settings);
+      setIsDirty(false);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
     } catch (e: any) {
@@ -84,7 +95,7 @@ export default function SettingsPage() {
               type="text"
               required
               value={settings.shop_name ?? ""}
-              onChange={(e) => setSettings({ ...settings, shop_name: e.target.value })}
+              onChange={(e) => updateField("shop_name", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             />
           </div>
@@ -95,7 +106,7 @@ export default function SettingsPage() {
               <input
                 type="text"
                 value={settings.phone ?? ""}
-                onChange={(e) => setSettings({ ...settings, phone: e.target.value })}
+                onChange={(e) => updateField("phone", e.target.value)}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
             </div>
@@ -105,7 +116,7 @@ export default function SettingsPage() {
               <input
                 type="email"
                 value={settings.email ?? ""}
-                onChange={(e) => setSettings({ ...settings, email: e.target.value })}
+                onChange={(e) => updateField("email", e.target.value)}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
             </div>
@@ -118,7 +129,7 @@ export default function SettingsPage() {
                 type="text"
                 placeholder="e.g. Ground Floor, Nairobi"
                 value={settings.address ?? ""}
-                onChange={(e) => setSettings({ ...settings, address: e.target.value })}
+                onChange={(e) => updateField("address", e.target.value)}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
             </div>
@@ -129,7 +140,7 @@ export default function SettingsPage() {
                 type="text"
                 placeholder="e.g. P051283749Z"
                 value={settings.tax_pin ?? ""}
-                onChange={(e) => setSettings({ ...settings, tax_pin: e.target.value })}
+                onChange={(e) => updateField("tax_pin", e.target.value)}
                 className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
               />
             </div>
@@ -148,7 +159,7 @@ export default function SettingsPage() {
               rows={2}
               placeholder="e.g. Fresh Gourmet Meats • Halal Certified"
               value={settings.receipt_header ?? ""}
-              onChange={(e) => setSettings({ ...settings, receipt_header: e.target.value })}
+              onChange={(e) => updateField("receipt_header", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs resize-y"
             />
             <p className="text-[11px] text-zinc-400 mt-0.5">Appears right below store contact info on all receipts in real time.</p>
@@ -160,7 +171,7 @@ export default function SettingsPage() {
               rows={2}
               placeholder="e.g. Thank you for shopping with us! Fresh cuts daily."
               value={settings.receipt_footer ?? ""}
-              onChange={(e) => setSettings({ ...settings, receipt_footer: e.target.value })}
+              onChange={(e) => updateField("receipt_footer", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs resize-y"
             />
             <p className="text-[11px] text-zinc-400 mt-0.5">Custom thank you, return policy, or note printed at the bottom of all receipts.</p>
