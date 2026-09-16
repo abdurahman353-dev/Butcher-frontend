@@ -796,7 +796,6 @@ function SalesLedger() {
                   <option value="all">All Payments</option>
                   <option value="cash">💵 Cash Only</option>
                   <option value="mpesa">📱 M-Pesa Only</option>
-                  <option value="card">💳 Card Only</option>
                   <option value="credit">⏳ Pay Later / Credit</option>
                 </select>
               </div>
@@ -1146,9 +1145,16 @@ function SalesLedger() {
                           <Banknote className="w-3 h-3 text-emerald-600" /> Cash
                         </span>
                       ) : sale.payment_method === "mpesa" ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 text-green-800 border border-green-200 text-[11px] font-bold">
-                          <Smartphone className="w-3 h-3 text-green-600" /> M-Pesa
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 text-green-800 border border-green-200 text-[11px] font-bold">
+                            <Smartphone className="w-3 h-3 text-green-600" /> M-Pesa
+                          </span>
+                          {sale.mpesa_reference && (
+                            <span className="inline-flex items-center text-[10px] font-mono font-bold text-zinc-600 bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 tracking-wider">
+                              Ref: {sale.mpesa_reference}
+                            </span>
+                          )}
+                        </div>
                       ) : sale.payment_method === "credit" ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[11px] font-bold">
                           <Clock className="w-3 h-3 text-amber-700" /> Pay Later

@@ -37,7 +37,7 @@ export default function PosPage() {
   const [selectedProductForWeight, setSelectedProductForWeight] = useState<Product | null>(null);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "card" | "credit">("cash");
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "credit">("cash");
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -188,7 +188,7 @@ export default function PosPage() {
     setSelectedCustomer(null);
   };
 
-  const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "card" | "credit" = "cash") => {
+  const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "credit" = "cash") => {
     if (!isShiftOpen) {
       const shouldOpen = await confirm({
         title: "Cashier Shift Closed",
@@ -210,7 +210,7 @@ export default function PosPage() {
   };
 
   const handleCompleteSale = async (payload: {
-    payment_method: "cash" | "mpesa" | "card" | "credit";
+    payment_method: "cash" | "mpesa" | "credit";
     amount_received?: number;
     mpesa_reference?: string;
     card_reference?: string;

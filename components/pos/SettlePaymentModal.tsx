@@ -9,13 +9,13 @@ import {
   X,
   Banknote,
   Smartphone,
-  CreditCard,
   CheckCircle2,
   DollarSign,
   User,
   Clock,
   Printer,
   Eye,
+  Hash,
 } from "lucide-react";
 
 interface SettlePaymentModalProps {
@@ -36,19 +36,15 @@ export function SettlePaymentModal({
   onPrintReceipt,
 }: SettlePaymentModalProps) {
   const { alert: showAlert } = useSystemDialog();
-  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "card">("cash");
+  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa">("cash");
   const [isProcessing, setIsProcessing] = useState(false);
   const [settledSale, setSettledSale] = useState<Sale | null>(null);
 
-  // Cash Form State
+  // Payment Amount State (Shared for Cash & M-Pesa)
   const [amountReceived, setAmountReceived] = useState<string>("");
 
-  // MPesa Form State
-  const [mpesaPhone, setMpesaPhone] = useState<string>("");
+  // MPesa Reference State (Optional)
   const [mpesaRef, setMpesaRef] = useState<string>("");
-
-  // Card Form State
-  const [cardRef, setCardRef] = useState<string>("");
 
   // Notes
   const [notes, setNotes] = useState<string>("");
@@ -91,11 +87,12 @@ export function SettlePaymentModal({
   };
 
   const handleMpesaSettle = async () => {
-    if (!mpesaRef.trim()) {
+    const receivedVal = numReceived || totalDue;
+    if (receivedVal < totalDue) {
       await showAlert({
-        title: "M-Pesa Reference Required",
-        message: "Please enter the M-Pesa transaction confirmation code (e.g. QJD7839X).",
-        type: "warning",
+        title: "Insufficient Amount",
+        message: `Amount received (${formatCurrency(receivedVal)}) is less than total due (${formatCurrency(totalDue)}).`,
+        type: "danger",
       });
       return;
     }
@@ -104,28 +101,8 @@ export function SettlePaymentModal({
     try {
       const updated = await salesService.settlePayment(sale.id, {
         payment_method: "mpesa",
-        mpesa_reference: mpesaRef.trim().toUpperCase(),
-        notes: notes.trim() || undefined,
-      });
-      setSettledSale(updated);
-      onPaymentSettled(updated);
-    } catch (e: any) {
-      await showAlert({
-        title: "Settlement Error",
-        message: e.message || "Failed to settle payment.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleCardSettle = async () => {
-    setIsProcessing(true);
-    try {
-      const updated = await salesService.settlePayment(sale.id, {
-        payment_method: "card",
-        card_reference: cardRef.trim() || `AUTH-${Date.now().toString().slice(-6)}`,
+        amount_received: receivedVal,
+        mpesa_reference: mpesaRef.trim() ? mpesaRef.trim().toUpperCase() : undefined,
         notes: notes.trim() || undefined,
       });
       setSettledSale(updated);
@@ -291,10 +268,10 @@ export function SettlePaymentModal({
 
             {/* Payment Method Selector */}
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-3 gap-1.5 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
-                {(["cash", "mpesa", "card"] as const).map((m) => {
-                  const Icon = m === "cash" ? Banknote : m === "mpesa" ? Smartphone : CreditCard;
-                  const label = m === "mpesa" ? "M-Pesa" : m.charAt(0).toUpperCase() + m.slice(1);
+              <div className="grid grid-cols-2 gap-1.5 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
+                {(["cash", "mpesa"] as const).map((m) => {
+                  const Icon = m === "cash" ? Banknote : Smartphone;
+                  const label = m === "mpesa" ? "M-Pesa" : "Cash";
                   return (
                     <button
                       key={m}
@@ -381,51 +358,81 @@ export function SettlePaymentModal({
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      M-Pesa Confirmation Code (Required)
+                      M-Pesa Amount Received (KSh)
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. QJD7839X"
-                      value={mpesaRef}
-                      onChange={(e) => setMpesaRef(e.target.value.toUpperCase())}
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2.5 text-sm font-mono font-bold tracking-wider text-zinc-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 uppercase"
+                      type="number"
+                      min={totalDue}
+                      step="any"
+                      placeholder={`Exact: ${totalDue}`}
+                      value={amountReceived}
+                      onChange={(e) => setAmountReceived(e.target.value)}
+                      className="w-full border border-zinc-300 rounded-xl px-3 py-2.5 text-base font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
 
-                  <button
-                    type="button"
-                    disabled={isProcessing || !mpesaRef.trim()}
-                    onClick={handleMpesaSettle}
-                    className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
-                  >
-                    {isProcessing ? "Verifying..." : `Confirm M-Pesa Payment (${formatCurrency(totalDue)})`}
-                  </button>
-                </div>
-              )}
+                  {/* Quick Amount Buttons */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setAmountReceived(totalDue.toString())}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-lg transition-colors"
+                    >
+                      Exact ({formatCurrency(totalDue)})
+                    </button>
+                    {[500, 1000, 2000, 5000]
+                      .filter((amt) => amt >= totalDue)
+                      .slice(0, 3)
+                      .map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setAmountReceived(amt.toString())}
+                          className="px-2.5 py-1 text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg transition-colors"
+                        >
+                          KSh {amt}
+                        </button>
+                      ))}
+                  </div>
 
-              {/* Card Panel */}
-              {selectedMethod === "card" && (
-                <div className="space-y-3">
+                  {/* Change Preview */}
+                  {numReceived > totalDue && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-800">Change Due to Customer:</span>
+                      <span className="text-sm font-black text-emerald-700 tabular-nums">
+                        {formatCurrency(change)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Optional M-Pesa Transaction Code */}
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Card Auth Reference
+                    <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5 text-emerald-600" />
+                        M-Pesa Transaction Ref / Code
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-normal uppercase">Optional</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. VISA-84729"
-                      value={cardRef}
-                      onChange={(e) => setCardRef(e.target.value)}
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2.5 text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="e.g. QJD7839X (Optional)"
+                      value={mpesaRef}
+                      onChange={(e) => setMpesaRef(e.target.value.toUpperCase())}
+                      className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-xs font-mono font-bold tracking-wider text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 uppercase"
                     />
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      Customer's M-Pesa confirmation code. Will appear on receipts and sales history.
+                    </p>
                   </div>
 
                   <button
                     type="button"
                     disabled={isProcessing}
-                    onClick={handleCardSettle}
-                    className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                    onClick={handleMpesaSettle}
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-50"
                   >
-                    {isProcessing ? "Processing..." : `Confirm Card Payment (${formatCurrency(totalDue)})`}
+                    {isProcessing ? "Verifying..." : `Confirm M-Pesa Payment (${formatCurrency(totalDue)})`}
                   </button>
                 </div>
               )}

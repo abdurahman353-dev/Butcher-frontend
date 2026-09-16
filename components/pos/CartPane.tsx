@@ -31,7 +31,7 @@ interface CartPaneProps {
   onOpenWeightEdit: (item: CartItem) => void;
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
-  onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "card" | "credit") => void;
+  onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "credit") => void;
   isShiftOpen?: boolean;
   heldCount?: number;
   onOpenHeldOrders?: () => void;

@@ -208,6 +208,12 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                   <span>Amount Received:</span>
                   <span className="font-black">{formatCurrency(sale.amount_received || sale.total)}</span>
                 </div>
+                {sale.change_given !== undefined && sale.change_given > 0 && (
+                  <div className="flex justify-between font-black">
+                    <span>Change:</span>
+                    <span>{formatCurrency(sale.change_given)}</span>
+                  </div>
+                )}
               </>
             )}
 

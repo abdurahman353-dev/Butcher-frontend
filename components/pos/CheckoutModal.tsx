@@ -9,7 +9,6 @@ import { MPesaPayment } from "./MPesaPayment";
 import {
   Banknote,
   Smartphone,
-  CreditCard,
   X,
   CheckCircle2,
   Printer,
@@ -30,12 +29,11 @@ interface CheckoutModalProps {
   totalDiscount: number;
   total: number;
   customer: Customer | null;
-  initialMethod?: "cash" | "mpesa" | "card" | "credit";
+  initialMethod?: "cash" | "mpesa" | "credit";
   onCompleteSale: (payload: {
-    payment_method: "cash" | "mpesa" | "card" | "credit";
+    payment_method: "cash" | "mpesa" | "credit";
     amount_received?: number;
     mpesa_reference?: string;
-    card_reference?: string;
     customer_name?: string;
     customer_phone?: string;
     notes?: string;
@@ -60,10 +58,11 @@ export function CheckoutModal({
   onNewSale,
 }: CheckoutModalProps) {
   const { alert: showAlert } = useSystemDialog();
-  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "card" | "credit">(initialMethod);
+  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "credit">(
+    initialMethod === "cash" || initialMethod === "mpesa" || initialMethod === "credit" ? initialMethod : "cash"
+  );
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
-  const [cardRef, setCardRef] = useState("");
 
   // Pay Later Form State
   const [creditCustomerName, setCreditCustomerName] = useState(customer?.name || "");
@@ -88,28 +87,13 @@ export function CheckoutModal({
     }
   };
 
-  const handleMPesaSuccess = async (phone: string, ref: string) => {
-    setIsProcessing(true);
-    try {
-      const sale = await onCompleteSale({ payment_method: "mpesa", mpesa_reference: ref });
-      setCompletedSale(sale);
-    } catch (e: any) {
-      await showAlert({
-        title: "Checkout Error",
-        message: e.message || "Failed to complete sale.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleCardSuccess = async () => {
+  const handleMPesaSuccess = async (received: number, change: number, ref?: string) => {
     setIsProcessing(true);
     try {
       const sale = await onCompleteSale({
-        payment_method: "card",
-        card_reference: cardRef || `AUTH-${Date.now().toString().slice(-6)}`,
+        payment_method: "mpesa",
+        amount_received: received,
+        mpesa_reference: ref,
       });
       setCompletedSale(sale);
     } catch (e: any) {
@@ -318,30 +302,28 @@ export function CheckoutModal({
               </div>
             </div>
 
-            {/* Payment method tabs (4 options) */}
+            {/* Payment method tabs (3 options: Cash, M-Pesa, Pay Later) */}
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-4 gap-1 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
-                {(["cash", "mpesa", "card", "credit"] as const).map((method) => {
+              <div className="grid grid-cols-3 gap-1 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
+                {(["cash", "mpesa", "credit"] as const).map((method) => {
                   const Icon =
                     method === "cash"
                       ? Banknote
                       : method === "mpesa"
                       ? Smartphone
-                      : method === "card"
-                      ? CreditCard
                       : Clock;
                   const label =
                     method === "mpesa"
                       ? "M-Pesa"
                       : method === "credit"
                       ? "Pay Later"
-                      : method.charAt(0).toUpperCase() + method.slice(1);
+                      : "Cash";
                   return (
                     <button
                       key={method}
                       type="button"
                       onClick={() => setSelectedMethod(method)}
-                      className={`py-2 px-1 rounded-lg text-[11px] font-bold flex flex-col sm:flex-row items-center justify-center gap-1 transition-all ${
+                      className={`py-2 px-1 rounded-lg text-[11px] font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all ${
                         selectedMethod === method
                           ? method === "credit"
                             ? "bg-amber-500 text-white shadow-xs"
@@ -365,37 +347,9 @@ export function CheckoutModal({
               {selectedMethod === "mpesa" && (
                 <MPesaPayment
                   total={total}
-                  customerPhone={customer?.phone}
                   onConfirm={handleMPesaSuccess}
                   isProcessing={isProcessing}
                 />
-              )}
-
-              {/* Card Panel */}
-              {selectedMethod === "card" && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1">
-                      Card Authorization Code
-                    </label>
-                    <input
-                      type="text"
-                      value={cardRef}
-                      onChange={(e) => setCardRef(e.target.value)}
-                      placeholder="e.g. VISA-948271"
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-sm font-bold text-zinc-900 tracking-wider focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={handleCardSuccess}
-                    className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-2 transition-all disabled:opacity-60 shadow-xs"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>{isProcessing ? "Processing..." : `Complete Card Sale (${formatCurrency(total)})`}</span>
-                  </button>
-                </div>
               )}
 
               {/* Pay Later / Credit Panel */}
