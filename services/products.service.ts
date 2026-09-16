@@ -1,6 +1,16 @@
 import apiClient from "./api";
 import { Product, Category, PaginatedResponse, PaginationParams } from "@/types";
 
+export interface BulkProductInput {
+  name: string;
+  sku?: string;
+  category_id: number;
+  price_per_kg: number;
+  buying_cost_per_kg: number;
+  current_stock?: number;
+  min_stock?: number;
+}
+
 export const productsService = {
   async getCategories(): Promise<Category[]> {
     const res = await apiClient.get<Category[]>("/categories");
@@ -19,6 +29,14 @@ export const productsService = {
 
   async createProduct(data: Partial<Product>): Promise<Product> {
     const res = await apiClient.post<Product>("/products", data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
+
+  async bulkCreateProducts(products: BulkProductInput[]): Promise<{ count: number; products: Product[]; message: string }> {
+    const res = await apiClient.post<{ count: number; products: Product[]; message: string }>("/products/bulk", { products });
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("butcher:data-change"));
     }

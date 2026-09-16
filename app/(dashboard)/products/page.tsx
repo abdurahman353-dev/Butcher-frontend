@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { productsService } from "@/services/products.service";
+import { productsService, BulkProductInput } from "@/services/products.service";
 import { Product, Category, PaginatedResponse } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { MeatImage } from "@/components/shared/MeatImage";
@@ -22,6 +22,12 @@ import {
   Layers,
   CheckCircle2,
   RefreshCw,
+  Upload,
+  Download,
+  Rows3,
+  FileSpreadsheet,
+  Loader2,
+  Trash,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -80,6 +86,153 @@ export default function ProductsPage() {
     min_stock: "10",
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Bulk Add Modal State
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkTab, setBulkTab] = useState<"grid" | "csv">("grid");
+  const [bulkRows, setBulkRows] = useState<Array<{
+    name: string; sku: string; category_id: number;
+    price_per_kg: string; buying_cost_per_kg: string;
+    current_stock: string; min_stock: string;
+  }>>([]);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
+  const [bulkValidated, setBulkValidated] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ count: number; errors?: string[] } | null>(null);
+  const [csvDragOver, setCsvDragOver] = useState(false);
+  const [csvPreviewRows, setCsvPreviewRows] = useState<Array<Record<string, string>>>([]);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const csvFileRef = useRef<HTMLInputElement>(null);
+
+  const blankRow = () => ({
+    name: "", sku: "",
+    category_id: 0,
+    price_per_kg: "", buying_cost_per_kg: "",
+    current_stock: "", min_stock: "",
+  });
+
+  const openBulkModal = () => {
+    setBulkTab("grid");
+    setBulkRows([blankRow(), blankRow(), blankRow()]);
+    setBulkResult(null);
+    setBulkValidated(false);
+    setCsvPreviewRows([]);
+    setCsvError(null);
+    setIsBulkModalOpen(true);
+  };
+
+  const addBulkRows = (n = 1) => setBulkRows(r => [...r, ...Array.from({ length: n }, blankRow)]);
+
+  const updateBulkRow = (i: number, field: string, val: string | number) =>
+    setBulkRows(r => r.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
+
+  const removeBulkRow = (i: number) => setBulkRows(r => r.filter((_, idx) => idx !== i));
+
+  const clearBlankRows = () => setBulkRows(r => r.filter(row => row.name.trim() !== ""));
+
+  const parseCsvFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) { setCsvError("CSV file appears empty."); return; }
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g, ""));
+      const rows = lines.slice(1).map(line => {
+        const vals = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
+        const obj: Record<string, string> = {};
+        headers.forEach((h, i) => { obj[h] = vals[i] ?? ""; });
+        return obj;
+      }).filter(r => r["name"] || r["product name"]);
+      setCsvPreviewRows(rows);
+      setCsvError(null);
+      // Build bulk rows from CSV
+      const mapped = rows.map(r => {
+        const catName = (r["category"] || "").toLowerCase();
+        const cat = categories.find(c => c.name.toLowerCase() === catName);
+        return {
+          name: r["name"] || r["product name"] || "",
+          sku: r["sku"] || "",
+          category_id: cat?.id || categories[0]?.id || 0,
+          price_per_kg: r["price per kg"] || r["price_per_kg"] || r["price"] || "",
+          buying_cost_per_kg: r["buying cost"] || r["buying_cost_per_kg"] || "",
+          current_stock: r["initial stock"] || r["current_stock"] || r["stock"] || "0",
+          min_stock: r["min stock"] || r["min_stock"] || "10",
+        };
+      });
+      setBulkRows(mapped);
+    };
+    reader.onerror = () => setCsvError("Failed to read file.");
+    reader.readAsText(file);
+  };
+
+  const downloadCsvTemplate = () => {
+    const catList = categories.map(c => c.name).join(" | ");
+    const header = `name,sku,category,price per kg,buying cost,initial stock,min stock`;
+    const example1 = `Prime Rib,,Beef,1200,,50,10`;
+    const example2 = `Whole Chicken,,Chicken,450,,30,5`;
+    const note = `# Available categories: ${catList}`;
+    const csv = `${header}\n${example1}\n${example2}\n${note}`;
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = "bulk_products_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkSave = async () => {
+    setBulkValidated(true);
+
+    // Find rows the user has started filling (has at least a name or any field)
+    const filledRows = bulkRows.filter(r =>
+      r.name.trim() || r.price_per_kg || r.category_id || r.current_stock || r.min_stock
+    );
+
+    if (filledRows.length === 0) {
+      await alert({ title: "Nothing to Import", message: "Please fill in at least one product row.", type: "warning" });
+      return;
+    }
+
+    // Collect per-row errors for required fields
+    const rowErrors: string[] = [];
+    filledRows.forEach((r, idx) => {
+      const rowNum = bulkRows.indexOf(r) + 1;
+      if (!r.name.trim())              rowErrors.push(`Row ${rowNum}: Product Name is required.`);
+      if (!r.category_id)              rowErrors.push(`Row ${rowNum}: Category is required.`);
+      if (!r.price_per_kg)             rowErrors.push(`Row ${rowNum}: Price per KG is required.`);
+      if (r.buying_cost_per_kg === "") rowErrors.push(`Row ${rowNum}: Buying Cost per KG is required.`);
+      if (r.current_stock === "")      rowErrors.push(`Row ${rowNum}: Initial Stock is required.`);
+      if (r.min_stock === "")          rowErrors.push(`Row ${rowNum}: Min Stock is required.`);
+    });
+
+    if (rowErrors.length > 0) {
+      setBulkResult({ count: 0, errors: rowErrors });
+      return;
+    }
+
+    // All rows valid — submit
+    const validRows = filledRows;
+    setIsBulkSaving(true);
+    setBulkResult(null);
+    try {
+      const payload: BulkProductInput[] = validRows.map(r => ({
+        name: r.name.trim(),
+        sku: r.sku.trim() || undefined,
+        category_id: Number(r.category_id),
+        price_per_kg: parseFloat(r.price_per_kg),
+        buying_cost_per_kg: parseFloat(r.buying_cost_per_kg),
+        current_stock: parseFloat(r.current_stock),
+        min_stock: parseFloat(r.min_stock),
+      }));
+      const res = await productsService.bulkCreateProducts(payload);
+      setBulkResult({ count: res.count });
+      setBulkValidated(false);
+      fetchProducts();
+    } catch (err: any) {
+      const errData = err?.response?.data;
+      setBulkResult({ count: 0, errors: errData?.errors || [err.message || "Import failed."] });
+    } finally {
+      setIsBulkSaving(false);
+    }
+  };
 
   const fetchProducts = useCallback(async (manual = false) => {
     try {
@@ -169,6 +322,17 @@ export default function ProductsPage() {
       return;
     }
 
+    if (formData.buying_cost_per_kg === "") {
+      const errMsg = "Please enter the buying cost per KG.";
+      setModalError(errMsg);
+      await alert({
+        title: "Buying Cost Required",
+        message: errMsg,
+        type: "warning",
+      });
+      return;
+    }
+
     if (!editingProduct && formData.current_stock === "") {
       const errMsg = "Please enter the initial stock quantity in KG.";
       setModalError(errMsg);
@@ -198,7 +362,7 @@ export default function ProductsPage() {
         sku: formData.sku.trim() || undefined,
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
-        buying_cost_per_kg: formData.buying_cost_per_kg ? parseFloat(formData.buying_cost_per_kg) : undefined,
+        buying_cost_per_kg: parseFloat(formData.buying_cost_per_kg),
         current_stock: parseFloat(formData.current_stock),
         min_stock: parseFloat(formData.min_stock),
         unit: "KG",
@@ -296,14 +460,24 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 self-start sm:self-auto active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Cut</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={openBulkModal}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+          >
+            <Rows3 className="w-4 h-4" />
+            <span>Bulk Add</span>
+          </button>
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Cut</span>
+          </button>
+        </div>
       </div>
 
       {/* ── FILTER CONSOLE (collapsed by default) ── */}
@@ -607,7 +781,9 @@ export default function ProductsPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">Category</label>
+                  <label className="block font-semibold text-zinc-700 mb-1">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
                   <select
                     value={formData.category_id}
                     onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
@@ -651,11 +827,12 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Buying Cost / KG (KSh)
+                    Buying Cost / KG (KSh) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
                     step="0.01"
+                    required
                     value={formData.buying_cost_per_kg}
                     onChange={(e) => setFormData({ ...formData, buying_cost_per_kg: e.target.value })}
                     placeholder="720"
@@ -717,6 +894,242 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── BULK ADD MODAL ── */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-8 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-5xl animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center">
+                  <Rows3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Bulk Add Products</h3>
+                  <p className="text-xs text-blue-100">Import multiple cuts at once — fast, reliable, isolated to your company</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setIsBulkModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="px-5 pt-4 flex items-center gap-1 border-b border-zinc-100">
+              <button type="button" onClick={() => setBulkTab("grid")}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all -mb-px ${bulkTab === "grid" ? "border-blue-600 text-blue-700 bg-blue-50/50" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}>
+                <Rows3 className="w-3.5 h-3.5" /> Quick Grid Entry
+              </button>
+              <button type="button" onClick={() => setBulkTab("csv")}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all -mb-px ${bulkTab === "csv" ? "border-blue-600 text-blue-700 bg-blue-50/50" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}>
+                <FileSpreadsheet className="w-3.5 h-3.5" /> CSV File Import
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Success / Error Result Banner */}
+              {bulkResult && (
+                <div className={`rounded-xl p-3 flex items-start gap-2.5 text-xs ${bulkResult.errors ? "bg-red-50 border border-red-200 text-red-800" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                  {bulkResult.errors
+                    ? <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                    : <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />}
+                  <div className="space-y-1">
+                    {bulkResult.errors
+                      ? <><p className="font-semibold">Import failed. Please fix the errors below:</p>{bulkResult.errors.map((e, i) => <p key={i}>{e}</p>)}</>
+                      : <p className="font-semibold">✅ {bulkResult.count} product{bulkResult.count !== 1 ? "s" : ""} imported successfully! Your inventory is updated.</p>}
+                  </div>
+                </div>
+              )}
+
+              {bulkTab === "grid" && (
+                <>
+                  {/* Grid action buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={() => addBulkRows(1)}
+                      className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Add Row
+                    </button>
+                    <button type="button" onClick={() => addBulkRows(5)}
+                      className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> + 5 Rows
+                    </button>
+                    <button type="button" onClick={clearBlankRows}
+                      className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
+                      <Trash className="w-3.5 h-3.5" /> Clear Blank
+                    </button>
+                    <span className="ml-auto text-xs text-zinc-400">{bulkRows.filter(r => r.name.trim()).length} of {bulkRows.length} rows filled</span>
+                  </div>
+
+                  {/* Scrollable grid table */}
+                  <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
+                      <table className="w-full text-xs min-w-[860px]">
+                        <thead className="bg-zinc-50 border-b border-zinc-200 sticky top-0 z-10">
+                          <tr>
+                            <th className="text-left p-2 pl-3 font-semibold text-zinc-600 w-6">#</th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[160px]">Product Name <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">SKU</th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[130px]">Category <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Price/KG <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Buy Cost/KG <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">Stock (KG) <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">Min Stock <span className="text-red-500">*</span></th>
+                            <th className="p-2 w-8"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {bulkRows.map((row, i) => {
+                            const isFilled = row.name.trim() || row.price_per_kg || row.category_id || row.buying_cost_per_kg || row.current_stock || row.min_stock;
+                            const isRowValid = row.name.trim() && row.category_id && row.price_per_kg && row.buying_cost_per_kg !== "" && row.current_stock !== "" && row.min_stock !== "";
+                            // Per-field error classes (only show red after user clicked Import)
+                            const errName    = bulkValidated && isFilled && !row.name.trim();
+                            const errCat     = bulkValidated && isFilled && !row.category_id;
+                            const errPrice   = bulkValidated && isFilled && !row.price_per_kg;
+                            const errBuying  = bulkValidated && isFilled && row.buying_cost_per_kg === "";
+                            const errStock   = bulkValidated && isFilled && row.current_stock === "";
+                            const errMinStk  = bulkValidated && isFilled && row.min_stock === "";
+                            const fieldBase  = "w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs focus:outline-none focus:ring-1 transition-colors";
+                            const ok         = `${fieldBase} border-zinc-200 focus:ring-blue-500 focus:border-blue-500`;
+                            const err        = `${fieldBase} border-red-400 bg-red-50 focus:ring-red-500 focus:border-red-500`;
+                            return (
+                              <tr key={i} className={`${isRowValid ? "bg-white" : isFilled ? "bg-red-50/20" : "bg-zinc-50/40"} hover:bg-blue-50/20 transition-colors`}>
+                                <td className="p-2 pl-3 text-zinc-400 font-mono">
+                                  {bulkValidated && isFilled && !isRowValid
+                                    ? <span className="text-red-400 font-bold">!</span>
+                                    : i + 1}
+                                </td>
+                                <td className="p-1.5">
+                                  <input value={row.name} onChange={e => updateBulkRow(i, "name", e.target.value)}
+                                    className={errName ? err : ok} />
+                                </td>
+                                <td className="p-1.5">
+                                  <input value={row.sku} onChange={e => updateBulkRow(i, "sku", e.target.value)}
+                                    className={ok} />
+                                </td>
+                                <td className="p-1.5">
+                                  <select value={row.category_id} onChange={e => updateBulkRow(i, "category_id", Number(e.target.value))}
+                                    className={errCat ? err : ok}>
+                                    <option value={0}>— Select —</option>
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.icon && `${c.icon} `}{c.name}</option>)}
+                                  </select>
+                                </td>
+                                <td className="p-1.5">
+                                  <input type="number" value={row.price_per_kg} onChange={e => updateBulkRow(i, "price_per_kg", e.target.value)}
+                                    min="0" step="0.01"
+                                    className={errPrice ? err : ok} />
+                                </td>
+                                <td className="p-1.5">
+                                  <input type="number" value={row.buying_cost_per_kg} onChange={e => updateBulkRow(i, "buying_cost_per_kg", e.target.value)}
+                                    min="0" step="0.01"
+                                    className={errBuying ? err : ok} />
+                                </td>
+                                <td className="p-1.5">
+                                  <input type="number" value={row.current_stock} onChange={e => updateBulkRow(i, "current_stock", e.target.value)}
+                                    min="0" step="0.1"
+                                    className={errStock ? err : ok} />
+                                </td>
+                                <td className="p-1.5">
+                                  <input type="number" value={row.min_stock} onChange={e => updateBulkRow(i, "min_stock", e.target.value)}
+                                    min="0"
+                                    className={errMinStk ? err : ok} />
+                                </td>
+                                <td className="p-1.5 text-center">
+                                  <button type="button" onClick={() => removeBulkRow(i)}
+                                    className="w-6 h-6 rounded-md hover:bg-red-50 hover:text-red-500 text-zinc-400 flex items-center justify-center transition-colors">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {bulkTab === "csv" && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={downloadCsvTemplate}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs">
+                      <Download className="w-4 h-4" /> Download CSV Template
+                    </button>
+                    <span className="text-xs text-zinc-500">Fill the template with your products, then upload it below.</span>
+                  </div>
+
+                  {/* Drag & Drop Zone */}
+                  <div
+                    onDragOver={e => { e.preventDefault(); setCsvDragOver(true); }}
+                    onDragLeave={() => setCsvDragOver(false)}
+                    onDrop={e => { e.preventDefault(); setCsvDragOver(false); const f = e.dataTransfer.files[0]; if (f) parseCsvFile(f); }}
+                    onClick={() => csvFileRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${csvDragOver ? "border-blue-500 bg-blue-50" : "border-zinc-200 hover:border-blue-300 hover:bg-blue-50/30"}`}
+                  >
+                    <Upload className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-zinc-700">Drop your CSV file here</p>
+                    <p className="text-xs text-zinc-400 mt-1">or click to browse — .csv files only</p>
+                    <input ref={csvFileRef} type="file" accept=".csv" className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) parseCsvFile(f); e.target.value = ""; }} />
+                  </div>
+
+                  {csvError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" /> {csvError}
+                    </div>
+                  )}
+
+                  {csvPreviewRows.length > 0 && (
+                    <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                      <div className="p-3 bg-zinc-50 border-b border-zinc-100 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-700">{csvPreviewRows.length} rows detected from CSV</span>
+                        <button type="button" onClick={() => { setCsvPreviewRows([]); setBulkRows([]); }}
+                          className="text-xs text-red-500 hover:text-red-700">Clear</button>
+                      </div>
+                      <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-zinc-50 sticky top-0">
+                            <tr>{Object.keys(csvPreviewRows[0]).map(h => <th key={h} className="text-left p-2 font-semibold text-zinc-600 border-b border-zinc-100">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-50">
+                            {csvPreviewRows.slice(0, 20).map((row, i) => (
+                              <tr key={i} className="hover:bg-zinc-50">
+                                {Object.values(row).map((v, j) => <td key={j} className="p-2 text-zinc-700">{v || <span className="text-zinc-300 italic">—</span>}</td>)}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {csvPreviewRows.length > 20 && <p className="p-2 text-center text-xs text-zinc-400">+ {csvPreviewRows.length - 20} more rows…</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+                <p className="text-xs text-zinc-400">
+                  {bulkRows.filter(r => r.name.trim() && r.price_per_kg).length} valid product{bulkRows.filter(r => r.name.trim() && r.price_per_kg).length !== 1 ? "s" : ""} ready to import
+                </p>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setIsBulkModalOpen(false)} disabled={isBulkSaving}
+                    className="px-5 py-2 bg-white border border-zinc-200 text-zinc-700 rounded-xl text-xs font-semibold hover:bg-zinc-50 transition-colors">
+                    {bulkResult?.count ? "Done" : "Cancel"}
+                  </button>
+                  {!bulkResult?.count && (
+                    <button type="button" onClick={handleBulkSave} disabled={isBulkSaving}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60 text-white rounded-xl text-xs font-semibold transition-colors shadow-xs flex items-center gap-2">
+                      {isBulkSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Importing…</> : <><Upload className="w-3.5 h-3.5" />Import Products</>}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

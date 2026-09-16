@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Loader2,
   AlertCircle,
-  Info
+  Info,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -26,6 +28,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
   const [selectedRole, setSelectedRole] = useState<"admin" | "cashier">("admin");
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [forgotRole, setForgotRole] = useState<"admin" | "cashier">("admin");
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
+  const [forgotSubmitted, setForgotSubmitted] = useState(false);
   // SSR-safe: initialize with neutral value, update from localStorage after mount
   const [cachedShopName, setCachedShopName] = useState("Butchery POS");
 
@@ -217,12 +223,14 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setIdentifier(selectedRole === "admin" ? "admin@primecut.co.ke" : "cashier@primecut.co.ke");
-                  setPassword(selectedRole === "admin" ? "Admin@123" : "Cashier@123");
+                  setForgotRole(selectedRole);
+                  setForgotIdentifier(identifier);
+                  setForgotSubmitted(false);
+                  setIsForgotPasswordOpen(true);
                 }}
-                className="text-red-600 hover:text-red-700 font-medium hover:underline cursor-pointer"
+                className="text-red-600 hover:text-red-700 font-medium hover:underline cursor-pointer transition-colors"
               >
-                Demo login
+                Forgot password?
               </button>
             </div>
 
@@ -245,6 +253,125 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Forgot Password Modal */}
+          {isForgotPasswordOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+              <div
+                className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="p-4 sm:p-5 bg-gradient-to-r from-red-600 to-red-700 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+                      <Lock className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold">Password Recovery</h3>
+                      <p className="text-xs text-red-100">Reset your Butchery POS credentials</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsForgotPasswordOpen(false)}
+                    className="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center transition-colors text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Role Switcher */}
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="grid grid-cols-2 p-1 bg-zinc-100 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => { setForgotRole("admin"); setForgotSubmitted(false); }}
+                      className={`py-1.5 text-xs font-semibold rounded-lg transition-all ${forgotRole === "admin" ? "bg-white text-red-600 shadow-xs" : "text-zinc-600 hover:text-zinc-900"}`}
+                    >
+                      Admin Account
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setForgotRole("cashier"); setForgotSubmitted(false); }}
+                      className={`py-1.5 text-xs font-semibold rounded-lg transition-all ${forgotRole === "cashier" ? "bg-white text-red-600 shadow-xs" : "text-zinc-600 hover:text-zinc-900"}`}
+                    >
+                      Cashier Account
+                    </button>
+                  </div>
+
+                  {forgotRole === "cashier" ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-2">
+                      <div className="flex items-center gap-2 font-semibold text-amber-800">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                        <span>Managed by Butchery Admin</span>
+                      </div>
+                      <p className="leading-relaxed text-zinc-700">
+                        Cashier passwords and PINs are securely assigned and managed by your Butchery Administrator.
+                      </p>
+                      <div className="pt-1 border-t border-amber-200/60 font-medium text-amber-800">
+                        👉 Please ask your Admin to open <span className="font-bold underline">User Management</span> on their device to reset your password.
+                      </div>
+                    </div>
+                  ) : forgotSubmitted ? (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-900 space-y-2">
+                      <div className="flex items-center gap-2 font-semibold text-emerald-800">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                        <span>Request Submitted</span>
+                      </div>
+                      <p className="leading-relaxed text-zinc-700">
+                        If an account matches <span className="font-semibold text-zinc-900">{forgotIdentifier || "your email"}</span>, instructions to restore access have been dispatched.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsForgotPasswordOpen(false)}
+                        className="mt-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs transition-colors"
+                      >
+                        Return to Sign In
+                      </button>
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (forgotIdentifier.trim()) {
+                          setForgotSubmitted(true);
+                        }
+                      }}
+                      className="space-y-3"
+                    >
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700 mb-1">
+                          Registered Admin Email or Phone
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={forgotIdentifier}
+                          onChange={(e) => setForgotIdentifier(e.target.value)}
+                          placeholder="e.g. admin@yourbutchery.com"
+                          className="w-full px-3.5 py-2.5 bg-zinc-50 border border-zinc-300 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs rounded-xl transition-all shadow-xs"
+                      >
+                        Send Reset Instructions
+                      </button>
+                    </form>
+                  )}
+
+                  {/* Direct Contact Support Box */}
+                  <div className="border-t border-zinc-100 pt-3 text-[11px] text-zinc-500 space-y-1">
+                    <p className="font-medium text-zinc-700">Need urgent assistance?</p>
+                    <p>Phone: <span className="font-semibold text-zinc-900">+254 700 000 000</span></p>
+                    <p>Email: <span className="font-semibold text-zinc-900">support@butcherypos.com</span></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
 
