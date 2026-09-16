@@ -18,7 +18,9 @@ import {
   Clock,
   CheckCircle2,
   Receipt,
+  RefreshCw,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   AreaChart,
   Area,
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [chartPeriod, setChartPeriod] = useState<"today" | "week" | "month">("today");
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     try {
@@ -41,8 +44,9 @@ export default function DashboardPage() {
     } catch { }
   }, []);
 
-  const fetchSummary = useCallback(async () => {
+  const fetchSummary = useCallback(async (manual = false) => {
     try {
+      if (manual) setIsRefreshing(true);
       const data = await reportsService.getDashboardSummary();
       setSummary(data);
       if (typeof window !== "undefined") {
@@ -52,6 +56,7 @@ export default function DashboardPage() {
       console.error("Failed to load dashboard summary:", e);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -65,16 +70,29 @@ export default function DashboardPage() {
         ? summary?.sales_chart.week || []
         : summary?.sales_chart.month || [];
 
+  if (isLoading && !summary) {
+    return <PageSkeleton variant="dashboard" title="Butcher Shop Overview" />;
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">
       {/* Welcome & Fast POS CTA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="text-2xl">🥩</span>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
               Butcher Shop Overview
             </h1>
+            <button
+              type="button"
+              onClick={() => fetchSummary(true)}
+              disabled={isRefreshing}
+              title="Refresh live metrics"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-green-600" : ""}`} />
+            </button>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
             Real-time monitoring of daily sales, profit margins, inventory levels, and counter transactions.

@@ -38,6 +38,7 @@ import {
   ChevronDown,
   Clock,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 function SalesLedger() {
   const { settings: shopSettings } = useShopSettings();
@@ -415,6 +416,10 @@ function SalesLedger() {
   const refundedCount =
     paginated.summary?.refunded_count ??
     paginated.data.filter((s) => s.sale_status === "refunded").length;
+
+  if (isLoading && paginated.data.length === 0) {
+    return <PageSkeleton variant="table" title="Sales History & Financial Ledger" />;
+  }
 
   return (
     <div className="p-3 sm:p-5 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto select-none print:p-0 print:max-w-full">
@@ -1044,7 +1049,21 @@ function SalesLedger() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {paginated.data.length === 0 ? (
+              {isLoading && paginated.data.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td className="py-4 pl-4"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
+                    <td className="py-4 px-3"><div className="h-3.5 w-28 bg-zinc-100 rounded" /></td>
+                    <td className="py-4 px-3"><div className="h-3.5 w-20 bg-zinc-200 rounded" /></td>
+                    <td className="py-4 px-3"><div className="h-3.5 w-24 bg-zinc-100 rounded" /></td>
+                    <td className="py-4 px-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
+                    <td className="py-4 px-3 text-right"><div className="h-3.5 w-12 bg-zinc-100 rounded ml-auto" /></td>
+                    <td className="py-4 px-3 text-right"><div className="h-3.5 w-16 bg-zinc-200 rounded ml-auto" /></td>
+                    <td className="py-4 px-3 text-center"><div className="h-5 w-14 bg-zinc-200 rounded-full mx-auto" /></td>
+                    <td className="py-4 pr-4 text-center"><div className="h-6 w-16 bg-zinc-100 rounded mx-auto" /></td>
+                  </tr>
+                ))
+              ) : paginated.data.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-zinc-400">
                     <div className="flex flex-col items-center justify-center gap-2">

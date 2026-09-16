@@ -25,6 +25,7 @@ import {
   DollarSign,
   Clock,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 interface ItemRefundState {
   selected: boolean;
@@ -247,11 +248,7 @@ export default function SaleDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="p-8 text-center text-zinc-400">
-        Loading transaction details...
-      </div>
-    );
+    return <PageSkeleton variant="table" title="Sale Transaction Details" />;
   }
 
   if (!sale) {

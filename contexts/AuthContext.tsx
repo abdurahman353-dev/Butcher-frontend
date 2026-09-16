@@ -63,19 +63,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, isLoading, pathname, router]);
 
+  const clearTenantCaches = () => {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("butcher_") || key.startsWith("prime_cut_"))) {
+          if (key !== "prime_cut_token") keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+  };
+
   const login = useCallback(async (identifier: string, password: string) => {
+    clearTenantCaches();
     const loggedIn = await authService.login(identifier, password);
     setUser(loggedIn);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("butcher:auth-success"));
+    }
     return loggedIn;
   }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout();
-    setUser(null);
     try {
-      localStorage.removeItem("butcher_shop_name");
-      localStorage.removeItem("butcher_shop_settings_cache");
+      await authService.logout();
     } catch {}
+    setUser(null);
+    clearTenantCaches();
     router.replace("/login");
   }, [router]);
 

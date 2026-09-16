@@ -7,7 +7,8 @@ import { formatCurrency } from "@/lib/formatters";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePolling } from "@/hooks/usePolling";
 import { useSystemDialog } from "@/contexts/DialogContext";
-import { Users, Plus, Search, Phone, ShoppingBag, X, Trash2 } from "lucide-react";
+import { Users, Plus, Search, Phone, ShoppingBag, X, Trash2, RefreshCw } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function CustomersPage() {
   const { confirm, alert } = useSystemDialog();
@@ -21,6 +22,8 @@ export default function CustomersPage() {
     to: 0,
   });
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -54,8 +57,9 @@ export default function CustomersPage() {
     } catch {}
   }, []);
 
-  const fetchCustomers = useCallback(async () => {
+  const fetchCustomers = useCallback(async (manual = false) => {
     try {
+      if (manual) setIsRefreshing(true);
       const res = await customersService.getCustomers({
         page: currentPage,
         per_page: 20,
@@ -67,6 +71,9 @@ export default function CustomersPage() {
       }
     } catch (e) {
       console.error("Failed to load customers:", e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [currentPage, search]);
 
@@ -133,6 +140,10 @@ export default function CustomersPage() {
       });
     }
   };
+
+  if (isLoading && paginated.data.length === 0) {
+    return <PageSkeleton variant="customers" title="Customer Directory" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">

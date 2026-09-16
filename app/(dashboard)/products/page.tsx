@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   RefreshCw,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function ProductsPage() {
   const { confirm, alert } = useSystemDialog();
@@ -37,6 +38,8 @@ export default function ProductsPage() {
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -78,8 +81,9 @@ export default function ProductsPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (manual = false) => {
     try {
+      if (manual) setIsRefreshing(true);
       const [prodsRes, cats] = await Promise.all([
         productsService.getProducts({
           page: currentPage,
@@ -98,6 +102,9 @@ export default function ProductsPage() {
       }
     } catch (e) {
       console.error("Failed to load products:", e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [currentPage, search, categoryFilter, statusFilter]);
 
@@ -266,6 +273,10 @@ export default function ProductsPage() {
       });
     }
   };
+
+  if (isLoading && paginated.data.length === 0) {
+    return <PageSkeleton variant="table" title="Products & Meat Cuts" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">

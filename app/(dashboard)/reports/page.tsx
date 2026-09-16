@@ -28,6 +28,7 @@ import {
   FileText,
   Clock,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { Pagination } from "@/components/shared/Pagination";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
@@ -52,7 +53,7 @@ export default function ReportsPage() {
   const [cashierId, setCashierId] = useState("all");
 
   const [analytics, setAnalytics] = useState<ReportAnalyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [chartMetric, setChartMetric] = useState<MetricView>("revenue");
@@ -357,6 +358,10 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
   const handlePrint = () => {
     window.print();
   };
+
+  if (isLoading && !analytics) {
+    return <PageSkeleton variant="reports" title="Executive Financial & Operational Reports" />;
+  }
 
   return (
     <div className="p-3 sm:p-5 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto select-none print:p-0 print:max-w-full">

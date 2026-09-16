@@ -38,6 +38,7 @@ import {
   RotateCcw,
   AlertTriangle,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function ShiftPage() {
   const { shift, isShiftOpen, openShift, closeShift, isLoading: isShiftLoading } = useShift();
@@ -465,6 +466,10 @@ export default function ShiftPage() {
     const start = (historyPage - 1) * perPage;
     return filteredAndSortedShifts.slice(start, start + perPage);
   }, [filteredAndSortedShifts, historyPage, perPage]);
+
+  if (isShiftLoading && !shift) {
+    return <PageSkeleton variant="shifts" title="Shift & Till Management" />;
+  }
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto select-none">

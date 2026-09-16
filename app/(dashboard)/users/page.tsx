@@ -25,6 +25,7 @@ import {
     Eye,
     EyeOff,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function UsersManagementPage() {
     const { alert, confirm } = useSystemDialog();
@@ -249,6 +250,10 @@ export default function UsersManagementPage() {
     const activeCashiers = stats.active_cashiers;
     const suspendedCount = stats.suspended;
     const superAdmins = stats.admins;
+
+    if (isLoading && users.length === 0) {
+        return <PageSkeleton variant="table" title="Staff & User Access Management" />;
+    }
 
     return (
         <div className="p-3 sm:p-5 lg:p-8 space-y-5 max-w-7xl mx-auto select-none">

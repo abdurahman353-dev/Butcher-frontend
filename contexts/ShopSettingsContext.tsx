@@ -101,6 +101,7 @@ export function ShopSettingsProvider({
   }, []);
 
   const reload = useCallback(async () => {
+    setIsLoading(true);
     try {
       const data = await settingsService.getSettings();
       if (data) {

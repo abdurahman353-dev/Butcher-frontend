@@ -5,11 +5,12 @@ import { ShopSettings } from "@/types";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { Settings, Save, CheckCircle2 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function SettingsPage() {
   const { alert } = useSystemDialog();
 
-  const { settings: globalSettings, saveSettings } = useShopSettings();
+  const { settings: globalSettings, saveSettings, isLoading } = useShopSettings();
 
   // Local copy of settings for editing in the form
   const [settings, setSettings] = useState<ShopSettings>(globalSettings);
@@ -21,6 +22,10 @@ export default function SettingsPage() {
   useEffect(() => {
     setSettings(globalSettings);
   }, [globalSettings]);
+
+  if (isLoading) {
+    return <PageSkeleton variant="settings" title="Store & System Settings" />;
+  }
 
   const handleSubmitSettings = async (e: React.FormEvent) => {
     e.preventDefault();

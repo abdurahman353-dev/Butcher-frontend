@@ -24,6 +24,7 @@ import {
   X,
   Filter,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 type SortKey = "name" | "current_stock" | "min_stock" | "price_per_kg" | "valuation";
 type SortDir = "asc" | "desc";
@@ -31,6 +32,8 @@ type SortDir = "asc" | "desc";
 export default function InventoryPage() {
   const [activeTab, setActiveTab] = useState<"levels" | "movements">("levels");
   const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [movementsPaginated, setMovementsPaginated] = useState<PaginatedResponse<InventoryMovement>>({
     data: [],
     current_page: 1,
@@ -53,8 +56,9 @@ export default function InventoryPage() {
   const [stockPage, setStockPage] = useState(1);
   const STOCK_PER_PAGE = 20;
 
-  const fetchInventory = useCallback(async () => {
+  const fetchInventory = useCallback(async (manual = false) => {
     try {
+      if (manual) setIsRefreshing(true);
       const [prodsRes, movsRes] = await Promise.all([
         productsService.getProducts({ per_page: 500 }),
         inventoryService.getMovements({
@@ -71,6 +75,9 @@ export default function InventoryPage() {
       }
     } catch (e) {
       console.error("Failed to load inventory:", e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [currentPage, search, statusFilter]);
 
@@ -204,6 +211,10 @@ export default function InventoryPage() {
       </span>
     </th>
   );
+
+  if (isLoading && products.length === 0) {
+    return <PageSkeleton variant="table" title="Stock & Inventory Management" />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none">
