@@ -38,6 +38,14 @@ export function MeatImage({ category, name, className = "w-full h-full" }: MeatI
     bg = "bg-pink-50/80 border-pink-100 text-pink-600";
     icon = "🍖";
     tag = "PORK/LAMB";
+  } else if (lowerCat.includes("fish") || lowerCat.includes("seafood") || lowerName.includes("fish") || lowerName.includes("tilapia") || lowerName.includes("salmon")) {
+    bg = "bg-sky-50/80 border-sky-100 text-sky-600";
+    icon = "🐟";
+    tag = "FISH";
+  } else if (lowerCat.includes("egg") || lowerCat.includes("dairy") || lowerName.includes("egg") || lowerName.includes("butter") || lowerName.includes("ghee")) {
+    bg = "bg-amber-50/80 border-amber-100 text-amber-700";
+    icon = "🥚";
+    tag = "EGGS/DAIRY";
   }
 
   return (

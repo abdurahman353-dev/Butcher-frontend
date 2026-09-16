@@ -20,6 +20,7 @@ function getCategoryEmoji(cat: Category): string {
   if (name.includes("pork") || name.includes("pig")) return "🥓";
   if (name.includes("lamb") || name.includes("mutton")) return "🍖";
   if (name.includes("fish") || name.includes("seafood")) return "🐟";
+  if (name.includes("egg") || name.includes("dairy")) return "🥚";
   return "🥩";
 }
 
