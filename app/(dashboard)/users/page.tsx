@@ -70,7 +70,9 @@ export default function UsersManagementPage() {
     // Reset Password Modal state
     const [resetTarget, setResetTarget] = useState<User | null>(null);
     const [resetPassword, setResetPassword] = useState("");
+    const [resetConfirm, setResetConfirm] = useState("");
     const [showResetPassword, setShowResetPassword] = useState(false);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [isResetting, setIsResetting] = useState(false);
 
     // Reset to page 1 whenever filters change
@@ -216,6 +218,10 @@ export default function UsersManagementPage() {
             await alert({ title: "Too Short", message: "Temporary password must be at least 8 characters.", type: "warning" });
             return;
         }
+        if (resetPassword !== resetConfirm) {
+            await alert({ title: "Mismatch", message: "Passwords do not match. Please re-enter.", type: "warning" });
+            return;
+        }
         setIsResetting(true);
         try {
             const res = await usersService.resetPassword(resetTarget.id, resetPassword);
@@ -226,6 +232,7 @@ export default function UsersManagementPage() {
             });
             setResetTarget(null);
             setResetPassword("");
+            setResetConfirm("");
         } catch (e: any) {
             await alert({
                 title: "Reset Failed",
@@ -477,7 +484,7 @@ export default function UsersManagementPage() {
                                                     <div className="flex items-center justify-end gap-2">
                                                         <button
                                                             type="button"
-                                                            onClick={() => { setResetTarget(staff); setResetPassword(""); setShowResetPassword(false); }}
+                                                        onClick={() => { setResetTarget(staff); setResetPassword(""); setResetConfirm(""); setShowResetPassword(false); setShowResetConfirm(false); }}
                                                             className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all active:scale-95"
                                                         >
                                                             <KeyRound className="w-3.5 h-3.5" />
@@ -586,6 +593,37 @@ export default function UsersManagementPage() {
                                 )}
                             </div>
 
+                                            {/* Confirm */}
+                                            <div>
+                                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Confirm Temporary Password *</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showResetConfirm ? "text" : "password"}
+                                                        required
+                                                        placeholder="Repeat the password"
+                                                        value={resetConfirm}
+                                                        onChange={(e) => setResetConfirm(e.target.value)}
+                                                        className={`w-full bg-white border rounded-xl px-3 pr-10 py-2.5 text-sm font-mono text-zinc-900 focus:outline-hidden focus:ring-1 shadow-2xs ${
+                                                            resetConfirm && resetConfirm !== resetPassword
+                                                                ? "border-red-400 focus:ring-red-400"
+                                                                : resetConfirm && resetConfirm === resetPassword
+                                                                ? "border-green-500 focus:ring-green-500"
+                                                                : "border-zinc-200 focus:border-indigo-500 focus:ring-indigo-400"
+                                                        }`}
+                                                    />
+                                                    <button type="button" onClick={() => setShowResetConfirm(!showResetConfirm)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                                        {showResetConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                    </button>
+                                                </div>
+                                                {resetConfirm && resetConfirm !== resetPassword && (
+                                                    <p className="text-[10px] text-red-500 mt-1">Passwords do not match.</p>
+                                                )}
+                                                {resetConfirm && resetConfirm === resetPassword && resetPassword.length >= 8 && (
+                                                    <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Passwords match!</p>
+                                                )}
+                                            </div>
+
                             <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
                                 <button
                                     type="button"
@@ -596,7 +634,7 @@ export default function UsersManagementPage() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isResetting || resetPassword.length < 8}
+                                    disabled={isResetting || resetPassword.length < 8 || resetPassword !== resetConfirm}
                                     className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold flex items-center gap-2 shadow-xs transition-all text-xs"
                                 >
                                     <KeyRound className="w-4 h-4" />
