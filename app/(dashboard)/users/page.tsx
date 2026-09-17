@@ -10,7 +10,6 @@ import {
     Users,
     UserPlus,
     Search,
-    Filter,
     Shield,
     UserCheck,
     UserX,
@@ -18,8 +17,7 @@ import {
     RefreshCw,
     X,
     Lock,
-    Mail,
-    Phone,
+    KeyRound,
     CheckCircle2,
     AlertTriangle,
     Eye,
@@ -68,6 +66,12 @@ export default function UsersManagementPage() {
     const [newUserConfirmPassword, setNewUserConfirmPassword] = useState("");
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
+
+    // Reset Password Modal state
+    const [resetTarget, setResetTarget] = useState<User | null>(null);
+    const [resetPassword, setResetPassword] = useState("");
+    const [showResetPassword, setShowResetPassword] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
 
     // Reset to page 1 whenever filters change
     useEffect(() => {
@@ -202,6 +206,34 @@ export default function UsersManagementPage() {
                 message: e?.response?.data?.message || e.message || "Failed to update staff status.",
                 type: "danger",
             });
+        }
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resetTarget) return;
+        if (resetPassword.length < 8) {
+            await alert({ title: "Too Short", message: "Temporary password must be at least 8 characters.", type: "warning" });
+            return;
+        }
+        setIsResetting(true);
+        try {
+            const res = await usersService.resetPassword(resetTarget.id, resetPassword);
+            await alert({
+                title: "Password Reset ✅",
+                message: res.message,
+                type: "success",
+            });
+            setResetTarget(null);
+            setResetPassword("");
+        } catch (e: any) {
+            await alert({
+                title: "Reset Failed",
+                message: e?.response?.data?.message || e.message || "Failed to reset password.",
+                type: "danger",
+            });
+        } finally {
+            setIsResetting(false);
         }
     };
 
@@ -445,6 +477,15 @@ export default function UsersManagementPage() {
                                                     <div className="flex items-center justify-end gap-2">
                                                         <button
                                                             type="button"
+                                                            onClick={() => { setResetTarget(staff); setResetPassword(""); setShowResetPassword(false); }}
+                                                            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all active:scale-95"
+                                                        >
+                                                            <KeyRound className="w-3.5 h-3.5" />
+                                                            <span>Reset</span>
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
                                                             onClick={() => handleToggleStatus(staff)}
                                                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all active:scale-95 ${isActive
                                                                     ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
@@ -493,6 +534,79 @@ export default function UsersManagementPage() {
                     />
                 </div>
             </div>
+
+            {/* ── RESET PASSWORD MODAL ── */}
+            {resetTarget && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-xl border border-zinc-200">
+                        <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                                    <KeyRound className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-zinc-900 text-sm">Reset Password</h3>
+                                    <p className="text-[11px] text-zinc-500">{resetTarget.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setResetTarget(null)} className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800 leading-relaxed">
+                            <strong>⚠️ This will immediately log out {resetTarget.name}.</strong><br />
+                            They will be forced to change this temporary password when they next sign in.
+                        </div>
+
+                        <form onSubmit={handleResetPassword} className="space-y-4 text-xs">
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Temporary Password *</label>
+                                <div className="relative">
+                                    <input
+                                        type={showResetPassword ? "text" : "password"}
+                                        required
+                                        minLength={8}
+                                        placeholder="Min. 8 characters"
+                                        value={resetPassword}
+                                        onChange={(e) => setResetPassword(e.target.value)}
+                                        className="w-full bg-white border border-zinc-200 rounded-xl px-3 pr-10 py-2.5 text-sm font-mono text-zinc-900 focus:outline-hidden focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 shadow-2xs"
+                                        autoFocus
+                                    />
+                                    <button type="button" onClick={() => setShowResetPassword(!showResetPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                                        {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                {resetPassword.length > 0 && resetPassword.length < 8 && (
+                                    <p className="text-[10px] text-red-500 mt-1">Too short — at least 8 characters required.</p>
+                                )}
+                                {resetPassword.length >= 8 && (
+                                    <p className="text-[10px] text-green-600 mt-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Good length</p>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setResetTarget(null)}
+                                    className="px-4 py-2.5 rounded-xl border border-zinc-200 font-semibold text-zinc-600 hover:bg-zinc-50 text-xs"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isResetting || resetPassword.length < 8}
+                                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold flex items-center gap-2 shadow-xs transition-all text-xs"
+                                >
+                                    <KeyRound className="w-4 h-4" />
+                                    <span>{isResetting ? "Resetting..." : "Set Temp Password"}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* ── ADD CASHIER MODAL ── */}
             {showAddModal && (

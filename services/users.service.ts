@@ -53,6 +53,11 @@ export const usersService = {
     }
   },
 
+  async resetPassword(id: number, password: string): Promise<{ message: string }> {
+    const res = await apiClient.post<{ message: string }>(`/users/${id}/reset-password`, { password });
+    return res.data;
+  },
+
   async changePassword(currentPassword: string, password: string, passwordConfirmation: string): Promise<void> {
     await apiClient.post("/auth/change-password", {
       current_password: currentPassword,
