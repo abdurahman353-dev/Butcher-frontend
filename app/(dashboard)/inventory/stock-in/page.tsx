@@ -34,22 +34,17 @@ function StockInForm() {
     return "";
   };
 
+  // Load all products once on mount
   useEffect(() => {
     async function load() {
       const res = await productsService.getProducts({ per_page: 100 });
       setProducts(res.data);
+      // Set initial selected product — cost sync is handled by the effect below
       if (!preselectedProductId && res.data.length > 0) {
-        const firstProd = res.data[0];
-        setSelectedProductId(firstProd.id);
-        const costStr = getProductDefaultCost(firstProd);
-        if (costStr) setBuyingCost(costStr);
+        setSelectedProductId(res.data[0].id);
       } else if (preselectedProductId) {
         const found = res.data.find((p) => p.id === Number(preselectedProductId));
-        if (found) {
-          setSelectedProductId(found.id);
-          const costStr = getProductDefaultCost(found);
-          if (costStr) setBuyingCost(costStr);
-        }
+        if (found) setSelectedProductId(found.id);
       }
     }
     load();
@@ -57,6 +52,14 @@ function StockInForm() {
 
   const activeProductId = selectedProductId || (products[0]?.id ?? 0);
   const selectedProduct = products.find((p) => p.id === activeProductId);
+
+  // Whenever the active product changes (initial load OR dropdown change), sync buying cost
+  useEffect(() => {
+    if (products.length === 0) return;
+    const prod = products.find((p) => p.id === activeProductId);
+    const costStr = getProductDefaultCost(prod);
+    setBuyingCost(costStr);
+  }, [activeProductId, products]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,13 +150,7 @@ function StockInForm() {
           </label>
           <select
             value={activeProductId}
-            onChange={(e) => {
-              const id = Number(e.target.value);
-              setSelectedProductId(id);
-              const found = products.find((p) => p.id === id);
-              const costStr = getProductDefaultCost(found);
-              setBuyingCost(costStr);
-            }}
+            onChange={(e) => setSelectedProductId(Number(e.target.value))}
             className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
           >
             {products.map((p) => (
