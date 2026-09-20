@@ -133,8 +133,8 @@ export default function InventoryPage() {
       else if (sortKey === "min_stock") { av = a.min_stock; bv = b.min_stock; }
       else if (sortKey === "price_per_kg") { av = a.price_per_kg; bv = b.price_per_kg; }
       else if (sortKey === "valuation") {
-        av = (a.current_stock || 0) * (a.buying_cost_per_kg || a.price_per_kg * 0.75);
-        bv = (b.current_stock || 0) * (b.buying_cost_per_kg || b.price_per_kg * 0.75);
+        av = (a.current_stock || 0) * (a.buying_cost_per_kg || 0);
+        bv = (b.current_stock || 0) * (b.buying_cost_per_kg || 0);
       }
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
@@ -147,7 +147,7 @@ export default function InventoryPage() {
   // Real-time KPI calculations
   const kpis = useMemo(() => {
     const totalValue = products.reduce(
-      (sum, p) => sum + (p.current_stock || 0) * (p.buying_cost_per_kg || p.price_per_kg * 0.75),
+      (sum, p) => sum + (p.current_stock || 0) * (p.buying_cost_per_kg || 0),
       0
     );
     const lowStock = products.filter((p) => p.current_stock > 0 && p.current_stock <= p.min_stock).length;
@@ -571,8 +571,7 @@ export default function InventoryPage() {
                     const isOut = p.current_stock <= 0;
                     const isLow = !isOut && p.current_stock <= p.min_stock;
                     const stockStatus = isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
-                    const valuation =
-                      (p.current_stock || 0) * (p.buying_cost_per_kg || p.price_per_kg * 0.75);
+                    const valuation = (p.current_stock || 0) * (p.buying_cost_per_kg || 0);
 
                     return (
                       <tr key={p.id} className="hover:bg-zinc-50/60 transition-colors">
@@ -595,7 +594,11 @@ export default function InventoryPage() {
                           {formatCurrency(p.price_per_kg)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-zinc-600 tabular-nums text-xs">
-                          {p.buying_cost_per_kg ? formatCurrency(p.buying_cost_per_kg) : "—"}
+                          {p.buying_cost_per_kg && Number(p.buying_cost_per_kg) > 0 ? (
+                            formatCurrency(p.buying_cost_per_kg)
+                          ) : (
+                            <span className="text-rose-500 font-medium">Unset</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
                           {formatCurrency(valuation)}

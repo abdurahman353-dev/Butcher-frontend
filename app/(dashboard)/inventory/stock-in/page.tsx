@@ -26,19 +26,29 @@ function StockInForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const getProductDefaultCost = (prod?: Product | null): string => {
+    if (!prod) return "";
+    if (prod.buying_cost_per_kg && Number(prod.buying_cost_per_kg) > 0) {
+      return prod.buying_cost_per_kg.toString();
+    }
+    return "";
+  };
+
   useEffect(() => {
     async function load() {
       const res = await productsService.getProducts({ per_page: 100 });
       setProducts(res.data);
       if (!preselectedProductId && res.data.length > 0) {
-        setSelectedProductId(res.data[0].id);
+        const firstProd = res.data[0];
+        setSelectedProductId(firstProd.id);
+        const costStr = getProductDefaultCost(firstProd);
+        if (costStr) setBuyingCost(costStr);
       } else if (preselectedProductId) {
         const found = res.data.find((p) => p.id === Number(preselectedProductId));
         if (found) {
           setSelectedProductId(found.id);
-          if (found.buying_cost_per_kg) {
-            setBuyingCost(found.buying_cost_per_kg.toString());
-          }
+          const costStr = getProductDefaultCost(found);
+          if (costStr) setBuyingCost(costStr);
         }
       }
     }
@@ -51,12 +61,21 @@ function StockInForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(quantity);
-    const cost = parseFloat(buyingCost) || 0;
+    const cost = parseFloat(buyingCost);
 
     if (isNaN(qty) || qty <= 0) {
       await alert({
         title: "Invalid Stock Quantity",
         message: "Please enter a valid stock quantity greater than 0 KG.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (isNaN(cost) || cost <= 0) {
+      await alert({
+        title: "Supplier Buying Cost Required",
+        message: "Please enter a valid supplier buying cost per KG to maintain accurate profit and valuation records.",
         type: "warning",
       });
       return;
@@ -132,9 +151,8 @@ function StockInForm() {
               const id = Number(e.target.value);
               setSelectedProductId(id);
               const found = products.find((p) => p.id === id);
-              if (found?.buying_cost_per_kg) {
-                setBuyingCost(found.buying_cost_per_kg.toString());
-              }
+              const costStr = getProductDefaultCost(found);
+              setBuyingCost(costStr);
             }}
             className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
           >
@@ -172,17 +190,19 @@ function StockInForm() {
 
         <div>
           <label className="block font-semibold uppercase text-zinc-700 mb-1">
-            Supplier Buying Cost / KG (KSh)
+            Supplier Buying Cost / KG (KSh) <span className="text-rose-500">*</span>
           </label>
           <input
             type="number"
             step="0.01"
+            min="0.01"
+            required
             value={buyingCost}
             onChange={(e) => setBuyingCost(e.target.value)}
             placeholder="e.g. 680"
             className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
           />
-          <p className="text-[10px] text-zinc-500 mt-1">Used to compute accurate shop profit margins.</p>
+          <p className="text-[10px] text-zinc-500 mt-1">Auto-loaded from product record. Edit if this delivery has a different price.</p>
         </div>
 
         <div>
