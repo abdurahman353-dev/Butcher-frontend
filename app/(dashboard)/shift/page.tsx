@@ -391,6 +391,7 @@ export default function ShiftPage() {
     const totalCashSales = filteredAndSortedShifts.reduce((acc, s) => acc + (Number(s.cash_sales) || 0), 0);
     const totalMpesaSales = filteredAndSortedShifts.reduce((acc, s) => acc + (Number(s.mpesa_sales) || 0), 0);
     const totalCardSales = filteredAndSortedShifts.reduce((acc, s) => acc + (Number(s.card_sales) || 0), 0);
+    const totalCashAndMpesa = totalCashSales + totalMpesaSales;
     const netVariance = filteredAndSortedShifts
       .filter((s) => s.status === "closed")
       .reduce((acc, s) => acc + (Number(s.difference) || 0), 0);
@@ -403,6 +404,7 @@ export default function ShiftPage() {
       totalCashSales,
       totalMpesaSales,
       totalCardSales,
+      totalCashAndMpesa,
       netVariance,
     };
   }, [filteredAndSortedShifts]);
@@ -977,17 +979,17 @@ export default function ShiftPage() {
               </p>
             </div>
 
-            {/* 3. Cash in Till */}
+            {/* 3. Cash & M-Pesa Combined Total */}
             <div className="p-3 sm:p-4 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs space-y-1">
               <div className="flex items-center justify-between text-[11px] sm:text-xs text-zinc-500">
-                <span className="font-semibold">Cash Collections</span>
+                <span className="font-semibold">Cash &amp; M-Pesa</span>
                 <Banknote className="w-4 h-4 text-green-600 shrink-0" />
               </div>
               <div className="text-xl sm:text-2xl font-bold text-zinc-900 tabular-nums truncate">
-                {formatCurrency(stats.totalCashSales)}
+                {formatCurrency(stats.totalCashAndMpesa)}
               </div>
               <p className="text-[10px] sm:text-[11px] text-zinc-500 truncate">
-                M-Pesa: {formatCurrency(stats.totalMpesaSales)}
+                Cash: {formatCurrency(stats.totalCashSales)} • M-Pesa: {formatCurrency(stats.totalMpesaSales)}
               </p>
             </div>
 

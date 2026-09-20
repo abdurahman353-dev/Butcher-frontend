@@ -218,6 +218,12 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
                 {formatCurrency(shift.card_sales)}
               </span>
             </div>
+            <div className="pt-2 border-t border-dashed border-black/40 flex justify-between text-xs items-center">
+              <span className="font-bold text-black">Total Cash + M-Pesa:</span>
+              <span className="font-black text-black tabular-nums">
+                {formatCurrency((Number(shift.cash_sales) || 0) + (Number(shift.mpesa_sales) || 0))}
+              </span>
+            </div>
             <div className="pt-2 border-t-2 border-black flex justify-between text-xs items-center">
               <span className="font-black text-black">TOTAL SHIFT REVENUE:</span>
               <span className="font-black text-base text-black tabular-nums">
