@@ -36,20 +36,20 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 select-none">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40 backdrop-blur-xs print:hidden" onClick={onClose} />
 
-      {/* Receipt Card */}
-      <div className="relative w-full max-w-sm bg-white text-zinc-900 font-mono rounded-2xl shadow-2xl overflow-hidden z-10 border border-zinc-200 print:m-0 print:p-0 print:border-none print:shadow-none">
-        {/* Top Control Bar (Hidden when printing) */}
-        <div className="p-3 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between print:hidden">
+      {/* Receipt Card - Responsive lengthwise on all mobile & desktop screens */}
+      <div className="relative w-full max-w-sm max-h-[92dvh] sm:max-h-[90vh] flex flex-col bg-white text-zinc-900 font-mono rounded-2xl shadow-2xl overflow-hidden z-10 border border-zinc-200 print:max-h-none print:h-auto print:overflow-visible print:m-0 print:p-0 print:border-none print:shadow-none">
+        {/* Top Control Bar (Hidden when printing) - Always visible & sticky at top */}
+        <div className="p-3 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between shrink-0 z-20 print:hidden">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-700">Receipt Preview</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors active:scale-95"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Print</span>
@@ -57,15 +57,15 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             <button
               type="button"
               onClick={onClose}
-              className="p-1 text-zinc-400 hover:text-zinc-700 rounded"
+              className="p-1 text-zinc-400 hover:text-zinc-700 rounded transition-colors active:scale-90"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Thermal Receipt Body */}
-        <div id="thermal-receipt" className="p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold">
+        {/* Thermal Receipt Body - Smoothly scrollable lengthwise on any device */}
+        <div id="thermal-receipt" className="p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold overflow-y-auto flex-1 overscroll-contain print:overflow-visible print:p-0 print:m-0">
           {/* 1. Header Box */}
           <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
             <div className="text-base sm:text-lg font-black tracking-tight uppercase">
