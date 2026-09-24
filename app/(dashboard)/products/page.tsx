@@ -80,6 +80,7 @@ export default function ProductsPage() {
     name: "",
     sku: "",
     category_id: 1,
+    unit: "KG",
     price_per_kg: "",
     buying_cost_per_kg: "",
     current_stock: "",
@@ -91,7 +92,7 @@ export default function ProductsPage() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkTab, setBulkTab] = useState<"grid" | "csv">("grid");
   const [bulkRows, setBulkRows] = useState<Array<{
-    name: string; sku: string; category_id: number;
+    name: string; sku: string; category_id: number; unit: string;
     price_per_kg: string; buying_cost_per_kg: string;
     current_stock: string; min_stock: string;
   }>>([]);
@@ -106,6 +107,7 @@ export default function ProductsPage() {
   const blankRow = () => ({
     name: "", sku: "",
     category_id: 0,
+    unit: "KG",
     price_per_kg: "", buying_cost_per_kg: "",
     current_stock: "", min_stock: "",
   });
@@ -152,6 +154,7 @@ export default function ProductsPage() {
           name: r["name"] || r["product name"] || "",
           sku: r["sku"] || "",
           category_id: cat?.id || categories[0]?.id || 0,
+          unit: (r["unit"] || "KG").toUpperCase(),
           price_per_kg: r["price per kg"] || r["price_per_kg"] || r["price"] || "",
           buying_cost_per_kg: r["buying cost"] || r["buying_cost_per_kg"] || "",
           current_stock: r["initial stock"] || r["current_stock"] || r["stock"] || "0",
@@ -166,9 +169,9 @@ export default function ProductsPage() {
 
   const downloadCsvTemplate = () => {
     const catList = categories.map(c => c.name).join(" | ");
-    const header = `name,sku,category,price per kg,buying cost,initial stock,min stock`;
-    const example1 = `Prime Rib,,Beef,1200,,50,10`;
-    const example2 = `Whole Chicken,,Chicken,450,,30,5`;
+    const header = `name,sku,category,unit,price per kg,buying cost,initial stock,min stock`;
+    const example1 = `Prime Rib,,Beef,KG,1200,,50,10`;
+    const example2 = `Beef Sausages 250g,,Sausages,PACK,220,,40,10`;
     const note = `# Available categories: ${catList}`;
     const csv = `${header}\n${example1}\n${example2}\n${note}`;
     const blob = new Blob([csv], { type: "text/csv" });
@@ -221,6 +224,7 @@ export default function ProductsPage() {
         buying_cost_per_kg: parseFloat(r.buying_cost_per_kg),
         current_stock: parseFloat(r.current_stock),
         min_stock: parseFloat(r.min_stock),
+        unit: r.unit || "KG",
       }));
       const res = await productsService.bulkCreateProducts(payload);
       setBulkResult({ count: res.count });
@@ -284,6 +288,7 @@ export default function ProductsPage() {
       name: "",
       sku: "",
       category_id: categories[0]?.id || 1,
+      unit: "KG",
       price_per_kg: "",
       buying_cost_per_kg: "",
       current_stock: "",
@@ -299,6 +304,7 @@ export default function ProductsPage() {
       name: product.name,
       sku: product.sku,
       category_id: product.category_id,
+      unit: product.unit || "KG",
       price_per_kg: product.price_per_kg.toString(),
       buying_cost_per_kg: product.buying_cost_per_kg ? product.buying_cost_per_kg.toString() : "",
       current_stock: product.current_stock.toString(),
@@ -365,7 +371,7 @@ export default function ProductsPage() {
         buying_cost_per_kg: parseFloat(formData.buying_cost_per_kg),
         current_stock: parseFloat(formData.current_stock),
         min_stock: parseFloat(formData.min_stock),
-        unit: "KG",
+        unit: formData.unit || "KG",
       };
 
       if (editingProduct) {
@@ -653,7 +659,9 @@ export default function ProductsPage() {
                           </div>
                           <div>
                             <span className="font-semibold text-zinc-900 block">{product.name}</span>
-                            <span className="text-[10px] text-zinc-500">{product.unit} Unit</span>
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${product.unit === "PACK" ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-zinc-100 text-zinc-600"}`}>
+                              {product.unit || "KG"}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -667,7 +675,7 @@ export default function ProductsPage() {
                       </td>
                       <td className="py-3 px-3 text-right font-semibold tabular-nums">
                         <span className={isLow ? "text-amber-700" : "text-zinc-800"}>
-                          {formatWeight(product.current_stock)}
+                          {formatWeight(product.current_stock, product.unit)}
                         </span>
                         {isLow && (
                           <span className="block text-[9px] font-semibold text-amber-600">
@@ -676,7 +684,7 @@ export default function ProductsPage() {
                         )}
                       </td>
                       <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                        {formatWeight(product.min_stock)}
+                        {formatWeight(product.min_stock, product.unit)}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <button
@@ -779,7 +787,21 @@ export default function ProductsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">
+                    Unit Type <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-semibold focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                  >
+                    <option value="KG">KG (Weight)</option>
+                    <option value="PACK">PACK (Package)</option>
+                    <option value="PCS">PCS (Pieces)</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
                     Category <span className="text-rose-500">*</span>
@@ -812,7 +834,7 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Selling Price / KG (KSh) <span className="text-rose-500">*</span>
+                    Selling Price / {formData.unit === "PACK" ? "Pack" : formData.unit === "PCS" ? "Pc" : "KG"} (KSh) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -827,7 +849,7 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Buying Cost / KG (KSh) <span className="text-rose-500">*</span>
+                    Buying Cost / {formData.unit === "PACK" ? "Pack" : formData.unit === "PCS" ? "Pc" : "KG"} (KSh) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -974,6 +996,7 @@ export default function ProductsPage() {
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[160px]">Product Name <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">SKU</th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[130px]">Category <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[95px]">Unit <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Price/KG <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Buy Cost/KG <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">Stock (KG) <span className="text-red-500">*</span></th>
@@ -1015,6 +1038,14 @@ export default function ProductsPage() {
                                     className={errCat ? err : ok}>
                                     <option value={0}>— Select —</option>
                                     {categories.map(c => <option key={c.id} value={c.id}>{c.icon && `${c.icon} `}{c.name}</option>)}
+                                  </select>
+                                </td>
+                                <td className="p-1.5">
+                                  <select value={row.unit || "KG"} onChange={e => updateBulkRow(i, "unit", e.target.value)}
+                                    className={ok}>
+                                    <option value="KG">KG</option>
+                                    <option value="PACK">PACK</option>
+                                    <option value="PCS">PCS</option>
                                   </select>
                                 </td>
                                 <td className="p-1.5">

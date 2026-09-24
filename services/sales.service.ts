@@ -50,4 +50,12 @@ export const salesService = {
     }
     return res.data;
   },
+
+  async deleteSale(id: number): Promise<{ message: string }> {
+    const res = await apiClient.delete<{ message: string }>(`/sales/${id}`);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
 };

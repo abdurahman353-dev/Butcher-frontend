@@ -14,6 +14,9 @@ interface CartItemRowProps {
 
 export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }: CartItemRowProps) {
   const isAtMaxStock = typeof item.available_stock === "number" && item.weight >= item.available_stock;
+  const isCountable = item.unit?.toUpperCase() === "PACK" || item.unit?.toUpperCase() === "PCS";
+  const stepDelta = isCountable ? 1 : 0.25;
+  const unitLabel = item.unit?.toUpperCase() === "PACK" ? "Pack" : item.unit?.toUpperCase() === "PCS" ? "Pc" : "KG";
 
   return (
     <div className="p-3 bg-white border border-zinc-200 rounded-lg flex flex-col gap-2 hover:border-zinc-300 transition-colors">
@@ -21,7 +24,7 @@ export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="text-sm font-semibold text-zinc-900 truncate">{item.product_name}</h4>
-          <p className="text-[11px] text-zinc-400">{formatCurrency(item.price_per_kg)} / KG</p>
+          <p className="text-[11px] text-zinc-400">{formatCurrency(item.price_per_kg)} / {unitLabel}</p>
         </div>
 
         <div className="text-right shrink-0">
@@ -41,9 +44,9 @@ export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }
         <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-md p-0.5">
           <button
             type="button"
-            onClick={() => onAdjustWeight(item.id, -0.25)}
+            onClick={() => onAdjustWeight(item.id, -stepDelta)}
             className="w-6 h-6 rounded flex items-center justify-center bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 transition-colors"
-            title="Decrease 250g"
+            title={isCountable ? "Decrease 1" : "Decrease 250g"}
           >
             <Minus className="w-3 h-3" />
           </button>
@@ -52,15 +55,15 @@ export function CartItemRow({ item, onAdjustWeight, onOpenWeightEdit, onRemove }
             type="button"
             onClick={() => onOpenWeightEdit(item)}
             className="px-2 py-0.5 text-xs font-bold text-zinc-800 hover:text-green-700 tabular-nums flex items-center gap-0.5 transition-colors"
-            title="Click to enter exact weight"
+            title="Click to enter exact quantity"
           >
-            <span>{formatWeight(item.weight)}</span>
+            <span>{formatWeight(item.weight, item.unit)}</span>
             <Edit2 className="w-2.5 h-2.5 text-zinc-400" />
           </button>
 
           <button
             type="button"
-            onClick={() => onAdjustWeight(item.id, 0.25)}
+            onClick={() => onAdjustWeight(item.id, stepDelta)}
             disabled={isAtMaxStock}
             className={`w-6 h-6 rounded flex items-center justify-center border transition-colors ${
               isAtMaxStock

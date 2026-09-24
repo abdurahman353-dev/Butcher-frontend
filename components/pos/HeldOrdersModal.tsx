@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { HeldOrder } from "@/types";
-import { formatCurrency, formatWeight, formatTimeOnly } from "@/lib/formatters";
+import { formatCurrency, formatWeight, formatTimeOnly, formatUnitLabel } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import {
   Clock,
@@ -266,7 +266,7 @@ export function HeldOrdersModal({
                                 {item.product_name}
                               </span>
                               <div className="text-[11px] text-zinc-500">
-                                {formatWeight(item.weight)} @ {formatCurrency(item.price_per_kg)}/kg
+                                {formatWeight(item.weight, item.unit)} @ {formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}
                               </div>
                             </div>
                             <span className="font-bold text-zinc-900 tabular-nums">

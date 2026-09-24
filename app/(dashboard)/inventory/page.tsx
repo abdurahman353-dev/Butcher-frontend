@@ -550,10 +550,10 @@ export default function InventoryPage() {
                   <SortTh label="Product Cut" col="name" className="pl-4" />
                   <th className="py-3.5 px-3">SKU</th>
                   <th className="py-3.5 px-3">Category</th>
-                  <SortTh label="Available Weight" col="current_stock" className="text-right" />
+                  <SortTh label="Available Stock" col="current_stock" className="text-right" />
                   <SortTh label="Min Threshold" col="min_stock" className="text-right" />
-                  <SortTh label="Selling Price / KG" col="price_per_kg" className="text-right" />
-                  <th className="py-3.5 px-3 text-right font-semibold text-zinc-500">Cost / KG</th>
+                  <SortTh label="Selling Price" col="price_per_kg" className="text-right" />
+                  <th className="py-3.5 px-3 text-right font-semibold text-zinc-500">Unit Cost</th>
                   <SortTh label="Est. Valuation" col="valuation" className="text-right" />
                   <th className="py-3.5 px-3 text-center">Status</th>
                   <th className="py-3.5 pr-4 text-center">Actions</th>
@@ -584,11 +584,11 @@ export default function InventoryPage() {
                         </td>
                         <td className="py-3 px-3 text-right font-bold tabular-nums text-sm">
                           <span className={isOut ? "text-rose-600" : isLow ? "text-amber-700" : "text-green-700"}>
-                            {formatWeight(p.current_stock)}
+                            {formatWeight(p.current_stock, p.unit)}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                          {formatWeight(p.min_stock)}
+                          {formatWeight(p.min_stock, p.unit)}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-green-700 tabular-nums text-xs">
                           {formatCurrency(p.price_per_kg)}
@@ -679,7 +679,7 @@ export default function InventoryPage() {
                   <th className="py-3.5 pl-4">Timestamp</th>
                   <th className="py-3.5 px-3">Cut Name</th>
                   <th className="py-3.5 px-3">Activity Type</th>
-                  <th className="py-3.5 px-3 text-right">Quantity (KG)</th>
+                  <th className="py-3.5 px-3 text-right">Quantity</th>
                   <th className="py-3.5 px-3 text-right">Before</th>
                   <th className="py-3.5 px-3 text-right">After</th>
                   <th className="py-3.5 px-3">User</th>
@@ -694,40 +694,43 @@ export default function InventoryPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredMovements.map((m) => (
-                    <tr key={m.id} className="hover:bg-zinc-50/60 transition-colors">
-                      <td className="py-3 pl-4 text-zinc-500">{formatDateTime(m.created_at)}</td>
-                      <td className="py-3 px-3 font-semibold text-zinc-900">{m.product_name}</td>
-                      <td className="py-3 px-3 uppercase font-semibold text-[10px]">
-                        <span
-                          className={`px-2 py-0.5 rounded-full border ${
-                            m.type === "stock_in"
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : m.type === "sale"
-                              ? "bg-zinc-100 text-zinc-700 border-zinc-200"
-                              : m.type === "wastage"
-                              ? "bg-rose-50 text-rose-700 border-rose-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}
-                        >
-                          {m.type.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right font-bold tabular-nums">
-                        <span className={m.quantity >= 0 ? "text-green-700" : "text-rose-600"}>
-                          {m.quantity > 0 ? `+${formatWeight(m.quantity)}` : formatWeight(m.quantity)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                        {formatWeight(m.previous_stock)}
-                      </td>
-                      <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
-                        {formatWeight(m.new_stock)}
-                      </td>
-                      <td className="py-3 px-3 text-zinc-700">{m.user_name}</td>
-                      <td className="py-3 pr-4 text-zinc-500">{m.reason || m.notes || "—"}</td>
-                    </tr>
-                  ))
+                  filteredMovements.map((m) => {
+                    const mUnit = products.find((pr) => pr.id === m.product_id)?.unit || "KG";
+                    return (
+                      <tr key={m.id} className="hover:bg-zinc-50/60 transition-colors">
+                        <td className="py-3 pl-4 text-zinc-500">{formatDateTime(m.created_at)}</td>
+                        <td className="py-3 px-3 font-semibold text-zinc-900">{m.product_name}</td>
+                        <td className="py-3 px-3 uppercase font-semibold text-[10px]">
+                          <span
+                            className={`px-2 py-0.5 rounded-full border ${
+                              m.type === "stock_in"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : m.type === "sale"
+                                ? "bg-zinc-100 text-zinc-700 border-zinc-200"
+                                : m.type === "wastage"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                            }`}
+                          >
+                            {m.type.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right font-bold tabular-nums">
+                          <span className={m.quantity >= 0 ? "text-green-700" : "text-rose-600"}>
+                            {m.quantity > 0 ? `+${formatWeight(m.quantity, mUnit)}` : formatWeight(m.quantity, mUnit)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
+                          {formatWeight(m.previous_stock, mUnit)}
+                        </td>
+                        <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
+                          {formatWeight(m.new_stock, mUnit)}
+                        </td>
+                        <td className="py-3 px-3 text-zinc-700">{m.user_name}</td>
+                        <td className="py-3 pr-4 text-zinc-500">{m.reason || m.notes || "—"}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

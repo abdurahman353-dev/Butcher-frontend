@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { salesService } from "@/services/sales.service";
 import { Sale, SaleItem } from "@/types";
-import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
+import { formatCurrency, formatWeight, formatDateTime, formatUnitLabel } from "@/lib/formatters";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
 import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
@@ -24,8 +24,10 @@ import {
   Info,
   DollarSign,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ItemRefundState {
   selected: boolean;
@@ -34,12 +36,14 @@ interface ItemRefundState {
 
 export default function SaleDetailPage() {
   const { confirm, alert } = useSystemDialog();
+  const { isAdmin } = useAuth();
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
 
   const [sale, setSale] = useState<Sale | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
@@ -47,8 +51,36 @@ export default function SaleDetailPage() {
   // Refund Modal State
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [refundReason, setRefundReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [itemStates, setItemStates] = useState<Record<number, ItemRefundState>>({});
+
+  const handleDeleteSale = async () => {
+    if (!sale) return;
+    const netPaid = Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0));
+    const confirmed = await confirm({
+      title: `Delete Sale #${sale.sale_number}?`,
+      message: `Are you sure you want to permanently delete this sale? This will deduct the collected amount (${formatCurrency(netPaid)}) everywhere (financial ledger, cashier shift, customer stats). Deleting a sale does NOT restore stock (only refunds restore stock). This action cannot be undone.`,
+      confirmText: "Yes, Delete Sale",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      await salesService.deleteSale(sale.id);
+      router.push("/sales");
+    } catch (err: any) {
+      alert({
+        title: "Delete Failed",
+        message: err?.response?.data?.message || err?.message || "Failed to delete sale.",
+        type: "danger",
+      });
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function loadSale() {
@@ -66,6 +98,10 @@ export default function SaleDetailPage() {
   }, [id]);
 
   // Initialize item refund states whenever the modal is opened
+  // Returns the number of decimal places to use for a unit
+  const unitDecimals = (unit?: string) =>
+    (unit || "KG").toUpperCase() === "KG" ? 3 : 0;
+
   const openRefundModal = () => {
     if (!sale) return;
     const initialStates: Record<number, ItemRefundState> = {};
@@ -73,14 +109,16 @@ export default function SaleDetailPage() {
       const alreadyRefunded = Number(item.refunded_weight || 0);
       const remaining = Math.max(0, Number(item.weight) - alreadyRefunded);
       const isFullyRefunded = Boolean(item.is_refunded || remaining <= 0.0001);
+      const dec = unitDecimals(item.unit);
 
       initialStates[item.id] = {
         selected: !isFullyRefunded,
-        refundWeight: isFullyRefunded ? "0" : remaining.toFixed(3),
+        refundWeight: isFullyRefunded ? "0" : remaining.toFixed(dec),
       };
     });
     setItemStates(initialStates);
     setRefundReason("");
+    setReasonError(false);
     setIsRefundModalOpen(true);
   };
 
@@ -120,9 +158,10 @@ export default function SaleDetailPage() {
       sale.items.forEach((item) => {
         const remaining = getItemRemainingWeight(item);
         if (remaining > 0.0001) {
+          const dec = unitDecimals(item.unit);
           next[item.id] = {
             selected: select,
-            refundWeight: remaining.toFixed(3),
+            refundWeight: remaining.toFixed(dec),
           };
         }
       });
@@ -130,12 +169,15 @@ export default function SaleDetailPage() {
     });
   };
 
-  const handleItemWeightChange = (itemId: number, value: string) => {
+  const handleItemWeightChange = (itemId: number, value: string, max: number) => {
+    // Clamp: never allow a value greater than the refundable amount
+    const num = parseFloat(value);
+    const clamped = !isNaN(num) && num > max ? max.toString() : value;
     setItemStates((prev) => ({
       ...prev,
       [itemId]: {
         ...prev[itemId],
-        refundWeight: value,
+        refundWeight: clamped,
       },
     }));
   };
@@ -155,11 +197,12 @@ export default function SaleDetailPage() {
 
   const handleSetMaxWeight = (item: SaleItem) => {
     const remaining = getItemRemainingWeight(item);
+    const dec = unitDecimals(item.unit);
     setItemStates((prev) => ({
       ...prev,
       [item.id]: {
         selected: true,
-        refundWeight: remaining.toFixed(3),
+        refundWeight: remaining.toFixed(dec),
       },
     }));
   };
@@ -168,11 +211,10 @@ export default function SaleDetailPage() {
     if (!sale) return;
 
     if (!refundReason.trim()) {
-      await alert({
-        title: "Refund Reason Required",
-        message: "Please enter an explanation or reason for processing this refund.",
-        type: "warning",
-      });
+      setReasonError(true);
+      // Scroll the reason field into view
+      document.getElementById("refund-reason-field")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("refund-reason-field")?.focus();
       return;
     }
 
@@ -187,9 +229,11 @@ export default function SaleDetailPage() {
         if (weight <= 0) continue;
 
         if (weight > remaining + 0.0001) {
+          const dec = unitDecimals(item.unit);
+          const unitLbl = formatUnitLabel(item.unit);
           await alert({
-            title: "Weight Exceeds Refundable Amount",
-            message: `You entered ${weight.toFixed(3)} KG for "${item.product_name}", but only ${remaining.toFixed(3)} KG is refundable.`,
+            title: "Quantity Exceeds Refundable Amount",
+            message: `You entered ${weight.toFixed(dec)} ${unitLbl} for "${item.product_name}", but only ${remaining.toFixed(dec)} ${unitLbl} is refundable.`,
             type: "warning",
           });
           return;
@@ -308,9 +352,9 @@ export default function SaleDetailPage() {
           <button
             type="button"
             onClick={() => setIsReceiptOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+            className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
           >
-            <Printer className="w-3.5 h-3.5 text-zinc-500" />
+            <Printer className="w-3.5 h-3.5 text-emerald-600" />
             <span>Print Receipt</span>
           </button>
 
@@ -318,10 +362,23 @@ export default function SaleDetailPage() {
             <button
               type="button"
               onClick={openRefundModal}
-              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
               <span>{isPartiallyRefunded ? "Refund Additional Cuts" : "Refund / Return Cuts"}</span>
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleDeleteSale}
+              disabled={isDeleting}
+              className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95 disabled:opacity-50"
+              title="Permanently delete sale (Super Admin only - deducts money everywhere, does not restore stock)"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>{isDeleting ? "Deleting..." : "Delete Sale"}</span>
             </button>
           )}
         </div>
@@ -377,15 +434,16 @@ export default function SaleDetailPage() {
       {isFullyRefunded && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-          <div className="text-xs space-y-1">
+          <div className="text-xs space-y-1.5 flex-1">
             <h4 className="font-bold text-rose-900">This sale has been fully refunded and inventory restored</h4>
             {sale.refund_reason && (
-              <p className="text-rose-700">
-                Reason: <strong>{sale.refund_reason}</strong>
-              </p>
+              <div className="mt-1 px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg">
+                <span className="text-[10px] uppercase font-bold text-rose-500 tracking-wider block mb-0.5">Refund Reason</span>
+                <p className="text-rose-900 font-semibold">{sale.refund_reason}</p>
+              </div>
             )}
             <p className="text-rose-500 text-[11px]">
-              Processed by {sale.refunded_by || "Authorized Staff"}
+              Processed by <strong>{sale.refunded_by || "Authorized Staff"}</strong>
               {sale.refunded_at ? ` on ${formatDateTime(sale.refunded_at)}` : ""}
             </p>
           </div>
@@ -395,20 +453,21 @@ export default function SaleDetailPage() {
       {/* Partially Refunded Banner if applicable */}
       {isPartiallyRefunded && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 flex-1">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-xs space-y-1">
+            <div className="text-xs space-y-1.5 flex-1">
               <h4 className="font-bold text-amber-900">This sale has been partially refunded</h4>
               <p className="text-amber-800">
                 Refunded Amount: <strong className="text-rose-700">{formatCurrency(sale.refunded_amount || 0)}</strong> &bull; Net Balance: <strong className="text-emerald-700">{formatCurrency(Number(sale.total) - Number(sale.refunded_amount || 0))}</strong>
               </p>
               {sale.refund_reason && (
-                <p className="text-amber-700">
-                  Latest Reason: <strong>{sale.refund_reason}</strong>
-                </p>
+                <div className="px-3 py-2 bg-amber-100 border border-amber-300 rounded-lg">
+                  <span className="text-[10px] uppercase font-bold text-amber-600 tracking-wider block mb-0.5">Refund Reason</span>
+                  <p className="text-amber-900 font-semibold">{sale.refund_reason}</p>
+                </div>
               )}
               <p className="text-amber-600 text-[11px]">
-                Last updated by {sale.refunded_by || "Authorized Staff"}
+                Last updated by <strong>{sale.refunded_by || "Authorized Staff"}</strong>
                 {sale.refunded_at ? ` on ${formatDateTime(sale.refunded_at)}` : ""}
               </p>
             </div>
@@ -470,7 +529,7 @@ export default function SaleDetailPage() {
                 <th className="py-3 pl-4">Product Cut</th>
                 <th className="py-3 px-3">Original Weight</th>
                 <th className="py-3 px-3">Refunded</th>
-                <th className="py-3 px-3">Price / KG</th>
+                <th className="py-3 px-3">Price / Unit</th>
                 <th className="py-3 pr-4 text-right">Subtotal</th>
               </tr>
             </thead>
@@ -507,18 +566,18 @@ export default function SaleDetailPage() {
                         )}
                         {isPartiallyRefundedItem && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            {formatWeight(refundedWeight)} Returned
+                            {formatWeight(refundedWeight, item.unit)} Returned
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="py-3 px-3 font-semibold text-zinc-700 tabular-nums">
-                      {formatWeight(item.weight)}
+                      {formatWeight(item.weight, item.unit)}
                     </td>
                     <td className="py-3 px-3 tabular-nums">
                       {refundedWeight > 0 ? (
                         <span className="font-semibold text-rose-600">
-                          {formatWeight(refundedWeight)}
+                          {formatWeight(refundedWeight, item.unit)}
                         </span>
                       ) : (
                         <span className="text-zinc-400">&mdash;</span>
@@ -557,23 +616,29 @@ export default function SaleDetailPage() {
 
           <div className="flex justify-between w-64 text-zinc-700">
             <span>Original Total:</span>
-            <span className="font-bold text-zinc-900 tabular-nums">
+            <span
+              className={`font-bold tabular-nums ${
+                (sale.refunded_amount || 0) > 0
+                  ? "line-through text-zinc-400 decoration-rose-500/80"
+                  : "text-zinc-900"
+              }`}
+            >
               {formatCurrency(sale.total)}
             </span>
           </div>
 
           {(sale.refunded_amount || 0) > 0 && (
-            <div className="flex justify-between w-64 text-rose-600 font-semibold">
-              <span>Total Refunded:</span>
+            <div className="flex justify-between w-64 text-rose-600 font-semibold text-xs">
+              <span>Refunded Amount:</span>
               <span className="tabular-nums">-{formatCurrency(sale.refunded_amount || 0)}</span>
             </div>
           )}
 
           <div className="pt-2 border-t border-zinc-200 flex justify-between w-64 items-baseline">
             <span className="text-sm font-bold uppercase text-zinc-900">
-              {(sale.refunded_amount || 0) > 0 ? "Net Settled:" : "Grand Total:"}
+              {(sale.refunded_amount || 0) > 0 ? "Remaining Balance:" : "Grand Total:"}
             </span>
-            <span className="text-xl font-bold text-green-700 tabular-nums">
+            <span className="text-xl font-black text-emerald-700 tabular-nums">
               {formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}
             </span>
           </div>
@@ -684,14 +749,14 @@ export default function SaleDetailPage() {
                               {item.product_name}
                             </label>
                             <div className="text-[11px] text-zinc-500 flex items-center gap-2 flex-wrap mt-0.5">
-                              <span>Bought: <strong>{formatWeight(item.weight)}</strong></span>
+                              <span>Bought: <strong>{formatWeight(item.weight, item.unit)}</strong></span>
                               <span>&bull;</span>
-                              <span>Rate: <strong>{formatCurrency(item.price_per_kg)}/KG</strong></span>
+                              <span>Rate: <strong>{formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}</strong></span>
                               {Number(item.refunded_weight || 0) > 0 && (
                                 <>
                                   <span>&bull;</span>
                                   <span className="text-amber-700 font-semibold">
-                                    {formatWeight(item.refunded_weight || 0)} already refunded
+                                    {formatWeight(item.refunded_weight || 0, item.unit)} already refunded
                                   </span>
                                 </>
                               )}
@@ -707,21 +772,23 @@ export default function SaleDetailPage() {
                         ) : (
                           <div className="flex items-center gap-2 self-end sm:self-center">
                             <div className="flex items-center gap-1">
-                              <span className="text-[11px] text-zinc-500 hidden sm:inline">KG:</span>
+                              <span className="text-[11px] text-zinc-500 hidden sm:inline">
+                                {formatUnitLabel(item.unit)}:
+                              </span>
                               <input
                                 type="number"
-                                step="0.001"
-                                min="0.001"
+                                step={(item.unit || "KG").toUpperCase() === "KG" ? "0.001" : "1"}
+                                min={(item.unit || "KG").toUpperCase() === "KG" ? "0.001" : "1"}
                                 max={remaining}
                                 disabled={!state.selected || isRefunding}
                                 value={state.refundWeight}
-                                onChange={(e) => handleItemWeightChange(item.id, e.target.value)}
-                                placeholder="0.000"
+                                onChange={(e) => handleItemWeightChange(item.id, e.target.value, remaining)}
+                                placeholder={(item.unit || "KG").toUpperCase() === "KG" ? "0.000" : "0"}
                                 className="w-24 h-9 bg-white border border-zinc-200 rounded-lg px-2 text-xs font-bold text-zinc-900 text-right focus:outline-hidden focus:border-rose-500 focus:ring-1 focus:ring-rose-500 disabled:bg-zinc-100 disabled:text-zinc-400"
                               />
                               <button
                                 type="button"
-                                title={`Set to max refundable (${remaining.toFixed(3)} KG)`}
+                                title={`Set to max refundable (${formatWeight(remaining, item.unit)})`}
                                 disabled={isRefunding}
                                 onClick={() => handleSetMaxWeight(item)}
                                 className="px-2 h-9 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-bold transition-colors"
@@ -735,7 +802,7 @@ export default function SaleDetailPage() {
                                 {state.selected ? formatCurrency(itemRefundCost) : "KSh 0.00"}
                               </span>
                               <span className="text-[10px] text-zinc-400 block">
-                                {remaining.toFixed(3)} KG left
+                                {formatWeight(remaining, item.unit)} left
                               </span>
                             </div>
                           </div>
@@ -748,16 +815,29 @@ export default function SaleDetailPage() {
 
               {/* Refund Reason */}
               <div className="pt-2">
-                <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                <label htmlFor="refund-reason-field" className={`block text-xs font-semibold mb-1 ${reasonError ? "text-rose-600" : "text-zinc-700"}`}>
                   Reason for Refund <span className="text-rose-500">*</span>
+                  {reasonError && (
+                    <span className="ml-2 text-[11px] font-bold text-rose-600 normal-case">
+                      ⚠ Please enter a reason before proceeding
+                    </span>
+                  )}
                 </label>
                 <textarea
+                  id="refund-reason-field"
                   value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
+                  onChange={(e) => {
+                    setRefundReason(e.target.value);
+                    if (e.target.value.trim()) setReasonError(false);
+                  }}
                   placeholder="e.g. Customer returned wrong cut, quality issue, entered wrong weight at checkout..."
                   rows={2}
                   disabled={isRefunding}
-                  className="w-full bg-white border border-zinc-200 rounded-xl p-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-rose-500 focus:ring-1 focus:ring-rose-500 shadow-2xs disabled:bg-zinc-50"
+                  className={`w-full bg-white border rounded-xl p-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs disabled:bg-zinc-50 transition-colors ${
+                    reasonError
+                      ? "border-rose-500 ring-1 ring-rose-500 bg-rose-50/30 focus:border-rose-600 focus:ring-rose-600"
+                      : "border-zinc-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
+                  }`}
                 />
               </div>
             </div>
@@ -786,7 +866,7 @@ export default function SaleDetailPage() {
                 <button
                   type="button"
                   onClick={handleSubmitRefund}
-                  disabled={isRefunding || liveRefundTotal <= 0 || !refundReason.trim()}
+                  disabled={isRefunding || liveRefundTotal <= 0}
                   className="w-1/2 sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 active:scale-95 flex items-center justify-center gap-1.5"
                 >
                   {isRefunding ? (

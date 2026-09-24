@@ -460,6 +460,7 @@ export default function PosPage() {
               pricePerKg={selectedProductForWeight.price_per_kg}
               availableStock={selectedProductForWeight.current_stock}
               initialWeight={1.0}
+              unit={selectedProductForWeight.unit}
               onConfirm={handleConfirmWeight}
               onCancel={() => setSelectedProductForWeight(null)}
             />
@@ -480,6 +481,7 @@ export default function PosPage() {
               pricePerKg={editingCartItem.price_per_kg}
               availableStock={editingCartItem.available_stock}
               initialWeight={editingCartItem.weight}
+              unit={editingCartItem.unit}
               onConfirm={handleConfirmEditWeight}
               onCancel={() => setEditingCartItem(null)}
             />

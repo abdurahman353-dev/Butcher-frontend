@@ -9,6 +9,7 @@ export interface BulkProductInput {
   buying_cost_per_kg: number;
   current_stock?: number;
   min_stock?: number;
+  unit?: string;
 }
 
 export const productsService = {

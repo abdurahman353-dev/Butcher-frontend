@@ -39,11 +39,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
           ) : isLowStock ? (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-0.5">
               <AlertTriangle className="w-2.5 h-2.5" />
-              {formatWeight(product.current_stock)}
+              {formatWeight(product.current_stock, product.unit)}
             </span>
           ) : (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/90 text-zinc-600 border border-zinc-200">
-              {formatWeight(product.current_stock)}
+              {formatWeight(product.current_stock, product.unit)}
             </span>
           )}
         </div>
@@ -58,7 +58,9 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
         <div className="mt-2.5 flex items-center justify-between">
           <div>
-            <span className="text-[10px] text-zinc-400 uppercase tracking-wide">Per KG</span>
+            <span className="text-[10px] text-zinc-400 uppercase tracking-wide">
+              Per {product.unit?.toUpperCase() === "PACK" ? "Pack" : product.unit?.toUpperCase() === "PCS" ? "Pc" : "KG"}
+            </span>
             <p className="text-base font-bold text-green-700 tabular-nums leading-tight">
               {formatCurrency(product.price_per_kg)}
             </p>

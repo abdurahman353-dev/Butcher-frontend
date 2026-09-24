@@ -37,10 +37,15 @@ import {
   Layers,
   ChevronDown,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSystemDialog } from "@/contexts/DialogContext";
 
 function SalesLedger() {
+  const { isAdmin } = useAuth();
+  const { confirm, alert } = useSystemDialog();
   const { settings: shopSettings } = useShopSettings();
   const searchParams = useSearchParams();
   const urlPaymentStatus = searchParams?.get("payment_status") || "all";
@@ -92,6 +97,7 @@ function SalesLedger() {
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMountRef = useRef(true);
@@ -188,6 +194,33 @@ function SalesLedger() {
   const handleManualRefresh = () => {
     setIsRefreshing(true);
     fetchSales();
+  };
+
+  const handleDeleteSale = async (sale: Sale) => {
+    const netPaid = Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0));
+    const confirmed = await confirm({
+      title: `Delete Sale #${sale.sale_number}?`,
+      message: `Are you sure you want to permanently delete this sale? This will deduct the collected amount (${formatCurrency(netPaid)}) everywhere (financial ledger, cashier shift, customer stats). Deleting a sale does NOT restore stock (only refunds restore stock). This action cannot be undone.`,
+      confirmText: "Yes, Delete Sale",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingSaleId(sale.id);
+      await salesService.deleteSale(sale.id);
+      await fetchSales();
+    } catch (err: any) {
+      alert({
+        title: "Delete Failed",
+        message: err?.response?.data?.message || err?.message || "Failed to delete sale.",
+        type: "danger",
+      });
+    } finally {
+      setDeletingSaleId(null);
+    }
   };
 
   // Quick Date Range Setters
@@ -1177,8 +1210,38 @@ function SalesLedger() {
                     </td>
 
                     {/* Total Amount */}
-                    <td className="py-3.5 px-3 text-right font-black text-zinc-900 tabular-nums text-sm whitespace-nowrap">
-                      {formatCurrency(sale.total)}
+                    <td className="py-3.5 px-3 text-right tabular-nums whitespace-nowrap">
+                      {sale.sale_status === "partially_refunded" || ((sale.refunded_amount ?? 0) > 0 && sale.sale_status !== "refunded") ? (
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <span className="text-[11px] text-zinc-400 line-through decoration-rose-500/80 font-medium">
+                              {formatCurrency(sale.total)}
+                            </span>
+                            <span className="font-black text-emerald-700 text-sm">
+                              {formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-100">
+                            -{formatCurrency(sale.refunded_amount || 0)} refunded
+                          </span>
+                        </div>
+                      ) : sale.sale_status === "refunded" ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-[11px] text-zinc-400 line-through decoration-rose-500/80 font-medium">
+                            {formatCurrency(sale.total)}
+                          </span>
+                          <span className="font-black text-rose-600 text-sm">
+                            {formatCurrency(0)}
+                          </span>
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-100">
+                            Fully refunded
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-black text-zinc-900 text-sm">
+                          {formatCurrency(sale.total)}
+                        </span>
+                      )}
                     </td>
 
                     {/* Status */}
@@ -1215,7 +1278,7 @@ function SalesLedger() {
                         )}
                         <Link
                           href={`/sales/${sale.id}`}
-                          className="p-1.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-700 hover:text-zinc-900 transition-all shadow-2xs active:scale-90"
+                          className="p-1.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 transition-all shadow-2xs active:scale-90"
                           title="View sale audit details"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -1223,11 +1286,22 @@ function SalesLedger() {
                         <button
                           type="button"
                           onClick={() => setViewingReceiptSale(sale)}
-                          className="p-1.5 rounded-xl border border-zinc-200 bg-white hover:bg-green-50 text-zinc-700 hover:text-green-700 hover:border-green-300 transition-all shadow-2xs active:scale-90"
+                          className="p-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-all shadow-2xs active:scale-90"
                           title="Print customer thermal receipt"
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSale(sale)}
+                            disabled={deletingSaleId === sale.id}
+                            className="p-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-all shadow-2xs active:scale-90 disabled:opacity-50"
+                            title="Delete sale (Super Admin only - deducts money everywhere, does not restore stock)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

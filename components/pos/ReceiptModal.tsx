@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { Sale } from "@/types";
-import { formatCurrency, formatWeight, formatDateTime } from "@/lib/formatters";
+import { formatCurrency, formatWeight, formatDateTime, formatUnitLabel } from "@/lib/formatters";
 import { Printer, X } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { printElementInWindow } from "@/lib/printWindow";
@@ -87,10 +87,17 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           </div>
 
           {/* 2. Transaction Metadata Box */}
+          {/* 2. Transaction Metadata Box */}
           <div className="border-2 border-black p-2 text-xs font-bold text-black space-y-1">
             <div className="flex justify-between font-black text-sm">
               <span>RECEIPT: #{sale.sale_number}</span>
-              <span>{sale.sale_status.toUpperCase()}</span>
+              <span className={sale.sale_status === "partially_refunded" ? "text-amber-900" : sale.sale_status === "refunded" ? "text-rose-900" : ""}>
+                {sale.sale_status === "partially_refunded"
+                  ? "PARTIALLY REFUNDED"
+                  : sale.sale_status === "refunded"
+                  ? "FULLY REFUNDED"
+                  : sale.sale_status.toUpperCase()}
+              </span>
             </div>
             <div>
               <span>Date: {formatDateTime(sale.created_at)}</span>
@@ -107,24 +114,43 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
 
           {/* 3. Line Items (Clean list with no outer box) */}
           <div className="py-1 space-y-2.5 text-black">
-            {sale.items.map((item) => (
-              <div key={item.id} className="space-y-0.5">
-                <div className="flex justify-between font-black text-xs sm:text-sm">
-                  <span>{item.product_name}</span>
-                  <span>{formatCurrency(item.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-black">
-                  <span>
-                    {formatWeight(item.weight)} x {formatCurrency(item.price_per_kg)}/KG
-                  </span>
-                  {Number(item.discount || 0) > 0 && (
-                    <span className="text-[11px]">
-                      (Disc: -{formatCurrency(item.discount || 0)})
+            {sale.items.map((item) => {
+              const refundedWeight = Number(item.refunded_weight || 0);
+              const isItemFullyRefunded = Boolean(
+                item.is_refunded || (refundedWeight >= Number(item.weight) - 0.0001 && refundedWeight > 0)
+              );
+
+              return (
+                <div key={item.id} className="space-y-0.5">
+                  <div className="flex justify-between font-black text-xs sm:text-sm">
+                    <span className={isItemFullyRefunded ? "line-through" : ""}>
+                      {item.product_name}
                     </span>
+                    <span className={isItemFullyRefunded ? "line-through text-zinc-500" : ""}>
+                      {formatCurrency(item.subtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-black">
+                    <span>
+                      {formatWeight(item.weight, item.unit)} x {formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}
+                    </span>
+                    {Number(item.discount || 0) > 0 && (
+                      <span className="text-[11px]">
+                        (Disc: -{formatCurrency(item.discount || 0)})
+                      </span>
+                    )}
+                  </div>
+                  {refundedWeight > 0 && (
+                    <div className="flex justify-between text-[11px] font-black text-black pl-1.5 border-l-2 border-black">
+                      <span>↳ {isItemFullyRefunded ? "Returned in Full:" : "Partially Returned:"}</span>
+                      <span>
+                        -{formatWeight(refundedWeight, item.unit)}
+                      </span>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* 4. Subtotal & Total Box */}
@@ -141,14 +167,69 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
               </div>
             )}
 
-            <div className="flex justify-between text-sm sm:text-base font-black pt-1 border-t-2 border-black">
-              <span>TOTAL:</span>
+            <div
+              className={`flex justify-between font-black pt-1 border-t-2 border-black ${
+                (sale.refunded_amount || 0) > 0 ? "text-xs text-zinc-600 line-through" : "text-sm sm:text-base text-black"
+              }`}
+            >
+              <span>{(sale.refunded_amount || 0) > 0 ? "ORIGINAL TOTAL:" : "TOTAL:"}</span>
               <span>{formatCurrency(sale.total)}</span>
             </div>
+
+            {(sale.refunded_amount || 0) > 0 && (
+              <>
+                <div className="flex justify-between text-xs font-black text-black">
+                  <span>REFUNDED AMOUNT:</span>
+                  <span>-{formatCurrency(sale.refunded_amount || 0)}</span>
+                </div>
+                <div className="flex justify-between text-sm sm:text-base font-black pt-1 border-t-2 border-black text-black">
+                  <span>NET TOTAL DUE:</span>
+                  <span>{formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* 5. Settlement / Status Banner Box */}
-          {sale.payment_status === "pending" || sale.payment_method === "credit" ? (
+          {sale.sale_status === "refunded" ? (
+            <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
+              <div className="font-black text-xs uppercase tracking-wider">
+                *** SALE FULLY REFUNDED &amp; CANCELLED ***
+              </div>
+              <div className="text-xs font-black">
+                TOTAL REFUNDED: -{formatCurrency(sale.refunded_amount || sale.total)}
+              </div>
+              {sale.refund_reason && (
+                <div className="text-[11px] font-bold">
+                  Reason: {sale.refund_reason}
+                </div>
+              )}
+              {sale.refunded_at && (
+                <div className="text-[10px] font-bold">
+                  Processed on {formatDateTime(sale.refunded_at)}{sale.refunded_by ? ` (${sale.refunded_by})` : ""}
+                </div>
+              )}
+            </div>
+          ) : sale.sale_status === "partially_refunded" || ((sale.refunded_amount || 0) > 0) ? (
+            <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
+              <div className="font-black text-xs uppercase tracking-wider">
+                *** PARTIALLY REFUNDED RECEIPT ***
+              </div>
+              <div className="text-xs font-black">
+                REFUNDED: -{formatCurrency(sale.refunded_amount || 0)} &bull; NET: {formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}
+              </div>
+              {sale.refund_reason && (
+                <div className="text-[11px] font-bold">
+                  Reason: {sale.refund_reason}
+                </div>
+              )}
+              {sale.refunded_at && (
+                <div className="text-[10px] font-bold">
+                  Refunded on {formatDateTime(sale.refunded_at)}{sale.refunded_by ? ` (${sale.refunded_by})` : ""}
+                </div>
+              )}
+            </div>
+          ) : sale.payment_status === "pending" || sale.payment_method === "credit" ? (
             <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
               <div className="font-black text-xs uppercase tracking-wider">
                 *** PAY LATER / CREDIT BILL ***
@@ -230,6 +311,19 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                   <span className="font-black">{formatCurrency(sale.amount_received || sale.total)}</span>
                 </div>
               </>
+            )}
+
+            {(sale.refunded_amount || 0) > 0 && (
+              <div className="pt-1 mt-1 border-t-2 border-black space-y-0.5">
+                <div className="flex justify-between text-black">
+                  <span>Refund Disbursed:</span>
+                  <span className="font-black">-{formatCurrency(sale.refunded_amount || 0)}</span>
+                </div>
+                <div className="flex justify-between font-black text-black">
+                  <span>Net Retained:</span>
+                  <span>{formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}</span>
+                </div>
+              </div>
             )}
 
             {sale.notes && (

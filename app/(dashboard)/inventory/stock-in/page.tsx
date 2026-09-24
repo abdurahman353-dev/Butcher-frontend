@@ -52,6 +52,10 @@ function StockInForm() {
 
   const activeProductId = selectedProductId || (products[0]?.id ?? 0);
   const selectedProduct = products.find((p) => p.id === activeProductId);
+  const isPack = selectedProduct?.unit?.toUpperCase() === "PACK";
+  const isPcs = selectedProduct?.unit?.toUpperCase() === "PCS";
+  const isCountable = isPack || isPcs;
+  const unitLabel = isPack ? "Pack" : isPcs ? "Pc" : "KG";
 
   // Whenever the active product changes (initial load OR dropdown change), sync buying cost
   useEffect(() => {
@@ -69,7 +73,7 @@ function StockInForm() {
     if (isNaN(qty) || qty <= 0) {
       await alert({
         title: "Invalid Stock Quantity",
-        message: "Please enter a valid stock quantity greater than 0 KG.",
+        message: `Please enter a valid stock quantity greater than 0 ${unitLabel}.`,
         type: "warning",
       });
       return;
@@ -78,7 +82,7 @@ function StockInForm() {
     if (isNaN(cost) || cost <= 0) {
       await alert({
         title: "Supplier Buying Cost Required",
-        message: "Please enter a valid supplier buying cost per KG to maintain accurate profit and valuation records.",
+        message: `Please enter a valid supplier buying cost per ${unitLabel} to maintain accurate profit and valuation records.`,
         type: "warning",
       });
       return;
@@ -86,7 +90,7 @@ function StockInForm() {
 
     const confirmed = await confirm({
       title: "Confirm Stock In",
-      message: `Add ${formatWeight(qty)} of "${selectedProduct?.name || 'Product'}" to stock?`,
+      message: `Add ${formatWeight(qty, selectedProduct?.unit)} of "${selectedProduct?.name || 'Product'}" to stock?`,
       confirmText: "Yes, Add Stock",
       cancelText: "Cancel",
       type: "info",
@@ -103,7 +107,7 @@ function StockInForm() {
         notes,
       });
       setSuccessMessage(
-        `Added ${formatWeight(qty)} to ${updated.name}. New stock: ${formatWeight(updated.current_stock)}.`
+        `Added ${formatWeight(qty, updated.unit)} to ${updated.name}. New stock: ${formatWeight(updated.current_stock, updated.unit)}.`
       );
       setQuantity("");
       setNotes("");
@@ -155,7 +159,7 @@ function StockInForm() {
           >
             {products.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} (Current: {formatWeight(p.current_stock)})
+                {p.name} (Current: {formatWeight(p.current_stock, p.unit)})
               </option>
             ))}
           </select>
@@ -165,29 +169,30 @@ function StockInForm() {
           <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl flex justify-between text-xs text-zinc-600">
             <span>Current Available Stock:</span>
             <span className="font-bold text-zinc-900 tabular-nums">
-              {formatWeight(selectedProduct.current_stock)}
+              {formatWeight(selectedProduct.current_stock, selectedProduct.unit)}
             </span>
           </div>
         )}
 
         <div>
           <label className="block font-semibold uppercase text-zinc-700 mb-1">
-            Quantity Added (KG) <span className="text-rose-500">*</span>
+            Quantity Added ({unitLabel}) <span className="text-rose-500">*</span>
           </label>
           <input
             type="number"
-            step="0.001"
+            step={isCountable ? "1" : "0.001"}
+            min={isCountable ? "1" : "0.001"}
             required
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            placeholder="e.g. 50.000"
+            placeholder={isCountable ? "e.g. 20" : "e.g. 50.000"}
             className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-lg font-bold text-green-700 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
           />
         </div>
 
         <div>
           <label className="block font-semibold uppercase text-zinc-700 mb-1">
-            Supplier Buying Cost / KG (KSh) <span className="text-rose-500">*</span>
+            Supplier Buying Cost / {unitLabel} (KSh) <span className="text-rose-500">*</span>
           </label>
           <input
             type="number"

@@ -10,6 +10,7 @@ interface WeightInputProps {
   pricePerKg: number;
   availableStock: number;
   initialWeight?: number;
+  unit?: string;
   onConfirm: (weightKg: number) => void;
   onCancel?: () => void;
 }
@@ -19,10 +20,18 @@ export function WeightInput({
   pricePerKg,
   availableStock,
   initialWeight = 1.0,
+  unit = "KG",
   onConfirm,
   onCancel,
 }: WeightInputProps) {
-  const [weightStr, setWeightStr] = useState<string>(initialWeight.toString());
+  const isPack = unit?.toUpperCase() === "PACK";
+  const isPcs = unit?.toUpperCase() === "PCS";
+  const isCountable = isPack || isPcs;
+  const unitLabel = isPack ? "PACK" : isPcs ? "PC" : "KG";
+
+  const [weightStr, setWeightStr] = useState<string>(
+    isCountable ? Math.max(1, Math.round(initialWeight)).toString() : initialWeight.toString()
+  );
   const [error, setError] = useState<string | null>(null);
 
   const numericWeight = parseFloat(weightStr) || 0;
@@ -30,13 +39,13 @@ export function WeightInput({
 
   useEffect(() => {
     if (numericWeight > availableStock) {
-      setError(`Exceeds available stock (${formatWeight(availableStock)})`);
+      setError(`Exceeds available stock (${formatWeight(availableStock, unit)})`);
     } else if (numericWeight <= 0) {
-      setError("Enter a valid weight greater than 0");
+      setError(`Enter a valid quantity greater than 0`);
     } else {
       setError(null);
     }
-  }, [numericWeight, availableStock]);
+  }, [numericWeight, availableStock, unit]);
 
   const handleKeypadPress = (val: string) => {
     if (val === "C") { setWeightStr("0"); return; }
@@ -45,6 +54,7 @@ export function WeightInput({
       return;
     }
     if (val === ".") {
+      if (isCountable) return; // Packs are whole units
       if (!weightStr.includes(".")) {
         setWeightStr((prev) => (prev === "0" ? "0." : prev + "."));
       }
@@ -53,19 +63,18 @@ export function WeightInput({
     setWeightStr((prev) => {
       if (prev === "0") return val;
       const parts = prev.split(".");
-      // Cap integer part at 4 digits (max 9999 KG) and decimal at 3 digits
       if (parts.length > 1 && parts[1].length >= 3) return prev;
       if (parts.length === 1 && parts[0].length >= 4) return prev;
       return prev + val;
     });
   };
 
-  const handleSetPreset = (presetKg: number) => setWeightStr(presetKg.toString());
+  const handleSetPreset = (preset: number) => setWeightStr(preset.toString());
 
   const handleConfirm = () => {
-    if (numericWeight <= 0) { setError("Weight must be greater than 0"); return; }
+    if (numericWeight <= 0) { setError("Quantity must be greater than 0"); return; }
     if (numericWeight > availableStock) {
-      setError(`Cannot exceed available stock of ${formatWeight(availableStock)}`);
+      setError(`Cannot exceed available stock of ${formatWeight(availableStock, unit)}`);
       return;
     }
     onConfirm(roundTo(numericWeight, 3));
@@ -74,14 +83,14 @@ export function WeightInput({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key >= "0" && e.key <= "9") { handleKeypadPress(e.key); }
-      else if (e.key === ".") { handleKeypadPress("."); }
+      else if (e.key === "." && !isCountable) { handleKeypadPress("."); }
       else if (e.key === "Backspace") { handleKeypadPress("BACK"); }
       else if (e.key === "Enter") { e.preventDefault(); handleConfirm(); }
       else if (e.key === "Escape" && onCancel) { onCancel(); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [weightStr, numericWeight, availableStock]);
+  }, [weightStr, numericWeight, availableStock, isCountable]);
 
   return (
     <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-xl max-w-sm w-full text-zinc-900 select-none">
@@ -93,12 +102,12 @@ export function WeightInput({
             <h3 className="text-sm font-bold text-zinc-900">{productName}</h3>
           </div>
           <p className="text-xs text-zinc-500 mt-0.5">
-            Unit price: <span className="text-green-700 font-bold">{formatCurrency(pricePerKg)}</span> / KG
+            Unit price: <span className="text-green-700 font-bold">{formatCurrency(pricePerKg)}</span> / {unitLabel}
           </p>
         </div>
         <div className="text-right">
           <span className="text-[11px] uppercase text-zinc-400 font-medium">Available</span>
-          <p className="text-xs font-bold text-zinc-700">{formatWeight(availableStock)}</p>
+          <p className="text-xs font-bold text-zinc-700">{formatWeight(availableStock, unit)}</p>
         </div>
       </div>
 
@@ -107,16 +116,26 @@ export function WeightInput({
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-medium">
             <Scale className="w-3.5 h-3.5 text-green-600" />
-            <span>Weighed Quantity</span>
+            <span>{isCountable ? "Package Quantity" : "Weighed Quantity"}</span>
           </div>
           <span className="text-xs text-zinc-400">Subtotal</span>
         </div>
         <div className="flex items-baseline justify-between gap-2 min-w-0">
           <div className="flex items-baseline gap-1 min-w-0 shrink">
             <span className="text-2xl font-bold tabular-nums text-zinc-900 truncate">
-              {numericWeight > 0 ? numericWeight.toFixed(3) : "0.000"}
+              {numericWeight > 0
+                ? isCountable
+                  ? Number.isInteger(numericWeight)
+                    ? numericWeight.toString()
+                    : numericWeight.toFixed(2)
+                  : numericWeight.toFixed(3)
+                : isCountable
+                ? "0"
+                : "0.000"}
             </span>
-            <span className="text-sm font-bold text-zinc-400 shrink-0">KG</span>
+            <span className="text-sm font-bold text-zinc-400 shrink-0">
+              {isPack ? (numericWeight === 1 ? "PACK" : "PACKS") : isPcs ? (numericWeight === 1 ? "PC" : "PCS") : "KG"}
+            </span>
           </div>
           <span className="text-lg font-bold text-green-700 tabular-nums shrink-0">
             {formatCurrency(subtotal)}
@@ -131,16 +150,27 @@ export function WeightInput({
 
       {/* Quick presets */}
       <div className="grid grid-cols-4 gap-1.5 mb-3">
-        {[0.25, 0.5, 1.0, 2.0].map((kg) => (
-          <button
-            key={kg}
-            type="button"
-            onClick={() => handleSetPreset(kg)}
-            className="py-2 bg-white hover:bg-green-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-700 transition-colors"
-          >
-            {kg >= 1 ? `${kg} KG` : `${kg * 1000}g`}
-          </button>
-        ))}
+        {isCountable
+          ? [1, 2, 5, 10].map((qty) => (
+              <button
+                key={qty}
+                type="button"
+                onClick={() => handleSetPreset(qty)}
+                className="py-2 bg-white hover:bg-green-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-700 transition-colors"
+              >
+                {qty} {isPack ? (qty === 1 ? "Pack" : "Packs") : qty === 1 ? "Pc" : "Pcs"}
+              </button>
+            ))
+          : [0.25, 0.5, 1.0, 2.0].map((kg) => (
+              <button
+                key={kg}
+                type="button"
+                onClick={() => handleSetPreset(kg)}
+                className="py-2 bg-white hover:bg-green-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-700 transition-colors"
+              >
+                {kg >= 1 ? `${kg} KG` : `${kg * 1000}g`}
+              </button>
+            ))}
       </div>
 
       {/* Keypad */}

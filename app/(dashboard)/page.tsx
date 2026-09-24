@@ -393,7 +393,7 @@ export default function DashboardPage() {
                   </td>
                 </tr>
               ) : (
-                summary.recent_sales.slice(0, 3).map((sale) => (
+                summary.recent_sales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-zinc-50/60 transition-colors">
                     <td className="py-3 pl-3 font-mono font-semibold text-zinc-900">
                       <Link href={`/sales/${sale.id}`} className="hover:text-green-700 hover:underline">
@@ -415,10 +415,40 @@ export default function DashboardPage() {
                         sale.payment_method
                       )}
                     </td>
-                    <td className="py-3 text-right font-bold text-green-700 tabular-nums">
-                      {formatCurrency(sale.total)}
+                    <td className="py-3 text-right tabular-nums whitespace-nowrap">
+                      {sale.sale_status === "partially_refunded" || ((sale.refunded_amount ?? 0) > 0 && sale.sale_status !== "refunded") ? (
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <span className="text-[11px] text-zinc-400 line-through decoration-rose-500/80 font-medium">
+                              {formatCurrency(sale.total)}
+                            </span>
+                            <span className="font-black text-emerald-700 text-sm">
+                              {formatCurrency(Math.max(0, Number(sale.total) - Number(sale.refunded_amount || 0)))}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-100">
+                            -{formatCurrency(sale.refunded_amount || 0)} refunded
+                          </span>
+                        </div>
+                      ) : sale.sale_status === "refunded" ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-[11px] text-zinc-400 line-through decoration-rose-500/80 font-medium">
+                            {formatCurrency(sale.total)}
+                          </span>
+                          <span className="font-black text-rose-600 text-sm">
+                            {formatCurrency(0)}
+                          </span>
+                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded border border-rose-100">
+                            Fully refunded
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-bold text-emerald-700 tabular-nums">
+                          {formatCurrency(sale.total)}
+                        </span>
+                      )}
                     </td>
-                    <td className="py-3 pr-3 text-center">
+                    <td className="py-3 pr-3 text-center whitespace-nowrap">
                       <StatusBadge
                         status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
                         type="sale"

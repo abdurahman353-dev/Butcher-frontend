@@ -49,7 +49,7 @@ export interface Product {
   buying_cost_per_kg?: number;
   image?: string;
   is_active: boolean;
-  unit: "KG";
+  unit: "KG" | "PACK" | "PCS" | string;
   created_at?: string;
   updated_at?: string;
 }
@@ -58,8 +58,9 @@ export interface CartItem {
   id: string; // unique item id in cart
   product_id: number;
   product_name: string;
+  unit?: string;
   price_per_kg: number;
-  weight: number; // in KG
+  weight: number; // in KG or pack count
   discount: number; // in KSh
   subtotal: number; // calculated safe decimal
   available_stock: number;
@@ -78,7 +79,8 @@ export interface SaleItem {
   sale_id: number;
   product_id: number;
   product_name: string;
-  weight: number; // in KG
+  unit?: string;
+  weight: number; // in KG or pack count
   price_per_kg: number;
   buying_cost_per_kg?: number;
   discount?: number;
