@@ -25,11 +25,13 @@ import {
   Filter,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { useAuth } from "@/hooks/useAuth";
 
 type SortKey = "name" | "current_stock" | "min_stock" | "price_per_kg" | "valuation";
 type SortDir = "asc" | "desc";
 
 export default function InventoryPage() {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<"levels" | "movements">("levels");
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -244,13 +246,15 @@ export default function InventoryPage() {
             <span>Stock In</span>
           </Link>
 
-          <Link
-            href="/inventory/adjust"
-            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Adjustment</span>
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/inventory/adjust"
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Adjustment</span>
+            </Link>
+          )}
 
           <Link
             href="/inventory/wastage"
@@ -615,13 +619,15 @@ export default function InventoryPage() {
                             >
                               + Stock
                             </Link>
-                            <Link
-                              href={`/inventory/adjust?product_id=${p.id}`}
-                              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
-                              title={`Adjust ${p.name}`}
-                            >
-                              Adjust
-                            </Link>
+                            {isAdmin && (
+                              <Link
+                                href={`/inventory/adjust?product_id=${p.id}`}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
+                                title={`Adjust ${p.name}`}
+                              >
+                                Adjust
+                              </Link>
+                            )}
                             <Link
                               href={`/inventory/wastage?product_id=${p.id}`}
                               className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"

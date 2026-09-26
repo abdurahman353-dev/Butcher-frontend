@@ -8,6 +8,7 @@ import { MeatImage } from "@/components/shared/MeatImage";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePolling } from "@/hooks/usePolling";
 import { useSystemDialog } from "@/contexts/DialogContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Package,
   Plus,
@@ -28,10 +29,12 @@ import {
   FileSpreadsheet,
   Loader2,
   Trash,
+  Lock,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function ProductsPage() {
+  const { isAdmin, isCashier } = useAuth();
   const { confirm, alert } = useSystemDialog();
   const [paginated, setPaginated] = useState<PaginatedResponse<Product>>({
     data: [],
@@ -369,7 +372,7 @@ export default function ProductsPage() {
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
         buying_cost_per_kg: parseFloat(formData.buying_cost_per_kg),
-        current_stock: parseFloat(formData.current_stock),
+        current_stock: editingProduct && !isAdmin ? editingProduct.current_stock : parseFloat(formData.current_stock),
         min_stock: parseFloat(formData.min_stock),
         unit: formData.unit || "KG",
       };
@@ -865,20 +868,39 @@ export default function ProductsPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    {editingProduct ? "Current Stock (KG)" : "Initial Stock (KG)"}
-                    {!editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-zinc-700">
+                      {editingProduct ? "Current Stock (KG)" : "Initial Stock (KG)"}
+                      {!editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
+                    </label>
+                    {editingProduct && !isAdmin && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                        <Lock className="w-2.5 h-2.5" />
+                        Read-only
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     step="0.001"
                     min="0"
                     required={!editingProduct}
+                    readOnly={Boolean(editingProduct && !isAdmin)}
+                    disabled={Boolean(editingProduct && !isAdmin)}
                     value={formData.current_stock}
                     onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
                     placeholder="e.g. 42.5"
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-bold placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={`w-full rounded-xl px-3 py-2 font-bold shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      editingProduct && !isAdmin
+                        ? "bg-zinc-100 text-zinc-500 border border-zinc-200 cursor-not-allowed select-none"
+                        : "bg-white border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
+                    }`}
                   />
+                  {editingProduct && !isAdmin && (
+                    <p className="text-[10px] text-zinc-400 mt-1">
+                      Cashier cannot edit current stock directly.
+                    </p>
+                  )}
                 </div>
 
                 <div>
