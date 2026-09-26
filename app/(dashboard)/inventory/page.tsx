@@ -256,13 +256,15 @@ export default function InventoryPage() {
             </Link>
           )}
 
-          <Link
-            href="/inventory/wastage"
-            className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
-          >
-            <Trash2 className="w-4 h-4" />
-            <span>Log Wastage</span>
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/inventory/wastage"
+              className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Log Wastage</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -628,13 +630,15 @@ export default function InventoryPage() {
                                 Adjust
                               </Link>
                             )}
-                            <Link
-                              href={`/inventory/wastage?product_id=${p.id}`}
-                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
-                              title={`Log wastage for ${p.name}`}
-                            >
-                              Waste
-                            </Link>
+                            {isAdmin && (
+                              <Link
+                                href={`/inventory/wastage?product_id=${p.id}`}
+                                className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-2xs active:scale-95"
+                                title={`Log wastage for ${p.name}`}
+                              >
+                                Waste
+                              </Link>
+                            )}
                           </div>
                         </td>
                       </tr>

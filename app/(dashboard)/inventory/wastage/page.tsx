@@ -7,10 +7,12 @@ import { inventoryService } from "@/services/inventory.service";
 import { Product, WastageRecord, WastageReason } from "@/types";
 import { formatWeight, formatCurrency, formatDateTime } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
-import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 
 export default function WastagePage() {
   const { confirm, alert } = useSystemDialog();
+  const { isAdmin } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [wastageList, setWastageList] = useState<WastageRecord[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(0);
@@ -50,6 +52,14 @@ export default function WastagePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      await alert({
+        title: "Unauthorized Action",
+        message: "Only Superadmin and Administrators can log meat wastage.",
+        type: "danger",
+      });
+      return;
+    }
     if (numQty <= 0) {
       await alert({
         title: "Invalid Wastage Quantity",
@@ -106,6 +116,45 @@ export default function WastagePage() {
       setIsSubmitting(false);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-xl mx-auto select-none">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/inventory"
+            className="p-2 rounded-xl bg-white border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition-colors shadow-2xs"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-zinc-900">Meat Wastage Logs</h1>
+            <p className="text-xs text-zinc-500">Access Restricted</p>
+          </div>
+        </div>
+
+        <div className="p-6 bg-white border border-amber-200 rounded-2xl shadow-xs space-y-4 text-center">
+          <div className="w-12 h-12 bg-amber-50 border border-amber-200 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-2xs">
+            <Lock className="w-6 h-6 text-amber-600" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-base font-bold text-zinc-900">Superadmin Access Only</h2>
+            <p className="text-xs text-zinc-600 leading-relaxed max-w-md mx-auto">
+              Logging meat wastage and trimming losses is restricted to Superadmin and Administrators. Cashiers cannot record wastage to prevent unauthorized quantity write-offs and preserve audit accuracy.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              href="/inventory"
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-xs transition-colors shadow-xs"
+            >
+              Return to Inventory
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-5xl mx-auto select-none">
