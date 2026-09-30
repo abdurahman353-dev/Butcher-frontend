@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CartItem, Customer, Sale } from "@/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
@@ -68,6 +68,32 @@ export function CheckoutModal({
   const [creditCustomerName, setCreditCustomerName] = useState(customer?.name || "");
   const [creditCustomerPhone, setCreditCustomerPhone] = useState(customer?.phone || "");
   const [creditNotes, setCreditNotes] = useState("");
+
+  // Always reset completed sale and form states when modal is opened or closed
+  useEffect(() => {
+    if (isOpen) {
+      setCompletedSale(null);
+      setSelectedMethod(
+        initialMethod === "cash" || initialMethod === "mpesa" || initialMethod === "credit" ? initialMethod : "cash"
+      );
+      setCreditCustomerName(customer?.name || "");
+      setCreditCustomerPhone(customer?.phone || "");
+      setCreditNotes("");
+      setIsProcessing(false);
+    } else {
+      setCompletedSale(null);
+    }
+  }, [isOpen, initialMethod, customer]);
+
+  const handleNextSale = () => {
+    setCompletedSale(null);
+    onNewSale();
+  };
+
+  const handleClose = () => {
+    setCompletedSale(null);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -145,7 +171,7 @@ export function CheckoutModal({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-xs"
-        onClick={() => !isProcessing && onClose()}
+        onClick={() => !isProcessing && handleClose()}
       />
 
       {/* Modal Card */}
@@ -243,7 +269,11 @@ export function CheckoutModal({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => onViewReceipt(completedSale)}
+                onClick={() => {
+                  const sale = completedSale;
+                  handleClose();
+                  onViewReceipt(sale);
+                }}
                 className="py-2.5 rounded-xl border border-zinc-200 text-zinc-700 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-zinc-50 transition-colors"
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -251,7 +281,11 @@ export function CheckoutModal({
               </button>
               <button
                 type="button"
-                onClick={() => onPrintReceipt(completedSale)}
+                onClick={() => {
+                  const sale = completedSale;
+                  handleClose();
+                  onPrintReceipt(sale);
+                }}
                 className="py-2.5 rounded-xl border border-zinc-200 text-zinc-700 font-semibold text-xs flex items-center justify-center gap-1.5 hover:bg-zinc-50 transition-colors"
               >
                 <Printer className="w-3.5 h-3.5" />
@@ -261,7 +295,7 @@ export function CheckoutModal({
 
             <button
               type="button"
-              onClick={onNewSale}
+              onClick={handleNextSale}
               className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xs"
             >
               <PlusCircle className="w-4 h-4" />
@@ -284,7 +318,7 @@ export function CheckoutModal({
               </div>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={isProcessing}
                 className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-colors"
               >

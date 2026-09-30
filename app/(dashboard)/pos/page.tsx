@@ -490,26 +490,28 @@ export default function PosPage() {
       )}
 
       {/* Checkout Modal */}
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        items={items}
-        subtotal={subtotal}
-        totalDiscount={totalDiscount}
-        total={total}
-        customer={selectedCustomer}
-        initialMethod={initialPaymentMethod}
-        onCompleteSale={handleCompleteSale}
-        onViewReceipt={(sale) => {
-          setAutoPrintReceipt(false);
-          setViewingReceiptSale(sale);
-        }}
-        onPrintReceipt={(sale) => {
-          setAutoPrintReceipt(true);
-          setViewingReceiptSale(sale);
-        }}
-        onNewSale={handleNewSale}
-      />
+      {isCheckoutOpen && (
+        <CheckoutModal
+          isOpen={isCheckoutOpen}
+          onClose={() => setIsCheckoutOpen(false)}
+          items={items}
+          subtotal={subtotal}
+          totalDiscount={totalDiscount}
+          total={total}
+          customer={selectedCustomer}
+          initialMethod={initialPaymentMethod}
+          onCompleteSale={handleCompleteSale}
+          onViewReceipt={(sale) => {
+            setAutoPrintReceipt(false);
+            setViewingReceiptSale(sale);
+          }}
+          onPrintReceipt={(sale) => {
+            setAutoPrintReceipt(true);
+            setViewingReceiptSale(sale);
+          }}
+          onNewSale={handleNewSale}
+        />
+      )}
 
       {/* Held Orders Modal */}
       <HeldOrdersModal
