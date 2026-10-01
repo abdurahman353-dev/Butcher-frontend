@@ -66,67 +66,88 @@ function ExpiryBanner({
 
   return (
     <div
-      className={`w-full z-30 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 px-4 py-3 text-sm font-medium border-b shadow-sm ${
+      className={`w-full z-30 border-b backdrop-blur-md transition-all ${
         isExpired
-          ? "bg-red-700 border-red-800 text-white"
-          : "bg-amber-500 border-amber-600 text-white"
+          ? "bg-red-950/95 border-red-800/80 text-white shadow-md"
+          : "bg-zinc-900/95 border-zinc-800 text-zinc-100 shadow-md"
       }`}
     >
-      {/* Icon + Message */}
-      <div className="flex items-start gap-2 flex-1 min-w-0">
-        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-        <div className="min-w-0">
-          <p className="font-bold text-xs sm:text-sm leading-tight">
-            {isExpired
-              ? "⚠️ Subscription Expired — Your access will be blocked!"
-              : "⚠️ Subscription Expiring Soon — Act now to avoid disruption!"}
-          </p>
-          {!isExpired && (
-            <p className="text-[11px] sm:text-xs font-semibold opacity-90 mt-0.5">
-              Time remaining:{" "}
-              <span className="font-mono font-black tabular-nums">
-                {d > 0 && `${d}d `}{String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s
-              </span>
-            </p>
-          )}
-          <p className="text-[11px] opacity-90 mt-0.5">
-            Pay via M-Pesa to <span className="font-bold font-mono">{MPESA_NUMBER}</span> (Name: <span className="font-bold">ABDULRAHMAN RAMADHAN</span>), then WhatsApp to confirm.
-          </p>
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex items-center gap-2 shrink-0 flex-wrap">
-        {/* M-Pesa call button */}
-        <a
-          href={`tel:${MPESA_NUMBER}`}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/20 hover:bg-white/30 border border-white/30 transition-all active:scale-95 whitespace-nowrap"
-        >
-          <Phone className="w-3.5 h-3.5" />
-          {MPESA_NUMBER}
-        </a>
-
-        {/* WhatsApp button */}
-        <a
-          href={waUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-700 border border-green-700 text-white transition-all active:scale-95 whitespace-nowrap shadow-sm"
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-          WhatsApp — I&apos;ve Paid!
-        </a>
-
-        {/* Dismiss (session only) */}
-        {!isExpired && (
-          <button
-            onClick={() => setDismissed(true)}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-            title="Dismiss for this session"
+      <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        {/* Left Side: Icon + Details */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              isExpired
+                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                : "bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-xs"
+            }`}
           >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
+            <AlertTriangle className="w-4 h-4" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-xs sm:text-sm text-white tracking-tight">
+                {isExpired ? "Subscription Expired" : "Subscription Renewal Notice"}
+              </span>
+
+              {/* Countdown Pill Badge */}
+              {!isExpired && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 tabular-nums">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  {d > 0 && `${d}d `}{String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s left
+                </span>
+              )}
+
+              {isExpired && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/30">
+                  Suspended
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] sm:text-xs text-zinc-400 font-medium mt-0.5 truncate">
+              Pay via M-Pesa to{" "}
+              <span className="font-mono font-bold text-zinc-200">{MPESA_NUMBER}</span>{" "}
+              (Name: <span className="font-semibold text-zinc-200">ABDULRAHMAN RAMADHAN</span>), then WhatsApp to confirm.
+            </p>
+          </div>
+        </div>
+
+        {/* Right Side: Quick Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+          {/* Call Support Button */}
+          <a
+            href={`tel:${MPESA_NUMBER}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition-all active:scale-95 whitespace-nowrap shadow-2xs"
+            title="Call Support"
+          >
+            <Phone className="w-3.5 h-3.5 text-zinc-400" />
+            <span>{MPESA_NUMBER}</span>
+          </a>
+
+          {/* WhatsApp Button */}
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 shadow-sm transition-all active:scale-95 whitespace-nowrap"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>WhatsApp — I&apos;ve Paid!</span>
+          </a>
+
+          {/* Dismiss (session only) */}
+          {!isExpired && (
+            <button
+              onClick={() => setDismissed(true)}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors ml-1"
+              title="Dismiss for this session"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
