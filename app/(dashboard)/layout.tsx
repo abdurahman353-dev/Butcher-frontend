@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
-import { AlertTriangle, Phone, MessageCircle, X } from "lucide-react";
+import { AlertTriangle, Phone, MessageCircle, X, Copy, Check } from "lucide-react";
 
 const ADMIN_ONLY_PATHS = ["/settings", "/reports", "/users"];
 
@@ -32,6 +32,7 @@ function ExpiryBanner({
 
   const [secs, setSecs] = useState<number>(getInitialSecs);
   const [dismissed, setDismissed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setSecs(getInitialSecs());
@@ -47,6 +48,13 @@ function ExpiryBanner({
     return () => clearInterval(interval);
   }, [remainingSeconds, subscriptionEndsAt]);
 
+  const handleCopyNumber = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(MPESA_NUMBER);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (dismissed) return null;
 
   const d = Math.floor(secs / 86400);
@@ -57,60 +65,73 @@ function ExpiryBanner({
 
   // Pre-filled WhatsApp message
   const waMessage = encodeURIComponent(
-    `Hello Abdulrahman, I have paid via M-Pesa to ${MPESA_NUMBER} for my butchery subscription renewal.\n\n` +
-    `*Business:* ${companyName}\n` +
-    `*Recipient:* ABDULRAHMAN RAMADHAN\n\n` +
-    `Please renew our subscription and restore access. Thank you! 🙏`
+    `Hello Abdulrahman, I have sent payment via M-Pesa to ${MPESA_NUMBER} for butchery subscription renewal.\n\n` +
+    `• Business: ${companyName}\n` +
+    `• Recipient: ABDULRAHMAN RAMADHAN\n\n` +
+    `Please confirm receipt and renew access. Thank you!`
   );
   const waUrl = `https://wa.me/254${MPESA_NUMBER.slice(1)}?text=${waMessage}`;
 
   return (
-    <div
-      className={`w-full z-30 border-b backdrop-blur-md transition-all ${
+    <aside
+      aria-label="Subscription status notice"
+      className={`w-full z-20 border-b transition-colors select-none ${
         isExpired
-          ? "bg-red-950/95 border-red-800/80 text-white shadow-md"
-          : "bg-zinc-900/95 border-zinc-800 text-zinc-100 shadow-md"
+          ? "bg-rose-50/95 border-rose-200 text-rose-950"
+          : "bg-amber-50/90 border-amber-200 text-amber-950"
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         {/* Left Side: Icon + Details */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div
-            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
               isExpired
-                ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                : "bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-xs"
+                ? "bg-rose-100 border-rose-300 text-rose-700"
+                : "bg-amber-100 border-amber-300 text-amber-800"
             }`}
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-4 h-4 shrink-0" />
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-xs sm:text-sm text-white tracking-tight">
+              <span className="font-semibold text-xs sm:text-sm tracking-tight text-zinc-900">
                 {isExpired ? "Subscription Expired" : "Subscription Renewal Notice"}
               </span>
 
               {/* Countdown Pill Badge */}
               {!isExpired && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 tabular-nums">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-amber-100 text-amber-900 border border-amber-300/80 tabular-nums">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   {d > 0 && `${d}d `}{String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s left
                 </span>
               )}
 
               {isExpired && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/30">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-rose-200 text-rose-900 border border-rose-300">
                   Suspended
                 </span>
               )}
             </div>
 
-            <p className="text-[11px] sm:text-xs text-zinc-400 font-medium mt-0.5 truncate">
-              Pay via M-Pesa to{" "}
-              <span className="font-mono font-bold text-zinc-200">{MPESA_NUMBER}</span>{" "}
-              (Name: <span className="font-semibold text-zinc-200">ABDULRAHMAN RAMADHAN</span>), then WhatsApp to confirm.
-            </p>
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-zinc-600 mt-0.5 flex-wrap">
+              <span>Pay via M-Pesa to</span>
+              <button
+                type="button"
+                onClick={handleCopyNumber}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white hover:bg-zinc-100 text-zinc-900 font-mono font-semibold border border-zinc-200 transition-colors shadow-2xs"
+                title="Click to copy M-Pesa number"
+              >
+                <span>{MPESA_NUMBER}</span>
+                {copied ? (
+                  <Check className="w-3 h-3 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3 h-3 text-zinc-400" />
+                )}
+              </button>
+              <span>(ABDULRAHMAN RAMADHAN), then confirm via WhatsApp.</span>
+            </div>
           </div>
         </div>
 
@@ -119,10 +140,10 @@ function ExpiryBanner({
           {/* Call Support Button */}
           <a
             href={`tel:${MPESA_NUMBER}`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700/80 transition-all active:scale-95 whitespace-nowrap shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-300 transition-colors shadow-2xs whitespace-nowrap active:scale-95"
             title="Call Support"
           >
-            <Phone className="w-3.5 h-3.5 text-zinc-400" />
+            <Phone className="w-3.5 h-3.5 text-zinc-500" />
             <span>{MPESA_NUMBER}</span>
           </a>
 
@@ -131,17 +152,17 @@ function ExpiryBanner({
             href={waUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 shadow-sm transition-all active:scale-95 whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors whitespace-nowrap active:scale-95"
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            <span>WhatsApp — I&apos;ve Paid!</span>
+            <span>Confirm Payment</span>
           </a>
 
           {/* Dismiss (session only) */}
           {!isExpired && (
             <button
               onClick={() => setDismissed(true)}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors ml-1"
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-200/50 transition-colors ml-0.5"
               title="Dismiss for this session"
             >
               <X className="w-4 h-4" />
@@ -149,7 +170,7 @@ function ExpiryBanner({
           )}
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
 
