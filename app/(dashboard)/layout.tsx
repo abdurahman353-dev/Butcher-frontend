@@ -57,10 +57,10 @@ function ExpiryBanner({
 
   // Pre-filled WhatsApp message
   const waMessage = encodeURIComponent(
-    `Hello, I have paid for my butchery subscription renewal.\n\n` +
+    `Hello Abdulrahman, I have paid via M-Pesa to ${MPESA_NUMBER} for my butchery subscription renewal.\n\n` +
     `*Business:* ${companyName}\n` +
-    `*M-Pesa Number Paid To:* ${MPESA_NUMBER}\n\n` +
-    `Please renew my subscription. Thank you! 🙏`
+    `*Recipient:* ABDULRAHMAN RAMADHAN\n\n` +
+    `Please renew our subscription and restore access. Thank you! 🙏`
   );
   const waUrl = `https://wa.me/254${MPESA_NUMBER.slice(1)}?text=${waMessage}`;
 
@@ -90,7 +90,7 @@ function ExpiryBanner({
             </p>
           )}
           <p className="text-[11px] opacity-90 mt-0.5">
-            Pay <span className="font-bold font-mono">{MPESA_NUMBER}</span> via M-Pesa, then WhatsApp to confirm.
+            Pay via M-Pesa to <span className="font-bold font-mono">{MPESA_NUMBER}</span> (Name: <span className="font-bold">ABDULRAHMAN RAMADHAN</span>), then WhatsApp to confirm.
           </p>
         </div>
       </div>
