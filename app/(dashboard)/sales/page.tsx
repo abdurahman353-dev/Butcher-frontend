@@ -179,9 +179,10 @@ function SalesLedger() {
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Use a longer debounce when only search changed so we don't fire on every keystroke
     debounceRef.current = setTimeout(() => {
       fetchSales();
-    }, 250);
+    }, 400);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -657,6 +658,47 @@ function SalesLedger() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── ALWAYS-VISIBLE PROMINENT SEARCH BAR ── */}
+      <div className="relative group print:hidden">
+        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          {isLoading && search.trim() ? (
+            <RefreshCw className="w-5 h-5 text-green-600 animate-spin" />
+          ) : (
+            <Search className="w-5 h-5 text-zinc-400 group-focus-within:text-green-600 transition-colors" />
+          )}
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          placeholder="Search by sale #, customer name, phone, cashier, or meat cut..."
+          className="w-full h-12 bg-white border-2 border-zinc-200 rounded-2xl pl-12 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 shadow-xs transition-all hover:border-zinc-300"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setCurrentPage(1);
+            }}
+            className="absolute inset-y-0 right-4 flex items-center text-zinc-400 hover:text-red-500 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+        {/* Search hint chips */}
+        {!search && (
+          <div className="absolute inset-y-0 right-4 flex items-center gap-1.5 pointer-events-none">
+            <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Sale #</span>
+            <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Customer</span>
+            <span className="hidden md:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Phone</span>
+          </div>
+        )}
       </div>
 
       {/* ── ADVANCED HIGH-CAPACITY FILTER CONSOLE ── */}
