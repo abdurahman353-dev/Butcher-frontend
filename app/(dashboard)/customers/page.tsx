@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { Pagination } from "@/components/shared/Pagination";
 import { usePolling } from "@/hooks/usePolling";
 import { useSystemDialog } from "@/contexts/DialogContext";
-import { Users, Plus, Search, Phone, ShoppingBag, X, Trash2, RefreshCw } from "lucide-react";
+import { Users, Plus, Search, Phone, ShoppingBag, X, Trash2, RefreshCw, Pencil, Mail, MapPin } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function CustomersPage() {
@@ -34,6 +34,78 @@ export default function CustomersPage() {
     address: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+
+  // Edit Customer Modal State
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleOpenEdit = (c: Customer) => {
+    setEditingCustomer(c);
+    setEditFormData({
+      name: c.name || "",
+      phone: c.phone || "",
+      email: c.email || "",
+      address: c.address || "",
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+
+    if (!editFormData.name.trim() || !editFormData.phone.trim()) {
+      await alert({
+        title: "Validation Error",
+        message: "Customer name and contact phone number are required.",
+        type: "warning",
+      });
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: "Update Customer Details",
+      message: `Do you want to save changes for customer "${editFormData.name.trim()}"?`,
+      confirmText: "Yes, Save Changes",
+      cancelText: "No, Cancel",
+      type: "info",
+    });
+
+    if (!confirmed) return;
+
+    setIsUpdating(true);
+    try {
+      await customersService.updateCustomer(editingCustomer.id, {
+        name: editFormData.name.trim(),
+        phone: editFormData.phone.trim(),
+        email: editFormData.email.trim() || undefined,
+        address: editFormData.address.trim() || undefined,
+      });
+      setIsEditModalOpen(false);
+      setEditingCustomer(null);
+      fetchCustomers();
+      await alert({
+        title: "Customer Updated",
+        message: `Customer "${editFormData.name.trim()}" has been updated successfully.`,
+        type: "success",
+      });
+    } catch (err: any) {
+      await alert({
+        title: "Update Failed",
+        message: err.message || "Failed to update customer.",
+        type: "danger",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -120,10 +192,10 @@ export default function CustomersPage() {
 
   const handleDeleteCustomer = async (c: Customer) => {
     const confirmed = await confirm({
-      title: "Delete Customer",
-      message: `Are you sure you want to delete customer account for "${c.name}"?\n\nPhone: ${c.phone}\nThis action cannot be undone.`,
+      title: "Delete Customer Account",
+      message: `Are you sure you want to permanently delete customer account for "${c.name}"?\n\nPhone: ${c.phone}\nThis action cannot be undone.`,
       confirmText: "Yes, Delete Customer",
-      cancelText: "Cancel",
+      cancelText: "No, Cancel",
       type: "danger",
     });
 
@@ -132,6 +204,11 @@ export default function CustomersPage() {
     try {
       await customersService.deleteCustomer(c.id);
       fetchCustomers();
+      await alert({
+        title: "Customer Deleted",
+        message: `Customer "${c.name}" was deleted successfully.`,
+        type: "success",
+      });
     } catch (err: any) {
       await alert({
         title: "Delete Failed",
@@ -206,17 +283,24 @@ export default function CustomersPage() {
                     {c.phone}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-full bg-green-50 border border-green-200 flex items-center justify-center font-bold text-green-700 text-xs">
-                    {c.name.charAt(0)}
-                  </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(c)}
+                    className="px-2 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-[11px] flex items-center gap-1 shadow-2xs transition-transform"
+                    title="Edit customer"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Edit</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleDeleteCustomer(c)}
-                    className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-2xs"
+                    className="px-2 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-semibold text-[11px] flex items-center gap-1 shadow-2xs transition-transform"
                     title="Delete customer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
                   </button>
                 </div>
               </div>
@@ -343,6 +427,110 @@ export default function CustomersPage() {
                   className="w-1/2 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors shadow-xs"
                 >
                   {isSaving ? "Saving..." : "Create Customer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Customer Modal ── */}
+      {isEditModalOpen && editingCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-200">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-zinc-900 text-base">Edit Customer Profile</h3>
+                  <p className="text-[11px] text-zinc-500">ID #{editingCustomer.id} • {editingCustomer.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isUpdating) {
+                    setIsEditModalOpen(false);
+                    setEditingCustomer(null);
+                  }
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCustomer} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Customer Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  placeholder="e.g. Ahmed Mohamed"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-blue-600 focus:ring-1 focus:ring-blue-500 shadow-2xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">
+                  Phone Number (M-Pesa) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={editFormData.phone}
+                  onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                  placeholder="0712 345 678"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 font-mono font-semibold placeholder:text-zinc-400 focus:outline-hidden focus:border-blue-600 focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Email Address (Optional)</label>
+                <input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  placeholder="ahmed@example.com"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-blue-600 focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Delivery / Estate Address (Optional)</label>
+                <input
+                  type="text"
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  placeholder="e.g. Kilimani, Nairobi"
+                  className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-blue-600 focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-3 border-t border-zinc-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingCustomer(null);
+                  }}
+                  disabled={isUpdating}
+                  className="w-1/2 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-bold transition-colors shadow-2xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  {isUpdating ? "Saving Changes..." : "Save Changes"}
                 </button>
               </div>
             </form>

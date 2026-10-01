@@ -42,6 +42,7 @@ export function Pagination({
               aria-label="Records per page"
               className="bg-white border border-zinc-200 rounded-lg px-2 py-0.5 text-xs text-zinc-700 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
             >
+              <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
               <option value={100}>100</option>

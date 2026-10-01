@@ -14,6 +14,12 @@ export interface Company {
   address?: string;
   tax_pin?: string;
   status: "active" | "suspended";
+  is_blocked_manually?: boolean;
+  subscription_starts_at?: string;
+  subscription_ends_at?: string;
+  remaining_seconds?: number;
+  is_active?: boolean;
+  plan?: string;
 }
 
 export interface User {
@@ -25,9 +31,29 @@ export interface User {
   avatar?: string;
   is_active?: boolean;
   must_change_password?: boolean;
+  is_platform_admin?: boolean;
   company_id?: number;
   company?: Company;
   created_at?: string;
+}
+
+export interface SaasCompany extends Company {
+  total_users: number;
+  cashiers_count: number;
+  superadmin?: {
+    id: number;
+    name: string;
+    email: string;
+    phone?: string;
+    is_active: boolean;
+  } | null;
+  created_at?: string;
+}
+
+export interface SaasSummary {
+  total: number;
+  active: number;
+  suspended: number;
 }
 export interface Category {
   id: number;
@@ -35,6 +61,7 @@ export interface Category {
   slug: string;
   icon?: string;
   description?: string;
+  products_count?: number;
 }
 
 export interface Product {
@@ -98,6 +125,8 @@ export interface Sale {
   customer_id?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  customer_address?: string | null;
+  customer?: Customer | null;
   subtotal: number;
   discount: number;
   total: number;

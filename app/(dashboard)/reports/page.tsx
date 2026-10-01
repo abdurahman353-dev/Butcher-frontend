@@ -226,17 +226,69 @@ export default function ReportsPage() {
     const pl: Record<string, string> = { today: "Today", yesterday: "Yesterday", "7days": "Past 7 Days", "30days": "Past 30 Days", this_month: "This Month", last_month: "Last Month", all: "All Time", custom: rangeLabel };
     const fK = (n: number) => `KSh ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const fW = (n: number) => `${Number(n).toFixed(2)} KG`;
-    const itemizedHTML = (analytics.itemized_categories || []).map(cat => `
-      <div style="margin-bottom:14px">
-        <table style="width:100%;border-collapse:collapse;font-size:10.5px">
-          <thead>
-            <tr style="background:#14532d"><th colspan="4" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:none">${cat.category_name}</th></tr>
-            <tr style="background:#dcfce7"><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d">Item / Cut</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Discount</th></tr>
-          </thead>
-          <tbody>${cat.items.map(it => `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(it.price)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${it.discount > 0 ? fK(it.discount) : "-"}</td></tr>`).join("")}</tbody>
-          <tfoot><tr style="background:#f0fdf4;border-top:2px solid #16a34a"><td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:700;color:#14532d">SUBTOTAL — ${cat.category_name}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${cat.subtotal_discount > 0 ? fK(cat.subtotal_discount) : "-"}</td></tr></tfoot>
-        </table>
-      </div>`).join("");
+    const itemizedHTML = (() => {
+      const cats = analytics.itemized_categories || [];
+      if (cats.length === 0) return "";
+      const fProfit = (profit: number, cost: number) => {
+        if (cost <= 0) return { label: '-', color: '#9ca3af' };
+        if (profit >= 0) return { label: `+${fK(profit)}`, color: '#15803d' };
+        return { label: `LOSS: -${fK(Math.abs(profit))}`, color: '#be123c' };
+      };
+      const sections = cats.map((cat, idx) => {
+        const rows = cat.items.map(it => {
+          const p = fProfit(it.profit, it.cost);
+          return `<tr>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left">${it.name}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fW(it.qty)}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fK(it.price)}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.discount > 0 ? '#b45309' : '#9ca3af'}">${it.discount > 0 ? `-${fK(it.discount)}` : '-'}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:${p.color}">${p.label}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.cost > 0 ? '#1d4ed8' : '#9ca3af'}">${it.cost > 0 ? fK(it.cost) : '-'}</td>
+          </tr>`;
+        }).join('');
+        const sp = fProfit(cat.subtotal_profit, cat.subtotal_cost);
+        return `
+          <!-- Category Header -->
+          <tr style="background:#14532d">
+            <th colspan="6" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:1px solid #14532d;${idx > 0 ? 'border-top:14px solid #fff;' : ''}">${cat.category_name}</th>
+          </tr>
+          <!-- Column Labels -->
+          <tr style="background:#dcfce7">
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">Item / Cut</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#b45309;text-align:right">Discount</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#15803d;text-align:right">Profit</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#1d4ed8;text-align:right">Reinvest (Cost)</th>
+          </tr>
+          ${rows}
+          <!-- Category Subtotal -->
+          <tr style="background:#f0fdf4;border-top:2px solid #16a34a">
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:800;color:#14532d">SUBTOTAL — ${cat.category_name}</td>
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td>
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td>
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#b45309">${cat.subtotal_discount > 0 ? `-${fK(cat.subtotal_discount)}` : '-'}</td>
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:${sp.color}">${sp.label}</td>
+            <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#1d4ed8">${cat.subtotal_cost > 0 ? fK(cat.subtotal_cost) : '-'}</td>
+          </tr>`;
+      }).join('');
+      return `
+        <div style="margin-bottom:14px">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px">
+            <colgroup>
+              <col style="width:30%">
+              <col style="width:12%">
+              <col style="width:14%">
+              <col style="width:12%">
+              <col style="width:16%">
+              <col style="width:16%">
+            </colgroup>
+            <tbody>
+              ${sections}
+            </tbody>
+          </table>
+        </div>`;
+    })();
     const topHTML = (analytics.top_products || []).slice(0,10).map((p,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center">${i+1}</td><td style="padding:6px 10px;border:1px solid #f3f4f6">${p.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6">${p.category}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(p.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(p.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(p.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;color:${p.margin_percent>=30?"#15803d":p.margin_percent>=20?"#b45309":"#374151"};font-weight:700">${p.margin_percent}%</td></tr>`).join("");
     const cashierHTML = (analytics.cashier_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${c.transactions}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.aov)}</td></tr>`).join("");
     const catHTML = (analytics.category_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;font-weight:700;color:#14532d">${c.percent}%</td></tr>`).join("");
@@ -266,7 +318,7 @@ ${sec("Payment Method Breakdown","Tender collection channels")}
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #15803d;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">📱 M-Pesa Mobile</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(mpesaAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${mpesaCount} transactions · ${mpesaPercent}% share</div></div>
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #1d4ed8;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">💳 Card Payment</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(cardAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${cardCount} transactions · ${cardPercent}% share</div></div>
 </div>
-${(analytics.itemized_categories||[]).length>0?`${sec("Sales by Meat Category","All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Weight</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div></div>`:""}
+${(analytics.itemized_categories||[]).length>0?`${sec("Sales by Meat Category","All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Discount</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.total_discount||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Weight</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Reinvest (Cost)</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK((analytics.itemized_categories||[]).reduce((s,c)=>s+(c.subtotal_cost||0),0))}</div></div></div>`:""}
 ${(analytics.top_products||[]).length>0?`${sec("Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>Meat Cut</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
 ${(analytics.category_breakdown||[]).length>0?`${sec("Category Performance","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Category</th><th ${thr}>Weight</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Share</th></tr></thead><tbody>${catHTML}</tbody></table>`:""}
 ${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Staff</th><th ${thr}>Transactions</th><th ${thr}>Revenue</th><th ${thr}>Weight</th><th ${thr}>AOV</th></tr></thead><tbody>${cashierHTML}</tbody></table>`:""}
@@ -606,7 +658,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               )}
               {categoryId !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
-                  🥩 {categoryName}
+                  Category: {categoryName}
                   <button onClick={() => setCategoryId("all")} className="hover:text-amber-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>

@@ -1,13 +1,136 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useAuth } from "@/hooks/useAuth";
+import { AlertTriangle, Phone, MessageCircle, X } from "lucide-react";
 
 const ADMIN_ONLY_PATHS = ["/settings", "/reports", "/users"];
+
+// ── Expiry Warning Banner ─────────────────────────────────────────────────────
+const TWO_DAYS_SECS = 2 * 24 * 3600; // 172800 seconds
+const MPESA_NUMBER = "0745621159";
+
+function ExpiryBanner({
+  remainingSeconds,
+  companyName,
+  subscriptionEndsAt,
+}: {
+  remainingSeconds: number;
+  companyName: string;
+  subscriptionEndsAt?: string | null;
+}) {
+  const getInitialSecs = () => {
+    if (subscriptionEndsAt) {
+      return Math.max(0, Math.floor((new Date(subscriptionEndsAt).getTime() - Date.now()) / 1000));
+    }
+    return Math.max(0, remainingSeconds);
+  };
+
+  const [secs, setSecs] = useState<number>(getInitialSecs);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    setSecs(getInitialSecs());
+    const interval = setInterval(() => {
+      if (subscriptionEndsAt) {
+        const diff = Math.max(0, Math.floor((new Date(subscriptionEndsAt).getTime() - Date.now()) / 1000));
+        setSecs(diff);
+      } else {
+        setSecs((prev) => Math.max(0, prev - 1));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [remainingSeconds, subscriptionEndsAt]);
+
+  if (dismissed) return null;
+
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  const isExpired = secs <= 0;
+
+  // Pre-filled WhatsApp message
+  const waMessage = encodeURIComponent(
+    `Hello, I have paid for my butchery subscription renewal.\n\n` +
+    `*Business:* ${companyName}\n` +
+    `*M-Pesa Number Paid To:* ${MPESA_NUMBER}\n\n` +
+    `Please renew my subscription. Thank you! 🙏`
+  );
+  const waUrl = `https://wa.me/254${MPESA_NUMBER.slice(1)}?text=${waMessage}`;
+
+  return (
+    <div
+      className={`w-full z-30 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 px-4 py-3 text-sm font-medium border-b shadow-sm ${
+        isExpired
+          ? "bg-red-700 border-red-800 text-white"
+          : "bg-amber-500 border-amber-600 text-white"
+      }`}
+    >
+      {/* Icon + Message */}
+      <div className="flex items-start gap-2 flex-1 min-w-0">
+        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <p className="font-bold text-xs sm:text-sm leading-tight">
+            {isExpired
+              ? "⚠️ Subscription Expired — Your access will be blocked!"
+              : "⚠️ Subscription Expiring Soon — Act now to avoid disruption!"}
+          </p>
+          {!isExpired && (
+            <p className="text-[11px] sm:text-xs font-semibold opacity-90 mt-0.5">
+              Time remaining:{" "}
+              <span className="font-mono font-black tabular-nums">
+                {d > 0 && `${d}d `}{String(h).padStart(2, "0")}h {String(m).padStart(2, "0")}m {String(s).padStart(2, "0")}s
+              </span>
+            </p>
+          )}
+          <p className="text-[11px] opacity-90 mt-0.5">
+            Pay <span className="font-bold font-mono">{MPESA_NUMBER}</span> via M-Pesa, then WhatsApp to confirm.
+          </p>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        {/* M-Pesa call button */}
+        <a
+          href={`tel:${MPESA_NUMBER}`}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/20 hover:bg-white/30 border border-white/30 transition-all active:scale-95 whitespace-nowrap"
+        >
+          <Phone className="w-3.5 h-3.5" />
+          {MPESA_NUMBER}
+        </a>
+
+        {/* WhatsApp button */}
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-green-600 hover:bg-green-700 border border-green-700 text-white transition-all active:scale-95 whitespace-nowrap shadow-sm"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          WhatsApp — I&apos;ve Paid!
+        </a>
+
+        {/* Dismiss (session only) */}
+        {!isExpired && (
+          <button
+            onClick={() => setDismissed(true)}
+            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            title="Dismiss for this session"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -136,6 +259,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  // ── Check if expiry warning banner should be shown ──
+  // Show for: non-platform-admins, non-lifetime plans, remaining_seconds ≤ 2 days (172800s)
+  const company = user?.company;
+  const isPlatformAdmin = user?.is_platform_admin ?? false;
+  const isLifetime = company?.plan === "lifetime" || (company?.remaining_seconds ?? 0) === -1;
+
+  // Calculate current seconds remaining against subscription_ends_at or remaining_seconds
+  const currentRemainingSecs = company?.subscription_ends_at
+    ? Math.floor((new Date(company.subscription_ends_at).getTime() - Date.now()) / 1000)
+    : (company?.remaining_seconds ?? 0);
+
+  const showExpiryBanner =
+    !isPlatformAdmin &&
+    !isLifetime &&
+    Boolean(company) &&
+    currentRemainingSecs <= TWO_DAYS_SECS;
+
   return (
     <div className="flex h-screen w-full bg-zinc-50 overflow-hidden">
       {/* Desktop Sidebar */}
@@ -154,6 +294,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           isSidebarCollapsed={isSidebarCollapsed}
           onSidebarToggleCollapse={handleToggleSidebar}
         />
+
+        {/* ── Expiry Warning Banner (shows ≤ 2 days before expiry) ── */}
+        {showExpiryBanner && (
+          <ExpiryBanner
+            remainingSeconds={Math.max(0, currentRemainingSecs)}
+            companyName={company?.name ?? "Your Butchery"}
+            subscriptionEndsAt={company?.subscription_ends_at}
+          />
+        )}
+
         <main className="flex-1 overflow-y-auto bg-zinc-50">
           {children}
         </main>
@@ -161,3 +311,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   );
 }
+

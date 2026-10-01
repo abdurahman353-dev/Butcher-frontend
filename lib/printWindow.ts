@@ -54,6 +54,7 @@ const PRINT_STYLES = `
   .flex { display: flex; }
   .justify-between { justify-content: space-between; }
   .items-center { align-items: center; }
+  .items-start { align-items: flex-start; }
   .items-baseline { align-items: baseline; }
   .text-center { text-align: center; }
   .grid { display: grid; }

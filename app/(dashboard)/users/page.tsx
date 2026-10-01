@@ -92,12 +92,15 @@ export default function UsersManagementPage() {
             if (statusFilter !== "all") params.status = statusFilter;
 
             const res: any = await usersService.getUsers(params);
-            setUsers(res.data || []);
+            const sanitized = (res.data || []).filter(
+                (u: any) => !u.is_platform_admin && u.email !== "abdura353hman@gmail.com"
+            );
+            setUsers(sanitized);
             setPaginated({
                 current_page: res.current_page ?? currentPage,
                 last_page: res.last_page ?? 1,
                 per_page: res.per_page ?? perPage,
-                total: res.total ?? (res.data || []).length,
+                total: res.total ?? sanitized.length,
                 from: res.from ?? 0,
                 to: res.to ?? 0,
             });

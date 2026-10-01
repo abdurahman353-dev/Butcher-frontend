@@ -28,7 +28,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
     >
       {/* Image area */}
       <div className="h-28 w-full overflow-hidden relative">
-        <MeatImage category={product.category_name} name={product.name} />
+        <MeatImage category={product.category_name} name={product.name} image={product.image} />
 
         {/* Stock badge */}
         <div className="absolute bottom-2 right-2">

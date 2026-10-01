@@ -18,6 +18,30 @@ export const productsService = {
     return res.data;
   },
 
+  async createCategory(data: { name: string; icon?: string; description?: string }): Promise<Category> {
+    const res = await apiClient.post<Category>("/categories", data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
+
+  async updateCategory(id: number, data: { name?: string; icon?: string; description?: string }): Promise<Category> {
+    const res = await apiClient.put<Category>(`/categories/${id}`, data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
+
+  async deleteCategory(id: number): Promise<{ message: string }> {
+    const res = await apiClient.delete<{ message: string }>(`/categories/${id}`);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
+
   async getProducts(params?: PaginationParams): Promise<PaginatedResponse<Product>> {
     const res = await apiClient.get<PaginatedResponse<Product>>("/products", { params });
     return res.data;

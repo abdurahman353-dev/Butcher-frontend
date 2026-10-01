@@ -39,6 +39,21 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
     });
   }, [products, selectedCategory, searchQuery]);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const p of products) {
+      if (p.is_active) {
+        total++;
+        const catId = p.category_id ? p.category_id.toString() : "";
+        if (catId) {
+          counts[catId] = (counts[catId] || 0) + 1;
+        }
+      }
+    }
+    return { counts, total };
+  }, [products]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-zinc-50">
       {/* Search + Categories */}
@@ -67,13 +82,15 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
           categories={categories}
           selectedCategoryId={selectedCategory}
           onSelectCategory={setSelectedCategory}
+          productCounts={categoryCounts.counts}
+          totalCount={categoryCounts.total}
         />
       </div>
 
       {/* Product Cards Grid */}
       <div className="flex-1 overflow-y-auto p-3">
         {isLoading && filteredProducts.length === 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2.5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
@@ -101,7 +118,7 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
             }}
           />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-2.5">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} onSelect={onSelectProduct} />
             ))}

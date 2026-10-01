@@ -64,6 +64,8 @@ export default function LoginPage() {
       window.dispatchEvent(new CustomEvent("butcher:auth-success"));
       if (loggedInUser.must_change_password) {
         router.push("/change-password");
+      } else if (loggedInUser.is_platform_admin) {
+        router.push("/saas");
       } else if (loggedInUser.role === "admin") {
         router.push("/");
       } else {

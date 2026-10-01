@@ -102,23 +102,31 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             <div>
               <span>Date: {formatDateTime(sale.created_at)}</span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
-              <div>
-                <span>Cashier: {sale.cashier_name}</span>
-              </div>
-              <div>
-                <span>Customer: {sale.customer_name || "Walk-in Customer"}</span>
+            <div className="text-xs pt-0.5 space-y-0.5">
+              <div className="grid grid-cols-2 gap-2 items-start">
+                <div className="space-y-0.5">
+                  <div>Cashier: {sale.cashier_name}</div>
+                </div>
+                <div className="space-y-0.5">
+                  <div>Customer: {sale.customer_name || "Walk-in Customer"}</div>
+                  {(sale.customer_phone || sale.customer?.phone) && (
+                    <div>Phone: {sale.customer_phone || sale.customer?.phone}</div>
+                  )}
+                  {(sale.customer_address || sale.customer?.address) && (
+                    <div>Address: {sale.customer_address || sale.customer?.address}</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* 3. Line Items (Clean list with no outer box) */}
           <div className="py-1 space-y-2.5 text-black">
             {sale.items.map((item) => {
               const refundedWeight = Number(item.refunded_weight || 0);
               const isItemFullyRefunded = Boolean(
                 item.is_refunded || (refundedWeight >= Number(item.weight) - 0.0001 && refundedWeight > 0)
               );
+              const itemDiscount = Number(item.discount || 0);
 
               return (
                 <div key={item.id} className="space-y-0.5">
@@ -134,9 +142,9 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                     <span>
                       {formatWeight(item.weight, item.unit)} x {formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}
                     </span>
-                    {Number(item.discount || 0) > 0 && (
+                    {itemDiscount > 0 && (
                       <span className="text-[11px]">
-                        (Disc: -{formatCurrency(item.discount || 0)})
+                        (Disc: -{formatCurrency(itemDiscount)})
                       </span>
                     )}
                   </div>
@@ -162,7 +170,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
 
             {sale.discount > 0 && (
               <div className="flex justify-between text-xs font-bold">
-                <span>Discount:</span>
+                <span>Total Discount:</span>
                 <span>-{formatCurrency(sale.discount)}</span>
               </div>
             )}

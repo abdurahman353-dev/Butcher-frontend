@@ -354,26 +354,69 @@ function SalesLedger() {
       const fK = (n: number) => `KSh ${n.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const fW = (n: number) => `${Number(n).toFixed(2)} KG`;
 
-      const itemizedHTML = (analytics.itemized_categories || [])
-        .map(
-          (cat) => `
-        <div style="margin-bottom:14px">
-          <table style="width:100%;border-collapse:collapse;font-size:10.5px">
-            <thead>
-              <tr style="background:#14532d"><th colspan="4" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:none">${cat.category_name}</th></tr>
-              <tr style="background:#dcfce7"><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d">Item / Cut</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th><th style="padding:7px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Discount</th></tr>
-            </thead>
-            <tbody>${cat.items
-              .map(
-                (it) =>
-                  `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(it.price)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${it.discount > 0 ? fK(it.discount) : "-"}</td></tr>`
-              )
-              .join("")}</tbody>
-            <tfoot><tr style="background:#f0fdf4;border-top:2px solid #16a34a"><td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:700;color:#14532d">SUBTOTAL — ${cat.category_name}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${cat.subtotal_discount > 0 ? fK(cat.subtotal_discount) : "-"}</td></tr></tfoot>
-          </table>
-        </div>`
-        )
-        .join("");
+      const itemizedHTML = (() => {
+        const cats = analytics.itemized_categories || [];
+        if (cats.length === 0) return "";
+        const fProfit = (profit: number, cost: number) => {
+          if (cost <= 0) return { label: '-', color: '#9ca3af' };
+          if (profit >= 0) return { label: `+${fK(profit)}`, color: '#15803d' };
+          return { label: `LOSS: -${fK(Math.abs(profit))}`, color: '#be123c' };
+        };
+        const sections = cats.map((cat, idx) => {
+          const rows = cat.items.map(it => {
+            const p = fProfit(it.profit, it.cost);
+            return `<tr>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left">${it.name}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fW(it.qty)}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fK(it.price)}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.discount > 0 ? '#b45309' : '#9ca3af'}">${it.discount > 0 ? `-${fK(it.discount)}` : '-'}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:${p.color}">${p.label}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.cost > 0 ? '#1d4ed8' : '#9ca3af'}">${it.cost > 0 ? fK(it.cost) : '-'}</td>
+            </tr>`;
+          }).join('');
+          const sp = fProfit(cat.subtotal_profit, cat.subtotal_cost);
+          return `
+            <!-- Category Header -->
+            <tr style="background:#14532d">
+              <th colspan="6" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:1px solid #14532d;${idx > 0 ? 'border-top:14px solid #fff;' : ''}">${cat.category_name}</th>
+            </tr>
+            <!-- Column Labels -->
+            <tr style="background:#dcfce7">
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">Item / Cut</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#b45309;text-align:right">Discount</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#15803d;text-align:right">Profit</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#1d4ed8;text-align:right">Reinvest (Cost)</th>
+            </tr>
+            ${rows}
+            <!-- Category Subtotal -->
+            <tr style="background:#f0fdf4;border-top:2px solid #16a34a">
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:800;color:#14532d">SUBTOTAL — ${cat.category_name}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#b45309">${cat.subtotal_discount > 0 ? `-${fK(cat.subtotal_discount)}` : '-'}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:${sp.color}">${sp.label}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#1d4ed8">${cat.subtotal_cost > 0 ? fK(cat.subtotal_cost) : '-'}</td>
+            </tr>`;
+        }).join('');
+        return `
+          <div style="margin-bottom:14px">
+            <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px">
+              <colgroup>
+                <col style="width:30%">
+                <col style="width:12%">
+                <col style="width:14%">
+                <col style="width:12%">
+                <col style="width:16%">
+                <col style="width:16%">
+              </colgroup>
+              <tbody>
+                ${sections}
+              </tbody>
+            </table>
+          </div>`;
+      })();
 
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Sales PDF Report - ${selectedDate}</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>

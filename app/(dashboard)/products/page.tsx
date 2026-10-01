@@ -32,6 +32,7 @@ import {
   Lock,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { ManageCategoriesModal } from "@/components/products/ManageCategoriesModal";
 
 export default function ProductsPage() {
   const { isAdmin, isCashier } = useAuth();
@@ -54,6 +55,7 @@ export default function ProductsPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -469,7 +471,15 @@ export default function ProductsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95 border border-purple-700"
+          >
+            <Layers className="w-4 h-4 text-white" />
+            <span>Categories</span>
+          </button>
           <button
             type="button"
             onClick={openBulkModal}
@@ -610,7 +620,7 @@ export default function ProductsPage() {
                 )}
                 {categoryFilter !== "all" && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
-                    🥩 {categories.find((c) => String(c.id) === categoryFilter)?.name || categoryFilter}
+                    Category: {categories.find((c) => String(c.id) === categoryFilter)?.name || categoryFilter}
                     <button onClick={() => setCategoryFilter("all")}><X className="w-3 h-3" /></button>
                   </span>
                 )}
@@ -658,7 +668,7 @@ export default function ProductsPage() {
                       <td className="py-3 pl-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-zinc-100">
-                            <MeatImage category={product.category_name} name={product.name} />
+                            <MeatImage category={product.category_name} name={product.name} image={product.image} size="sm" />
                           </div>
                           <div>
                             <span className="font-semibold text-zinc-900 block">{product.name}</span>
@@ -806,9 +816,19 @@ export default function ProductsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-zinc-700 mb-1">
-                    Category <span className="text-rose-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-zinc-700">
+                      Category <span className="text-rose-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCategoryModalOpen(true)}
+                      className="text-[11px] font-bold text-green-700 hover:text-green-800 flex items-center gap-0.5"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>New Category</span>
+                    </button>
+                  </div>
                   <select
                     value={formData.category_id}
                     onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
@@ -1059,7 +1079,7 @@ export default function ProductsPage() {
                                   <select value={row.category_id} onChange={e => updateBulkRow(i, "category_id", Number(e.target.value))}
                                     className={errCat ? err : ok}>
                                     <option value={0}>— Select —</option>
-                                    {categories.map(c => <option key={c.id} value={c.id}>{c.icon && `${c.icon} `}{c.name}</option>)}
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
                                 </td>
                                 <td className="p-1.5">
@@ -1186,6 +1206,14 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      {/* Manage Categories Modal */}
+      <ManageCategoriesModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        categories={categories}
+        onCategoriesChange={fetchProducts}
+      />
     </div>
   );
 }

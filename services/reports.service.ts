@@ -93,10 +93,14 @@ export interface ReportAnalyticsData {
       qty: number;
       price: number;
       discount: number;
+      cost: number;    // buying cost (reinvest amount)
+      profit: number;  // price - cost
     }>;
     subtotal_qty: number;
     subtotal_price: number;
     subtotal_discount: number;
+    subtotal_cost: number;
+    subtotal_profit: number;
   }>;
   filter_options?: {
     categories: Array<{ id: number; name: string }>;

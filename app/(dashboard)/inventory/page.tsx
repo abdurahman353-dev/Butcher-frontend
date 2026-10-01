@@ -510,7 +510,7 @@ export default function InventoryPage() {
               )}
               {categoryFilter !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">
-                  🥩 {categoryFilter}
+                  Category: {categoryFilter}
                   <button onClick={() => setCategoryFilter("all")}><X className="w-3 h-3" /></button>
                 </span>
               )}

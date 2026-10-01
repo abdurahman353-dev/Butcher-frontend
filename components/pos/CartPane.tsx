@@ -16,6 +16,11 @@ import {
   PlusCircle,
   PauseCircle,
   Bookmark,
+  Search,
+  Plus,
+  MapPin,
+  X,
+  Pencil,
 } from "lucide-react";
 
 interface CartPaneProps {
@@ -27,8 +32,11 @@ interface CartPaneProps {
   customers: Customer[];
   selectedCustomer: Customer | null;
   onSelectCustomer: (customer: Customer | null) => void;
+  onOpenAddCustomer?: () => void;
+  onEditCustomer?: (customer: Customer) => void;
   onAdjustWeight: (id: string, deltaKg: number) => void;
   onOpenWeightEdit: (item: CartItem) => void;
+  onUpdateDiscount: (id: string, discount: number) => void;
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "credit") => void;
@@ -50,8 +58,11 @@ export function CartPane({
   customers,
   selectedCustomer,
   onSelectCustomer,
+  onOpenAddCustomer,
+  onEditCustomer,
   onAdjustWeight,
   onOpenWeightEdit,
+  onUpdateDiscount,
   onRemoveItem,
   onClearCart,
   onProceedCheckout,
@@ -65,6 +76,17 @@ export function CartPane({
 }: CartPaneProps) {
   const { confirm } = useSystemDialog();
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  const filteredCustomers = customers.filter((c) => {
+    if (!customerSearch.trim()) return true;
+    const q = customerSearch.toLowerCase();
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.phone && c.phone.toLowerCase().includes(q)) ||
+      (c.address && c.address.toLowerCase().includes(q))
+    );
+  });
 
   const handleClearClick = async () => {
     const confirmed = await confirm({
@@ -154,30 +176,66 @@ export function CartPane({
       </div>
 
       {/* Customer Selector & Unpaid Bills Pill */}
-      <div className="px-4 py-2.5 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-zinc-500">Customer:</span>
-          <button
-            type="button"
-            onClick={() => setShowCustomerSelect(!showCustomerSelect)}
-            className="text-xs font-medium text-green-700 hover:text-green-800 flex items-center gap-1 transition-colors"
-          >
-            <span>{selectedCustomer ? selectedCustomer.name : "Walk-in Customer"}</span>
-            <UserPlus className="w-3 h-3" />
-          </button>
+      <div className="px-4 py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm text-zinc-500 shrink-0 font-semibold">Customer:</span>
+          <div className="flex items-center gap-2 min-w-0">
+            {selectedCustomer ? (
+              <div className="flex items-center gap-1.5 min-w-0 bg-white border border-green-300 px-2.5 py-1 rounded-xl text-sm">
+                <span className="font-bold text-green-800 truncate">{selectedCustomer.name}</span>
+                {selectedCustomer.phone && (
+                  <span className="text-xs text-zinc-400 font-mono hidden sm:inline">({selectedCustomer.phone})</span>
+                )}
+                {onEditCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => onEditCustomer(selectedCustomer)}
+                    title="Edit customer details"
+                    className="px-1.5 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[10px] flex items-center gap-1 shadow-2xs ml-0.5 active:scale-95 transition-transform"
+                  >
+                    <Pencil className="w-2.5 h-2.5" />
+                    <span>Edit</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onSelectCustomer(null)}
+                  title="Remove customer (switch to Walk-in)"
+                  className="text-zinc-400 hover:text-red-600 p-0.5 ml-0.5 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowCustomerSelect(!showCustomerSelect)}
+              className="text-sm font-bold text-white bg-green-600 flex items-center gap-1.5 transition-colors px-3 py-1.5 rounded-xl border border-green-700 active:bg-green-700 active:scale-95"
+            >
+              <span>{selectedCustomer ? "Change" : "Walk-in Customer"}</span>
+              <UserPlus className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Unpaid / Pay Later alert link if any exist */}
+        {selectedCustomer?.address && (
+          <div className="flex items-center gap-1.5 text-xs text-zinc-500 pl-0.5">
+            <MapPin className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            <span className="truncate">{selectedCustomer.address}</span>
+          </div>
+        )}
+
+        {/* Unpaid / Pay Later alert */}
         {unpaidCount > 0 && onOpenUnpaidOrders && (
-          <div className="flex items-center justify-between pt-1 border-t border-zinc-200/60 text-[11px]">
-            <span className="text-amber-800 font-semibold flex items-center gap-1">
-              <Bookmark className="w-3 h-3 text-amber-600" />
+          <div className="flex items-center justify-between px-3 py-2 bg-amber-50 border border-amber-300 rounded-xl">
+            <span className="text-amber-900 font-bold text-sm flex items-center gap-1.5">
+              <Bookmark className="w-4 h-4 text-amber-600 shrink-0" />
               {unpaidCount} Pay Later Bill{unpaidCount !== 1 ? "s" : ""} Pending
             </span>
             <button
               type="button"
               onClick={onOpenUnpaidOrders}
-              className="text-amber-700 hover:text-amber-900 font-bold underline"
+              className="text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 active:bg-amber-700 px-3 py-1 rounded-lg border border-amber-600 transition-colors shrink-0 ml-2"
             >
               Collect
             </button>
@@ -185,37 +243,128 @@ export function CartPane({
         )}
 
         {showCustomerSelect && (
-          <div className="mt-2 p-1 bg-white border border-zinc-200 rounded-lg space-y-0.5 max-h-36 overflow-y-auto shadow-md">
-            <button
-              type="button"
-              onClick={() => {
-                onSelectCustomer(null);
-                setShowCustomerSelect(false);
-              }}
-              className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors ${
-                !selectedCustomer ? "bg-green-50 text-green-700 font-medium" : "text-zinc-700 hover:bg-zinc-50"
-              }`}
+          <div className="mt-1 bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-xl animate-in fade-in duration-100">
+            {/* Search Bar */}
+            <div className="p-2.5 border-b border-zinc-100 flex items-center gap-2 bg-zinc-50">
+              <Search className="w-4 h-4 text-zinc-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search name, phone, or address..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="w-full text-sm bg-transparent focus:outline-none placeholder:text-zinc-400 font-medium text-zinc-800"
+                autoFocus
+              />
+              {customerSearch && (
+                <button
+                  type="button"
+                  onClick={() => setCustomerSearch("")}
+                  className="text-zinc-400 hover:text-zinc-600 p-0.5"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Add Button */}
+            {onOpenAddCustomer && (
+              <div className="p-2 border-b border-zinc-100 bg-green-50/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCustomerSelect(false);
+                    onOpenAddCustomer();
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl text-sm font-bold text-green-800 bg-green-100 hover:bg-green-200 border border-green-300 flex items-center justify-center gap-2 transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4 text-green-700" />
+                  <span>+ Add New Customer to Order</span>
+                </button>
+              </div>
+            )}
+
+            {/* Customers List — fixed height shows ~2 rows, scroll for more */}
+            <div
+              className="overflow-y-scroll p-1.5 space-y-0.5"
+              style={{ height: "152px" }}
             >
-              Walk-in Customer
-            </button>
-            {customers.map((c) => (
               <button
-                key={c.id}
                 type="button"
                 onClick={() => {
-                  onSelectCustomer(c);
+                  onSelectCustomer(null);
                   setShowCustomerSelect(false);
                 }}
-                className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors flex justify-between ${
-                  selectedCustomer?.id === c.id
-                    ? "bg-green-50 text-green-700 font-medium"
-                    : "text-zinc-700 hover:bg-zinc-50"
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-between ${
+                  !selectedCustomer ? "bg-green-50 text-green-800 border border-green-200" : "text-zinc-700 hover:bg-zinc-50"
                 }`}
               >
-                <span>{c.name}</span>
-                <span className="text-zinc-400">{c.phone}</span>
+                <span>Walk-in Customer</span>
+                {!selectedCustomer && <span className="text-xs text-green-600 font-bold bg-green-100 px-2 py-0.5 rounded-full">Selected</span>}
               </button>
-            ))}
+
+              {filteredCustomers.length === 0 ? (
+                <div className="p-4 text-center text-sm text-zinc-400">
+                  <p>No customer matches &ldquo;{customerSearch}&rdquo;</p>
+                  {onOpenAddCustomer && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCustomerSelect(false);
+                        onOpenAddCustomer();
+                      }}
+                      className="mt-2 text-green-700 hover:underline font-bold text-sm"
+                    >
+                      + Add &ldquo;{customerSearch}&rdquo;
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredCustomers.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`w-full px-3 py-2 rounded-xl text-sm transition-colors flex items-center justify-between gap-1.5 ${
+                      selectedCustomer?.id === c.id
+                        ? "bg-green-50 text-green-800 font-bold border border-green-200"
+                        : "text-zinc-700 hover:bg-zinc-50 border border-transparent"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectCustomer(c);
+                        setShowCustomerSelect(false);
+                      }}
+                      className="flex-1 text-left min-w-0"
+                    >
+                      <div className="flex items-center justify-between pr-2">
+                        <span className="font-bold text-zinc-900 text-sm truncate">{c.name}</span>
+                        <span className="text-zinc-500 font-mono text-xs">{c.phone}</span>
+                      </div>
+                      {c.address && (
+                        <div className="flex items-center gap-1 text-xs text-zinc-400 mt-0.5">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{c.address}</span>
+                        </div>
+                      )}
+                    </button>
+                    {onEditCustomer && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditCustomer(c);
+                        }}
+                        className="px-1.5 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[10px] shrink-0 flex items-center gap-1 shadow-2xs ml-1 active:scale-95 transition-transform"
+                        title="Edit customer profile"
+                      >
+                        <Pencil className="w-2.5 h-2.5" />
+                        <span>Edit</span>
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -247,6 +396,7 @@ export function CartPane({
               item={item}
               onAdjustWeight={onAdjustWeight}
               onOpenWeightEdit={onOpenWeightEdit}
+              onUpdateDiscount={onUpdateDiscount}
               onRemove={onRemoveItem}
             />
           ))
@@ -276,15 +426,15 @@ export function CartPane({
           </div>
         </div>
 
-        {/* Quick Pay Buttons: Cash, M-Pesa, Pay Later */}
+        {/* Quick Pay Buttons: Cash, M-Pesa, Pay Later — responsive 3-col grid */}
         <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
             disabled={items.length === 0}
             onClick={() => onProceedCheckout("cash")}
-            className="py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 transition-colors"
+            className="py-3 sm:py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 active:bg-zinc-100 transition-colors"
           >
-            <Banknote className="w-3.5 h-3.5 text-green-600" />
+            <Banknote className="w-4 h-4 text-green-600" />
             Cash
           </button>
 
@@ -292,9 +442,9 @@ export function CartPane({
             type="button"
             disabled={items.length === 0}
             onClick={() => onProceedCheckout("mpesa")}
-            className="py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 transition-colors"
+            className="py-3 sm:py-2 px-2 rounded-xl border border-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-zinc-700 flex items-center justify-center gap-1 hover:bg-zinc-50 active:bg-zinc-100 transition-colors"
           >
-            <Smartphone className="w-3.5 h-3.5 text-green-600" />
+            <Smartphone className="w-4 h-4 text-green-600" />
             M-Pesa
           </button>
 
@@ -302,19 +452,19 @@ export function CartPane({
             type="button"
             disabled={items.length === 0}
             onClick={() => onProceedCheckout("credit")}
-            className="py-2 px-2 rounded-xl border border-amber-200 bg-amber-50/60 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs text-amber-800 flex items-center justify-center gap-1 hover:bg-amber-100 transition-colors"
+            className="py-3 sm:py-2 px-2 rounded-xl border border-amber-200 bg-amber-50/60 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-xs text-amber-800 flex items-center justify-center gap-1 hover:bg-amber-100 active:bg-amber-200 transition-colors"
           >
-            <Clock className="w-3.5 h-3.5 text-amber-700" />
+            <Clock className="w-4 h-4 text-amber-700" />
             Pay Later
           </button>
         </div>
 
-        {/* Main checkout */}
+        {/* Main checkout — large, full-width, very visible */}
         <button
           type="button"
           disabled={items.length === 0}
           onClick={() => onProceedCheckout()}
-          className={`w-full py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-white flex items-center justify-center gap-2 transition-all shadow-xs ${
+          className={`w-full py-4 sm:py-3 px-4 rounded-xl font-bold text-sm sm:text-xs uppercase tracking-wider text-white flex items-center justify-center gap-2 transition-all shadow-sm ${
             items.length === 0
               ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
               : !isShiftOpen
@@ -327,7 +477,7 @@ export function CartPane({
               ? `Open Shift to Checkout (${formatCurrency(total)})`
               : `Checkout (${formatCurrency(total)})`}
           </span>
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
         </button>
       </div>
     </div>

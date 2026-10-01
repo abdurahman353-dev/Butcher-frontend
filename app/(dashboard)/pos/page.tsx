@@ -16,6 +16,9 @@ import { CheckoutModal } from "@/components/pos/CheckoutModal";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
 import { HeldOrdersModal } from "@/components/pos/HeldOrdersModal";
 import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
+import { UnpaidOrdersPickerModal } from "@/components/pos/UnpaidOrdersPickerModal";
+import { QuickAddCustomerModal } from "@/components/pos/QuickAddCustomerModal";
+import { EditCustomerModal } from "@/components/pos/EditCustomerModal";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { ShoppingBag, AlertTriangle, Clock, Bookmark } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +44,7 @@ export default function PosPage() {
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
 
   // Held Orders State
   const [isHeldOrdersOpen, setIsHeldOrdersOpen] = useState(false);
@@ -50,6 +54,7 @@ export default function PosPage() {
   const [unpaidCount, setUnpaidCount] = useState(0);
   const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false); // picker when >1 unpaid
 
   const {
     items,
@@ -61,6 +66,7 @@ export default function PosPage() {
     addItem,
     updateWeight,
     adjustWeightBy,
+    updateDiscount,
     removeItem,
     clearCart,
     restoreItems,
@@ -258,13 +264,46 @@ export default function PosPage() {
     setSelectedCustomer(null);
   };
 
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
+
+  const handleOpenEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setIsEditCustomerOpen(true);
+  };
+
+  const handleCustomerUpdated = (updated: Customer) => {
+    setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    if (selectedCustomer?.id === updated.id) {
+      setSelectedCustomer(updated);
+    }
+  };
+
+  const handleCustomerDeleted = (customerId: number) => {
+    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    if (selectedCustomer?.id === customerId) {
+      setSelectedCustomer(null);
+    }
+  };
+
+  const handleCustomerCreated = (newCustomer: Customer) => {
+    setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.id !== newCustomer.id)]);
+    setSelectedCustomer(newCustomer);
+    setIsAddCustomerOpen(false);
+  };
+
   const handleOpenSettle = (sale?: Sale) => {
     if (sale) {
+      // Specific sale passed — go straight to settle
       setSaleToSettle(sale);
       setIsSettleModalOpen(true);
-    } else if (unpaidSales.length > 0) {
+    } else if (unpaidSales.length === 1) {
+      // Only one unpaid bill — go straight to it
       setSaleToSettle(unpaidSales[0]);
       setIsSettleModalOpen(true);
+    } else if (unpaidSales.length > 1) {
+      // Multiple bills — show picker so user selects which to collect
+      setIsPickerOpen(true);
     }
   };
 
@@ -326,8 +365,11 @@ export default function PosPage() {
           customers={customers}
           selectedCustomer={selectedCustomer}
           onSelectCustomer={setSelectedCustomer}
+          onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
+          onEditCustomer={handleOpenEditCustomer}
           onAdjustWeight={adjustWeightBy}
           onOpenWeightEdit={(item) => setEditingCartItem(item)}
+          onUpdateDiscount={updateDiscount}
           onRemoveItem={removeItem}
           onClearCart={clearCart}
           onProceedCheckout={handleProceedCheckout}
@@ -412,11 +454,20 @@ export default function PosPage() {
               customers={customers}
               selectedCustomer={selectedCustomer}
               onSelectCustomer={setSelectedCustomer}
+              onOpenAddCustomer={() => {
+                setIsMobileCartOpen(false);
+                setIsAddCustomerOpen(true);
+              }}
+              onEditCustomer={(customer) => {
+                setIsMobileCartOpen(false);
+                handleOpenEditCustomer(customer);
+              }}
               onAdjustWeight={adjustWeightBy}
               onOpenWeightEdit={(item) => {
                 setIsMobileCartOpen(false);
                 setEditingCartItem(item);
               }}
+              onUpdateDiscount={updateDiscount}
               onRemoveItem={removeItem}
               onClearCart={clearCart}
               onProceedCheckout={(method) => {
@@ -524,6 +575,17 @@ export default function PosPage() {
         hasActiveCartItems={items.length > 0}
       />
 
+      {/* Unpaid Orders Picker — shown when there are multiple pay-later bills */}
+      <UnpaidOrdersPickerModal
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        unpaidSales={unpaidSales}
+        onSelectSale={(sale) => {
+          setSaleToSettle(sale);
+          setIsSettleModalOpen(true);
+        }}
+      />
+
       {/* Settle Payment Modal */}
       <SettlePaymentModal
         isOpen={isSettleModalOpen}
@@ -554,6 +616,25 @@ export default function PosPage() {
           setAutoPrintReceipt(false);
         }}
         autoPrint={autoPrintReceipt}
+      />
+
+      {/* Quick Add Customer Modal */}
+      <QuickAddCustomerModal
+        isOpen={isAddCustomerOpen}
+        onClose={() => setIsAddCustomerOpen(false)}
+        onCustomerCreated={handleCustomerCreated}
+      />
+
+      {/* Edit Customer Modal */}
+      <EditCustomerModal
+        isOpen={isEditCustomerOpen}
+        customer={editingCustomer}
+        onClose={() => {
+          setIsEditCustomerOpen(false);
+          setEditingCustomer(null);
+        }}
+        onCustomerUpdated={handleCustomerUpdated}
+        onCustomerDeleted={handleCustomerDeleted}
       />
     </div>
   );

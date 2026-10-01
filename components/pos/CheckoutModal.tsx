@@ -19,6 +19,7 @@ import {
   Phone,
   FileText,
   AlertCircle,
+  Lock,
 } from "lucide-react";
 
 interface CheckoutModalProps {
@@ -69,9 +70,14 @@ export function CheckoutModal({
   const [creditCustomerPhone, setCreditCustomerPhone] = useState(customer?.phone || "");
   const [creditNotes, setCreditNotes] = useState("");
 
-  // Always reset completed sale and form states when modal is opened or closed
+  // Reset ONLY when the modal transitions from closed → open (fresh open)
+  const prevIsOpenRef = React.useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    if (isOpen && !wasOpen) {
+      // Fresh open: reset everything
       setCompletedSale(null);
       setSelectedMethod(
         initialMethod === "cash" || initialMethod === "mpesa" || initialMethod === "credit" ? initialMethod : "cash"
@@ -80,10 +86,13 @@ export function CheckoutModal({
       setCreditCustomerPhone(customer?.phone || "");
       setCreditNotes("");
       setIsProcessing(false);
-    } else {
+    } else if (!isOpen && wasOpen) {
+      // Closed: clear completed sale
       setCompletedSale(null);
     }
-  }, [isOpen, initialMethod, customer]);
+    // Intentionally NOT depending on customer/initialMethod changes after open
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleNextSale = () => {
     setCompletedSale(null);
@@ -218,6 +227,14 @@ export function CheckoutModal({
                 <div className="flex justify-between text-zinc-500">
                   <span>Phone:</span>
                   <span className="font-mono text-zinc-800">{completedSale.customer_phone}</span>
+                </div>
+              )}
+              {(completedSale.customer_address || completedSale.customer?.address) && (
+                <div className="flex justify-between text-zinc-500">
+                  <span>Address:</span>
+                  <span className="font-semibold text-zinc-800">
+                    {completedSale.customer_address || completedSale.customer?.address}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between text-zinc-500">
@@ -356,7 +373,13 @@ export function CheckoutModal({
                     <button
                       key={method}
                       type="button"
-                      onClick={() => setSelectedMethod(method)}
+                      onClick={() => {
+                        setSelectedMethod(method);
+                        if (method === "credit" && customer) {
+                          setCreditCustomerName(customer.name);
+                          setCreditCustomerPhone(customer.phone || "");
+                        }
+                      }}
                       className={`py-2 px-1 rounded-lg text-[11px] font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all ${
                         selectedMethod === method
                           ? method === "credit"
@@ -396,30 +419,77 @@ export function CheckoutModal({
                     </div>
                   </div>
 
+                  {customer && (
+                    <div className="p-2.5 bg-green-50 border border-green-200 rounded-xl text-xs text-green-900 space-y-0.5">
+                      <div className="flex items-center gap-1.5 font-bold text-green-800">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                        <span>Auto-filled from selected customer profile:</span>
+                      </div>
+                      <div className="text-[11px] text-green-950 pl-5">
+                        <p><strong>{customer.name}</strong> • {customer.phone || "No phone"}</p>
+                        {customer.address && <p className="text-zinc-600">📍 {customer.address}</p>}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1">
-                      <User className="w-3 h-3 text-zinc-400" /> Customer Name (Required)
+                    <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <User className="w-3 h-3 text-zinc-400" /> Customer Name (Required)
+                      </span>
+                      {Boolean(customer) && (
+                        <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5 text-zinc-400" /> Read-only (Profile)
+                        </span>
+                      )}
                     </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mama Mboga / John / Table 4"
-                      value={creditCustomerName}
-                      onChange={(e) => setCreditCustomerName(e.target.value)}
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="e.g. Mama Mboga / John / Table 4"
+                        value={creditCustomerName}
+                        readOnly={Boolean(customer)}
+                        onChange={(e) => setCreditCustomerName(e.target.value)}
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none transition-colors ${
+                          customer
+                            ? "bg-zinc-100 text-zinc-600 border-zinc-200 cursor-not-allowed select-none pr-8"
+                            : "border-zinc-300 text-zinc-900 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                        }`}
+                      />
+                      {Boolean(customer) && (
+                        <Lock className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      )}
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center gap-1">
-                      <Phone className="w-3 h-3 text-zinc-400" /> Customer Phone (Recommended)
+                    <label className="block text-xs font-bold text-zinc-700 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-zinc-400" /> Customer Phone (Recommended)
+                      </span>
+                      {Boolean(customer) && (
+                        <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5 text-zinc-400" /> Read-only (Profile)
+                        </span>
+                      )}
                     </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 0712 345 678"
-                      value={creditCustomerPhone}
-                      onChange={(e) => setCreditCustomerPhone(e.target.value)}
-                      className="w-full border border-zinc-300 rounded-xl px-3 py-2 text-xs font-mono font-semibold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="e.g. 0712 345 678"
+                        value={creditCustomerPhone}
+                        readOnly={Boolean(customer)}
+                        onChange={(e) => setCreditCustomerPhone(e.target.value)}
+                        className={`w-full border rounded-xl px-3 py-2 text-xs font-mono font-semibold focus:outline-none transition-colors ${
+                          customer
+                            ? "bg-zinc-100 text-zinc-600 border-zinc-200 cursor-not-allowed select-none pr-8"
+                            : "border-zinc-300 text-zinc-900 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                        }`}
+                      />
+                      {Boolean(customer) && (
+                        <Lock className="w-3.5 h-3.5 text-zinc-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      )}
+                    </div>
                   </div>
 
                   <div>
