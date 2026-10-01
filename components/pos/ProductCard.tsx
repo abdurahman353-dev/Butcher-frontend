@@ -20,29 +20,29 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
       onClick={() => {
         if (!isOutOfStock) onSelect(product);
       }}
-      className={`group relative rounded-xl bg-white border flex flex-col justify-between transition-all duration-150 select-none overflow-hidden ${
+      className={`group relative rounded-2xl bg-white border flex flex-col justify-between transition-all duration-150 select-none overflow-hidden ${
         isOutOfStock
           ? "border-zinc-200 opacity-50 cursor-not-allowed"
-          : "border-zinc-200 hover:border-green-400 hover:shadow-md cursor-pointer active:scale-[0.98]"
+          : "border-zinc-200 hover:border-green-500 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer active:scale-[0.97] active:shadow-sm"
       }`}
     >
-      {/* Image area */}
-      <div className="h-28 w-full overflow-hidden relative">
+      {/* Color-block image area — taller for better visual impact */}
+      <div className="h-32 w-full overflow-hidden relative">
         <MeatImage category={product.category_name} name={product.name} image={product.image} />
 
-        {/* Stock badge */}
-        <div className="absolute bottom-2 right-2">
+        {/* Stock badge — top-right so it doesn't overlap the code text */}
+        <div className="absolute top-2 right-2">
           {isOutOfStock ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
+            <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-red-600 text-white shadow-sm tracking-wide">
               OUT
             </span>
           ) : isLowStock ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-0.5">
+            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500 text-white shadow-sm flex items-center gap-0.5">
               <AlertTriangle className="w-2.5 h-2.5" />
               {formatWeight(product.current_stock, product.unit)}
             </span>
           ) : (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/90 text-zinc-600 border border-zinc-200">
+            <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-black/30 text-white backdrop-blur-sm">
               {formatWeight(product.current_stock, product.unit)}
             </span>
           )}
@@ -51,17 +51,17 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
       {/* Info */}
       <div className="p-3">
-        <h3 className="text-sm font-semibold text-zinc-900 line-clamp-1 group-hover:text-green-700 transition-colors">
+        <h3 className="text-sm font-bold text-zinc-900 line-clamp-1 group-hover:text-green-700 transition-colors leading-snug">
           {product.name}
         </h3>
-        <p className="text-[11px] text-zinc-400 font-mono mt-0.5">{product.sku}</p>
+        <p className="text-[10px] text-zinc-400 font-mono mt-0.5 tracking-wide">{product.sku}</p>
 
         <div className="mt-2.5 flex items-center justify-between">
           <div>
-            <span className="text-[10px] text-zinc-400 uppercase tracking-wide">
+            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
               Per {product.unit?.toUpperCase() === "PACK" ? "Pack" : product.unit?.toUpperCase() === "PCS" ? "Pc" : "KG"}
             </span>
-            <p className="text-base font-bold text-green-700 tabular-nums leading-tight">
+            <p className="text-base font-black text-green-700 tabular-nums leading-tight">
               {formatCurrency(product.price_per_kg)}
             </p>
           </div>
@@ -70,13 +70,13 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
             type="button"
             disabled={isOutOfStock}
             aria-label={`Add ${product.name} to sale`}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-sm ${
               isOutOfStock
-                ? "bg-zinc-100 text-zinc-300"
-                : "bg-green-600 text-white group-hover:bg-green-700"
+                ? "bg-zinc-100 text-zinc-300 shadow-none"
+                : "bg-green-600 text-white group-hover:bg-green-700 group-hover:scale-110 active:scale-95"
             }`}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-5 h-5" />
           </button>
         </div>
       </div>
