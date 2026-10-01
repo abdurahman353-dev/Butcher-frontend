@@ -73,5 +73,10 @@ export const saasService = {
     const res = await apiClient.post(`/saas/companies/${companyId}/set-lifetime`);
     return res.data;
   },
+
+  async deleteCompany(companyId: number): Promise<{ message: string }> {
+    const res = await apiClient.delete<{ message: string }>(`/saas/companies/${companyId}`);
+    return res.data;
+  },
 };
 

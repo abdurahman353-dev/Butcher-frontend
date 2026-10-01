@@ -14,7 +14,7 @@ import {
   Calendar, AlertTriangle, Loader2,
   Lock, Unlock, MoreVertical, Star, Infinity,
   Activity, ChevronRight, AlertCircle, Search, Filter,
-  SlidersHorizontal, ChevronDown, ArrowUpDown, Phone, Mail, MapPin, Minus,
+  SlidersHorizontal, ChevronDown, ArrowUpDown, Phone, Mail, MapPin, Minus, Trash2,
 } from "lucide-react";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -297,6 +297,32 @@ export default function SaasPortalPage() {
       showToast(`${c.name} upgraded to Lifetime VIP plan!`);
     } catch {
       showToast("Failed to set lifetime", "error");
+    } finally {
+      clearAction(c.id);
+    }
+  };
+
+  // ── Yes/No Confirmation on Delete Butchery ──
+  const handleDeleteCompany = async (c: SaasCompany) => {
+    setOpenMenu(null);
+    const confirmed = await confirm({
+      title: "Delete Butchery Permanently?",
+      message: `Are you sure you want to permanently delete "${c.name}" and all associated data?\nThis action cannot be undone.`,
+      confirmText: "Yes, Delete Butchery",
+      cancelText: "No, Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    setAction(c.id, "delete");
+    try {
+      const res = await saasService.deleteCompany(c.id);
+      setCompanies((prev) => prev.filter((x) => x.id !== c.id));
+      showToast(res.message || `${c.name} deleted successfully`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to delete company";
+      showToast(msg, "error");
     } finally {
       clearAction(c.id);
     }
@@ -715,6 +741,16 @@ export default function SaasPortalPage() {
                 <span>Set Lifetime VIP</span>
               </button>
             )}
+
+            <div className="my-1 border-t border-zinc-100" />
+
+            <button
+              onClick={() => handleDeleteCompany(openMenu.company)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Butchery</span>
+            </button>
           </div>
         </>
       )}
