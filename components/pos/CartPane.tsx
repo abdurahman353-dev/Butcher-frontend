@@ -514,7 +514,7 @@ export function CartPane({
               onOpenWeightEdit={onOpenWeightEdit}
               onUpdateDiscount={onUpdateDiscount}
               onRemove={onRemoveItem}
-              readOnly={isSavingOrder}
+              readOnly={isSavingOrder || Boolean(item.is_saved)}
             />
           ))
         )}

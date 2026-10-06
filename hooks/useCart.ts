@@ -35,7 +35,7 @@ export function useCart() {
       : Infinity;
 
     setItems((prev) => {
-      const existingIdx = prev.findIndex((it) => it.product_id === product.id);
+      const existingIdx = prev.findIndex((it) => it.product_id === product.id && !it.is_saved);
       if (existingIdx !== -1) {
         // Update existing line
         const updated = [...prev];

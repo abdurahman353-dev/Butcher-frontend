@@ -100,14 +100,17 @@ export interface CartItem {
   id: string; // unique item id in cart
   product_id: number;
   product_name: string;
+  sku?: string;
   unit?: string;
   price_per_kg: number;
   weight: number; // in KG or pack count
   discount: number; // in KSh
   subtotal: number; // calculated safe decimal
+  total?: number;
   available_stock: number;
   image?: string;
   notes?: string;
+  is_saved?: boolean;
 }
 
 export type PaymentMethod = "cash" | "mpesa" | "card" | "credit" | "free";

@@ -341,6 +341,7 @@ export default function PosPage() {
           total: Math.max(0, sub - disc),
           available_stock: matchingProduct?.current_stock ?? 999,
           notes: it.notes || "",
+          is_saved: true,
         };
       });
       restoreItems(cartItems);
@@ -406,6 +407,9 @@ export default function PosPage() {
 
     try {
       setIsSavingOrder(true);
+      // Identify only the newly added / unsaved items for this KOT print round
+      const newItems = items.filter((it) => !it.is_saved);
+
       const formattedItems: RestaurantBillItem[] = items.map((it) => ({
         product_id: it.product_id,
         product_name: it.product_name,
@@ -427,12 +431,37 @@ export default function PosPage() {
         notes: activeBill.notes || undefined,
       });
 
+      // Mark all items in the cart as saved/read-only now
+      const allSavedCartItems: CartItem[] = items.map((it) => ({
+        ...it,
+        is_saved: true,
+      }));
+      restoreItems(allSavedCartItems);
+
       setActiveBill(res.data);
       setHasUnsavedOrder(false);
-      // Show & auto-print the Kitchen Order Ticket (initial print)
+
+      // Only print newly posted items on this round's KOT slip
+      const itemsForSlip: RestaurantBillItem[] = (newItems.length > 0 ? newItems : items).map((it) => ({
+        product_id: it.product_id,
+        product_name: it.product_name,
+        price_per_kg: it.price_per_kg,
+        weight: it.weight,
+        unit: it.unit,
+        discount: it.discount || 0,
+        notes: it.notes || "",
+        line_total: it.subtotal,
+      }));
+
+      const billForKitchenSlip: RestaurantBill = {
+        ...res.data,
+        items: itemsForSlip,
+      };
+
+      // Show & auto-print the Kitchen Order Ticket for the newly posted items
       setIsSlipReprint(false);
       setReprintProductId(undefined);
-      setPrintingKitchenBill(res.data);
+      setPrintingKitchenBill(billForKitchenSlip);
       fetchRestaurantTables();
     } catch (e: any) {
       console.error("Save order error:", e);
