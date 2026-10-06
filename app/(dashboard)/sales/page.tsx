@@ -713,8 +713,8 @@ function SalesLedger() {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-          placeholder={isRestaurant ? "Search by order #, table, customer name, phone, server, or item..." : "Search by sale #, customer name, phone, cashier, or meat cut..."}
-          className="w-full h-12 bg-white border-2 border-zinc-200 rounded-2xl pl-12 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 shadow-xs transition-all hover:border-zinc-300"
+          placeholder={isRestaurant ? "Search by bill #, sale #, table, customer, phone, server, or item..." : "Search by sale #, customer name, phone, cashier, or meat cut..."}
+          className="w-full h-12 bg-white border-2 border-emerald-500 rounded-2xl pl-12 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all"
         />
         {search && (
           <button
