@@ -31,10 +31,12 @@ interface CheckoutModalProps {
   totalDiscount: number;
   total: number;
   customer: Customer | null;
+  defaultCustomerName?: string | null;
+  defaultCustomerPhone?: string | null;
   initialMethod?: "cash" | "mpesa" | "credit" | "free";
   isRestaurant?: boolean;
   orderType?: string;
-  tableNumber?: string;
+  tableNumber?: string | number | null;
   onCompleteSale: (payload: {
     payment_method: "cash" | "mpesa" | "credit" | "free";
     amount_received?: number;
@@ -56,6 +58,8 @@ export function CheckoutModal({
   totalDiscount,
   total,
   customer,
+  defaultCustomerName,
+  defaultCustomerPhone,
   initialMethod = "cash",
   isRestaurant = false,
   orderType = "counter",
@@ -73,8 +77,10 @@ export function CheckoutModal({
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
 
   // Pay Later & Free Meal Form State
-  const [creditCustomerName, setCreditCustomerName] = useState(customer?.name || "");
-  const [creditCustomerPhone, setCreditCustomerPhone] = useState(customer?.phone || "");
+  const initialName = customer?.name || defaultCustomerName || "";
+  const initialPhone = customer?.phone || defaultCustomerPhone || "";
+  const [creditCustomerName, setCreditCustomerName] = useState(initialName);
+  const [creditCustomerPhone, setCreditCustomerPhone] = useState(initialPhone);
   const [creditNotes, setCreditNotes] = useState("");
   const [freeMealReason, setFreeMealReason] = useState("");
 
@@ -88,8 +94,8 @@ export function CheckoutModal({
       // Fresh open: reset everything
       setCompletedSale(null);
       setSelectedMethod(initialMethod || "cash");
-      setCreditCustomerName(customer?.name || "");
-      setCreditCustomerPhone(customer?.phone || "");
+      setCreditCustomerName(customer?.name || defaultCustomerName || "");
+      setCreditCustomerPhone(customer?.phone || defaultCustomerPhone || "");
       setCreditNotes("");
       setFreeMealReason("");
       setIsProcessing(false);
@@ -183,11 +189,13 @@ export function CheckoutModal({
   const handleFreeSuccess = async () => {
     setIsProcessing(true);
     try {
+      const finalCustName = creditCustomerName.trim() || customer?.name || defaultCustomerName || undefined;
+      const finalCustPhone = creditCustomerPhone.trim() || customer?.phone || defaultCustomerPhone || undefined;
       const sale = await onCompleteSale({
         payment_method: "free",
         amount_received: 0,
-        customer_name: creditCustomerName.trim() || customer?.name || "Complimentary Guest",
-        customer_phone: creditCustomerPhone.trim() || customer?.phone || undefined,
+        customer_name: finalCustName,
+        customer_phone: finalCustPhone,
         notes: freeMealReason.trim() ? `[FREE MEAL / COMPLIMENTARY]: ${freeMealReason.trim()}` : "[FREE MEAL / COMPLIMENTARY]",
       });
       setCompletedSale(sale);
@@ -259,16 +267,24 @@ export function CheckoutModal({
             </div>
 
             <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-left space-y-2 text-xs">
+              {(completedSale.table_number || tableNumber) && (
+                <div className="flex justify-between text-zinc-500">
+                  <span>Table:</span>
+                  <span className="font-bold text-zinc-800">
+                    Table {completedSale.table_number || tableNumber}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between text-zinc-500">
                 <span>Customer:</span>
                 <span className="font-bold text-zinc-800">
-                  {completedSale.customer_name || "Walk-in Customer"}
+                  {completedSale.customer_name || defaultCustomerName || "Walk-in Customer"}
                 </span>
               </div>
-              {completedSale.customer_phone && (
+              {(completedSale.customer_phone || defaultCustomerPhone) && (
                 <div className="flex justify-between text-zinc-500">
                   <span>Phone:</span>
-                  <span className="font-mono text-zinc-800">{completedSale.customer_phone}</span>
+                  <span className="font-mono text-zinc-800">{completedSale.customer_phone || defaultCustomerPhone}</span>
                 </div>
               )}
               {(completedSale.customer_address || completedSale.customer?.address) && (
@@ -283,10 +299,14 @@ export function CheckoutModal({
                 <span>Payment Status:</span>
                 <span
                   className={`font-bold uppercase ${
-                    isPendingCredit ? "text-amber-700" : "text-green-700"
+                    isFreeMeal ? "text-purple-700" : isPendingCredit ? "text-amber-700" : "text-green-700"
                   }`}
                 >
-                  {isPendingCredit ? (isRestaurant ? "Open Tab (Unpaid)" : "Unpaid (Pay Later)") : completedSale.payment_method}
+                  {isFreeMeal
+                    ? "Free Meal (Complimentary)"
+                    : isPendingCredit
+                    ? (isRestaurant ? "Open Tab (Unpaid)" : "Unpaid (Pay Later)")
+                    : completedSale.payment_method}
                 </span>
               </div>
               {completedSale.mpesa_reference && (

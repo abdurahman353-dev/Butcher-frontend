@@ -34,6 +34,7 @@ import {
   Banknote,
   Smartphone,
   CreditCard,
+  Gift,
   Layers,
   ChevronDown,
   Clock,
@@ -951,6 +952,7 @@ function SalesLedger() {
                   <option value="cash">💵 Cash Only</option>
                   <option value="mpesa">📱 M-Pesa Only</option>
                   <option value="credit">⏳ Pay Later / Credit</option>
+                  <option value="free">🎁 Free Meal / Complimentary</option>
                 </select>
               </div>
 
@@ -1312,6 +1314,10 @@ function SalesLedger() {
                       ) : sale.payment_method === "credit" ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[11px] font-bold">
                           <Clock className="w-3 h-3 text-amber-700" /> Pay Later
+                        </span>
+                      ) : sale.payment_method === "free" ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-900 border border-purple-200 text-[11px] font-bold">
+                          <Gift className="w-3 h-3 text-purple-600" /> Free Meal
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">

@@ -210,6 +210,12 @@ export function CustomerPreBillModal({
                   <span className="font-bold">{bill.customer_name}</span>
                 </div>
               )}
+              {bill.customer_phone && (
+                <div className="flex justify-between">
+                  <span>Guest Phone:</span>
+                  <span className="font-mono">{bill.customer_phone}</span>
+                </div>
+              )}
               <div className="flex justify-between text-[10px] text-zinc-500 pt-1">
                 <span>Printed At:</span>
                 <span>{formatDateTime(bill.bill_printed_at || new Date().toISOString())}</span>
@@ -291,8 +297,14 @@ function buildPreBillEscPos(bill: RestaurantBill, settings?: any): any[] {
   commands.push(`${storeName}\n`);
   commands.push("\x1B\x45\x00", "\x1B\x61\x01", "GUEST BILL\n", "PRE-SETTLEMENT\n", "--------------\n");
   commands.push("\x1B\x61\x00");
-  commands.push(`Table: ${bill.table_number}\n`);
+  commands.push(`Table: Table ${bill.table_number}\n`);
   commands.push(`Bill: ${bill.bill_number}\n`);
+  if (bill.customer_name) {
+    commands.push(`Customer: ${bill.customer_name}${bill.customer_phone ? ` (${bill.customer_phone})` : ""}\n`);
+  }
+  if (bill.waiter_name) {
+    commands.push(`Server: ${bill.waiter_name}\n`);
+  }
   commands.push(`Time: ${new Date(bill.bill_printed_at || bill.created_at || Date.now()).toLocaleString()}\n`);
   commands.push("--------------\n");
   commands.push("ITEM                TOTAL\n");

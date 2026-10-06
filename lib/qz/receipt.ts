@@ -78,7 +78,7 @@ export function buildEscPosReceipt(
   commands.push(padLine(`Time: ${saleDate.split(",")[1]?.trim() || ""}`, `Cashier: ${sale.cashier_name || "Staff"}`) + "\n");
 
   if (sale.table_number) {
-    commands.push(padLine(`Table: ${sale.table_number}`, "") + "\n");
+    commands.push(padLine(`Table: Table ${sale.table_number}`, "") + "\n");
   }
 
   if (sale.customer_name) {
@@ -124,17 +124,26 @@ export function buildEscPosReceipt(
   commands.push(divider("-"));
 
   // --- PAYMENT DETAILS ---
-  const paymentMethod = (sale.payment_method || "cash").toUpperCase();
+  let paymentMethod = (sale.payment_method || "cash").toUpperCase();
+  if (sale.payment_method === "free") {
+    paymentMethod = "FREE MEAL (COMPLIMENTARY)";
+  } else if (sale.payment_status === "pending" || sale.payment_method === "credit") {
+    paymentMethod = "PAY LATER (CREDIT)";
+  }
   commands.push(padLine("PAYMENT METHOD:", paymentMethod) + "\n");
 
-  if (sale.amount_received && Number(sale.amount_received) > 0) {
-    commands.push(padLine("CASH TENDERED:", `KSh ${Number(sale.amount_received).toFixed(2)}`) + "\n");
-  }
-  if (sale.change_given && Number(sale.change_given) > 0) {
-    commands.push(padLine("CHANGE:", `KSh ${Number(sale.change_given).toFixed(2)}`) + "\n");
-  }
-  if (sale.mpesa_reference) {
-    commands.push(padLine("MPESA REF:", sale.mpesa_reference) + "\n");
+  if (sale.payment_method === "free") {
+    commands.push(padLine("AMOUNT CHARGED:", "KSh 0.00") + "\n");
+  } else {
+    if (sale.amount_received && Number(sale.amount_received) > 0) {
+      commands.push(padLine("CASH TENDERED:", `KSh ${Number(sale.amount_received).toFixed(2)}`) + "\n");
+    }
+    if (sale.change_given && Number(sale.change_given) > 0) {
+      commands.push(padLine("CHANGE:", `KSh ${Number(sale.change_given).toFixed(2)}`) + "\n");
+    }
+    if (sale.mpesa_reference) {
+      commands.push(padLine("MPESA REF:", sale.mpesa_reference) + "\n");
+    }
   }
 
   // --- FOOTER ---

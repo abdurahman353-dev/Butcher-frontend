@@ -33,8 +33,6 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   const [agentState, setAgentState] = useState<Partial<PrintAgentState>>({});
   const pendingAutoPrint = useRef(autoPrint);
 
-  if (!isOpen || !sale) return null;
-
   useEffect(() => {
     if (isOpen) {
       pendingAutoPrint.current = autoPrint;
@@ -145,6 +143,8 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
     }
   };
 
+  if (!isOpen || !sale) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 select-none">
       {/* Backdrop */}
@@ -215,6 +215,8 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                   ? "PARTIALLY REFUNDED"
                   : sale.sale_status === "refunded"
                   ? "FULLY REFUNDED"
+                  : sale.payment_method === "free"
+                  ? "FREE MEAL"
                   : sale.sale_status.toUpperCase()}
               </span>
             </div>
@@ -225,6 +227,12 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
               <div className="grid grid-cols-2 gap-2 items-start">
                 <div className="space-y-0.5">
                   <div>Cashier: {sale.cashier_name}</div>
+                  {sale.table_number && (
+                    <div className="font-black text-black">Table: Table {sale.table_number}</div>
+                  )}
+                  {sale.order_type && sale.order_type !== "counter" && (
+                    <div>Type: {sale.order_type.toUpperCase()}</div>
+                  )}
                 </div>
                 <div className="space-y-0.5">
                   <div>Customer: {sale.customer_name || "Walk-in Customer"}</div>
@@ -368,6 +376,16 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                 Payment is pending. Please retain this bill until settled.
               </div>
             </div>
+          ) : sale.payment_method === "free" ? (
+            <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
+              <div className="font-black text-xs uppercase tracking-wider">
+                *** FREE MEAL / COMPLIMENTARY ***
+              </div>
+              <div className="text-[11px] font-bold leading-snug">
+                Authorized complimentary order on {formatDateTime(sale.settled_at || sale.created_at)}
+                {sale.settled_by ? ` (${sale.settled_by})` : sale.cashier_name ? ` (${sale.cashier_name})` : ""}
+              </div>
+            </div>
           ) : (
             <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
               <div className="font-black text-xs uppercase tracking-wider">
@@ -385,11 +403,20 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             <div className="flex justify-between">
               <span>Payment:</span>
               <span className="font-black uppercase">
-                {sale.payment_status === "pending" || sale.payment_method === "credit"
+                {sale.payment_method === "free"
+                  ? "FREE MEAL (COMPLIMENTARY)"
+                  : sale.payment_status === "pending" || sale.payment_method === "credit"
                   ? "PAY LATER (CREDIT)"
                   : sale.payment_method}
               </span>
             </div>
+
+            {sale.payment_method === "free" && (
+              <div className="flex justify-between">
+                <span>Amount Charged:</span>
+                <span className="font-black">{formatCurrency(0)}</span>
+              </div>
+            )}
 
             {sale.payment_method === "cash" && (
               <>

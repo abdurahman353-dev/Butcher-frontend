@@ -247,6 +247,9 @@ export function CartPane({
                 <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
                   Waiter: <span className="font-semibold text-zinc-700">{activeBill.waiter_name || "Staff"}{activeBill.waiter_pin ? ` (#${activeBill.waiter_pin})` : ""}</span>
                   {" \u2022 "}{activeBill.guest_count} guest{activeBill.guest_count !== 1 ? "s" : ""}
+                  {activeBill.customer_name && (
+                    <span className="font-bold text-emerald-800 ml-1">{" \u2022 "}Guest: {activeBill.customer_name}</span>
+                  )}
                 </div>
               </div>
             </div>

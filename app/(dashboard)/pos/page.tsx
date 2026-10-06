@@ -702,8 +702,10 @@ export default function PosPage() {
         amount_received: payload.amount_received,
         mpesa_reference: payload.mpesa_reference,
         customer_id: selectedCustomer?.id || activeBill.customer_id || undefined,
-        customer_name: payload.customer_name || selectedCustomer?.name || activeBill.customer_name || undefined,
-        customer_phone: payload.customer_phone || selectedCustomer?.phone || activeBill.customer_phone || undefined,
+        customer_name: (payload.customer_name && payload.customer_name !== "Complimentary Guest")
+          ? payload.customer_name
+          : (activeBill.customer_name || selectedCustomer?.name || undefined),
+        customer_phone: payload.customer_phone || activeBill.customer_phone || selectedCustomer?.phone || undefined,
         notes: payload.notes,
       });
 
@@ -1255,6 +1257,10 @@ export default function PosPage() {
           totalDiscount={totalDiscount}
           total={total}
           customer={selectedCustomer}
+          defaultCustomerName={activeBill?.customer_name || undefined}
+          defaultCustomerPhone={activeBill?.customer_phone || undefined}
+          isRestaurant={isRestaurant}
+          tableNumber={activeBill?.table_number ? String(activeBill.table_number) : (activeTable ? String(activeTable.table_number) : undefined)}
           initialMethod={initialPaymentMethod}
           onCompleteSale={handleCompleteSale}
           onViewReceipt={(sale) => {
