@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
+  const [printingState, setPrintingState] = useState({ status: 'unknown', printer: null, isChecking: false, isPrinting: false } as any);
 
   // Sync local form when global settings load, but NEVER overwrite if user is actively editing
   useEffect(() => {

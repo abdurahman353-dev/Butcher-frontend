@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RestaurantBill, RestaurantBillItem } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
-import { Printer, X, Receipt } from "lucide-react";
+import { Printer, X, Receipt, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
+import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
+import { buildEscPosReceipt } from "@/lib/qz/receipt";
+import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
+import type { Sale } from "@/types";
 
 interface CustomerPreBillModalProps {
   bill: RestaurantBill | null;
@@ -21,20 +26,113 @@ export function CustomerPreBillModal({
   autoPrint = true,
 }: CustomerPreBillModalProps) {
   const { settings } = useShopSettings();
+  const { alert } = useSystemDialog();
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
+  const pendingAutoPrint = useRef(autoPrint);
 
   useEffect(() => {
-    if (isOpen && bill && autoPrint) {
+    if (isOpen) {
+      pendingAutoPrint.current = autoPrint;
+    }
+  }, [isOpen, autoPrint]);
+
+  useEffect(() => {
+    if (!isOpen || !bill) return;
+    const run = async () => {
+      try {
+        const token = getToken();
+        if (!token) {
+          const detected = await detectAgentState();
+          if (!detected.health || (!detected.printer && !detected.error)) {
+            setIsPrintAgentOpen(true);
+            return;
+          }
+        }
+        // Try agent: if bill maps to a sale? sometimes not. But requirement says all slips via agent.
+        // Build a minimal ESC/POS fallback not needed; just queue via agent? We'll try to build receipt-like ESC/POS
+        const escpos = buildPreBillEscPos(bill, settings);
+        const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}` });
+        if (res.status === "FAILED") {
+          await alert({
+            title: "Print Failed",
+            message: res.error || "The pre-bill could not be printed.",
+            type: "danger",
+          });
+          setIsPrintAgentOpen(true);
+          return;
+        }
+        pendingAutoPrint.current = false;
+      } catch (err: any) {
+        if (ensureTokenClearedOn401(err)) {
+          setIsPrintAgentOpen(true);
+          pendingAutoPrint.current = true;
+          return;
+        }
+        await alert({
+          title: "Print Agent Unavailable",
+          message: err?.message || "Cannot reach the local Print Agent.",
+          type: "warning",
+        });
+        setIsPrintAgentOpen(true);
+        pendingAutoPrint.current = true;
+      }
+    };
+    if (pendingAutoPrint.current) {
       const timer = setTimeout(() => {
-        printElementInWindow("customer-pre-bill-slip", `Bill #${bill.bill_number}`);
+        pendingAutoPrint.current = false;
+        run();
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, bill, autoPrint]);
+    return undefined;
+  }, [isOpen, bill, alert, settings]);
 
   if (!isOpen || !bill) return null;
 
-  const handlePrint = () => {
-    printElementInWindow("customer-pre-bill-slip", `Bill #${bill.bill_number}`);
+  const handlePrint = async () => {
+    if (!bill) return;
+    setIsPrinting(true);
+    try {
+      const escpos = buildPreBillEscPos(bill, settings);
+      const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}` });
+      if (res.status === "FAILED") {
+        await alert({
+          title: "Print Failed",
+          message: res.error || "The pre-bill could not be printed.",
+          type: "danger",
+        });
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      if (res.status === "PENDING" && res.reason) {
+        await alert({
+          title: "Slip Queued",
+          message: "The pre-bill is waiting for the printer. It will print automatically when available.",
+          type: "info",
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (ensureTokenClearedOn401(err)) {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      try {
+        await checkHealth();
+      } catch {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      await alert({
+        title: "Print Failed",
+        message: err?.message || "The Print Agent returned an error.",
+        type: "warning",
+      });
+      setIsPrintAgentOpen(true);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const items: RestaurantBillItem[] = bill.items || [];
@@ -54,10 +152,11 @@ export function CustomerPreBillModal({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1 bg-amber-900 hover:bg-amber-950 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              disabled={isPrinting}
+              className="px-3 py-1 bg-amber-900 hover:bg-amber-950 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Bill</span>
+              {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+              <span>{isPrinting ? "Printing..." : "Print Bill"}</span>
             </button>
             <button
               type="button"
@@ -178,6 +277,37 @@ export function CustomerPreBillModal({
           </button>
         </div>
       </div>
+      <PrintAgentDialog
+        isOpen={isPrintAgentOpen}
+        onClose={() => setIsPrintAgentOpen(false)}
+      />
     </div>
   );
+}
+
+function buildPreBillEscPos(bill: RestaurantBill, settings?: any): any[] {
+  const storeName = settings?.shop_name || "RESTAURANT";
+  const commands: any[] = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01"];
+  commands.push(`${storeName}\n`);
+  commands.push("\x1B\x45\x00", "\x1B\x61\x01", "GUEST BILL\n", "PRE-SETTLEMENT\n", "--------------\n");
+  commands.push("\x1B\x61\x00");
+  commands.push(`Table: ${bill.table_number}\n`);
+  commands.push(`Bill: ${bill.bill_number}\n`);
+  commands.push(`Time: ${new Date(bill.bill_printed_at || bill.created_at || Date.now()).toLocaleString()}\n`);
+  commands.push("--------------\n");
+  commands.push("ITEM                TOTAL\n");
+  for (const item of bill.items || []) {
+    const name = (item.product_name || "Item").substring(0, 18);
+    const total = Number(item.line_total || 0).toFixed(2);
+    commands.push(`${name.padEnd(20)}${total}\n`);
+  }
+  commands.push("--------------\n");
+  commands.push(`SUBTOTAL: KSh ${Number(bill.subtotal || 0).toFixed(2)}\n`);
+  if (Number(bill.discount || 0) > 0) {
+    commands.push(`DISCOUNT: KSh ${Number(bill.discount).toFixed(2)}\n`);
+  }
+  commands.push(`TOTAL:    KSh ${Number(bill.total || 0).toFixed(2)}\n`);
+  commands.push("--------------\n");
+  commands.push("Thank you!\n\n\n\n\x1D\x56\x41\x03");
+  return commands;
 }

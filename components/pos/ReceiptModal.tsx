@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Sale } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime, formatUnitLabel } from "@/lib/formatters";
 import { Printer, X, Settings, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
-import { printService } from "@/lib/qz/printService";
 import { buildEscPosReceipt } from "@/lib/qz/receipt";
 import { PrinterSettingsModal } from "@/components/pos/PrinterSettingsModal";
+import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
+import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
+import type { PrintAgentState } from "@/lib/printAgent/client";
 
 interface ReceiptModalProps {
   sale: Sale | null;
@@ -23,46 +26,120 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
   const { settings } = useShopSettings();
+  const { alert } = useSystemDialog();
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [agentState, setAgentState] = useState<Partial<PrintAgentState>>({});
+  const pendingAutoPrint = useRef(autoPrint);
 
-  // Auto-print when the modal opens with autoPrint=true
+  if (!isOpen || !sale) return null;
+
   useEffect(() => {
-    if (isOpen && sale && autoPrint) {
-      const timer = setTimeout(async () => {
-        const savedPrinter = printService.getSavedPrinter();
-        if (savedPrinter) {
-          try {
-            const escpos = buildEscPosReceipt(sale, settings);
-            await printService.printRaw(savedPrinter, escpos);
+    if (isOpen) {
+      pendingAutoPrint.current = autoPrint;
+    }
+  }, [isOpen, autoPrint]);
+
+  useEffect(() => {
+    if (!isOpen || !sale) return;
+    const runAutoPrint = async () => {
+      try {
+        const token = getToken();
+        if (!token) {
+          const detected = await detectAgentState();
+          if (detected.health && !detected.printer && !detected.error) {
+            setIsPrintAgentOpen(true);
             return;
-          } catch (err) {
-            console.warn("[QZ Auto-print] Fallback:", err);
+          }
+          if (!detected.health) {
+            setIsPrintAgentOpen(true);
+            return;
           }
         }
-        printElementInWindow("thermal-receipt", `Receipt #${sale.sale_number}`);
+        const escpos = buildEscPosReceipt(sale, settings);
+        const res = await printEscPos(escpos, {
+          title: `Receipt #${sale.sale_number}`,
+        });
+        if (res.status === "FAILED") {
+          await alert({
+            title: "Print Failed",
+            message: res.error || "The receipt could not be printed.",
+            type: "danger",
+          });
+          setIsPrintAgentOpen(true);
+          return;
+        }
+        // PRINTED or PENDING: queued locally if printer unavailable
+        pendingAutoPrint.current = false;
+      } catch (err: any) {
+        if (ensureTokenClearedOn401(err)) {
+          setIsPrintAgentOpen(true);
+          pendingAutoPrint.current = true;
+          return;
+        }
+        await alert({
+          title: "Print Agent Unavailable",
+          message: err?.message || "Cannot reach the local Print Agent.",
+          type: "warning",
+        });
+        setIsPrintAgentOpen(true);
+        pendingAutoPrint.current = true;
+      }
+    };
+    if (pendingAutoPrint.current) {
+      const timer = setTimeout(() => {
+        pendingAutoPrint.current = false;
+        runAutoPrint();
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, sale, autoPrint, settings]);
-
-  if (!isOpen || !sale) return null;
+    return undefined;
+  }, [isOpen, sale, settings, alert]);
 
   const handlePrint = async () => {
     if (!sale) return;
     setIsPrinting(true);
     try {
-      const savedPrinter = printService.getSavedPrinter();
-      if (savedPrinter) {
-        try {
-          const escpos = buildEscPosReceipt(sale, settings);
-          await printService.printRaw(savedPrinter, escpos);
-          return;
-        } catch (err) {
-          console.warn("[QZ Print] Fallback to window print:", err);
-        }
+      const escpos = buildEscPosReceipt(sale, settings);
+      const res = await printEscPos(escpos, {
+        title: `Receipt #${sale.sale_number}`,
+      });
+      if (res.status === "FAILED") {
+        await alert({
+          title: "Print Failed",
+          message: res.error || "The receipt could not be printed.",
+          type: "danger",
+        });
+        setIsPrintAgentOpen(true);
+        return;
       }
-      printElementInWindow("thermal-receipt", `Receipt #${sale?.sale_number ?? ""}`);
+      if (res.status === "PENDING" && res.reason) {
+        await alert({
+          title: "Receipt Queued",
+          message:
+            "The receipt is waiting for the printer. It will print automatically when the printer becomes available.",
+          type: "info",
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (ensureTokenClearedOn401(err)) {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      try {
+        await checkHealth();
+      } catch {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      await alert({
+        title: "Print Failed",
+        message: err?.message || "The Print Agent returned an error.",
+        type: "warning",
+      });
+      setIsPrintAgentOpen(true);
     } finally {
       setIsPrinting(false);
     }
@@ -401,6 +478,17 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
       <PrinterSettingsModal
         isOpen={isPrinterSettingsOpen}
         onClose={() => setIsPrinterSettingsOpen(false)}
+      />
+      <PrintAgentDialog
+        isOpen={isPrintAgentOpen}
+        onClose={() => setIsPrintAgentOpen(false)}
+        onReady={(s) => {
+          setAgentState(s);
+          if (s.status === "ready" && pendingAutoPrint.current && sale) {
+            pendingAutoPrint.current = false;
+            void handlePrint();
+          }
+        }}
       />
     </div>
   );

@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RestaurantBill, RestaurantBillItem } from "@/types";
 import { formatDateTime } from "@/lib/formatters";
-import { ChefHat, Printer, X } from "lucide-react";
+import { ChefHat, Printer, X, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
+import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
+import { buildKitchenSlipEscPos } from "@/lib/qz/receipt";
+import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
 
 interface KitchenOrderSlipModalProps {
   bill: RestaurantBill | null;
@@ -21,20 +25,121 @@ export function KitchenOrderSlipModal({
   autoPrint = true,
 }: KitchenOrderSlipModalProps) {
   const { settings } = useShopSettings();
+  const { alert } = useSystemDialog();
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
+  const pendingAutoPrint = useRef(autoPrint);
 
   useEffect(() => {
-    if (isOpen && bill && autoPrint) {
+    if (isOpen) {
+      pendingAutoPrint.current = autoPrint;
+    }
+  }, [isOpen, autoPrint]);
+
+  useEffect(() => {
+    if (!isOpen || !bill) return;
+    const run = async () => {
+      try {
+        const token = getToken();
+        if (!token) {
+          const detected = await detectAgentState();
+          if (!detected.health || (!detected.printer && !detected.error)) {
+            setIsPrintAgentOpen(true);
+            return;
+          }
+        }
+        const escpos = buildKitchenSlipEscPos(
+          bill,
+          bill.items || [],
+          bill.waiter_name,
+          bill.table_number
+        );
+        const res = await printEscPos(escpos, { title: `KOT #${bill.bill_number}` });
+        if (res.status === "FAILED") {
+          await alert({
+            title: "Print Failed",
+            message: res.error || "The kitchen slip could not be printed.",
+            type: "danger",
+          });
+          setIsPrintAgentOpen(true);
+          return;
+        }
+        pendingAutoPrint.current = false;
+      } catch (err: any) {
+        if (ensureTokenClearedOn401(err)) {
+          setIsPrintAgentOpen(true);
+          pendingAutoPrint.current = true;
+          return;
+        }
+        await alert({
+          title: "Print Agent Unavailable",
+          message: err?.message || "Cannot reach the local Print Agent.",
+          type: "warning",
+        });
+        setIsPrintAgentOpen(true);
+        pendingAutoPrint.current = true;
+      }
+    };
+    if (pendingAutoPrint.current) {
       const timer = setTimeout(() => {
-        printElementInWindow("kitchen-order-ticket", `KOT #${bill.bill_number}`);
+        pendingAutoPrint.current = false;
+        run();
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, bill, autoPrint]);
+    return undefined;
+  }, [isOpen, bill, alert]);
 
   if (!isOpen || !bill) return null;
 
-  const handlePrint = () => {
-    printElementInWindow("kitchen-order-ticket", `KOT #${bill.bill_number}`);
+  const handlePrint = async () => {
+    if (!bill) return;
+    setIsPrinting(true);
+    try {
+      const escpos = buildKitchenSlipEscPos(
+        bill,
+        bill.items || [],
+        bill.waiter_name,
+        bill.table_number
+      );
+      const res = await printEscPos(escpos, { title: `KOT #${bill.bill_number}` });
+      if (res.status === "FAILED") {
+        await alert({
+          title: "Print Failed",
+          message: res.error || "The kitchen slip could not be printed.",
+          type: "danger",
+        });
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      if (res.status === "PENDING" && res.reason) {
+        await alert({
+          title: "Slip Queued",
+          message: "The kitchen slip is waiting for the printer. It will print automatically when available.",
+          type: "info",
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (ensureTokenClearedOn401(err)) {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      try {
+        await checkHealth();
+      } catch {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      await alert({
+        title: "Print Failed",
+        message: err?.message || "The Print Agent returned an error.",
+        type: "warning",
+      });
+      setIsPrintAgentOpen(true);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const items: RestaurantBillItem[] = bill.items || [];
@@ -54,10 +159,11 @@ export function KitchenOrderSlipModal({
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              disabled={isPrinting}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print Slip</span>
+              {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+              <span>{isPrinting ? "Printing..." : "Print Slip"}</span>
             </button>
             <button
               type="button"
@@ -153,6 +259,10 @@ export function KitchenOrderSlipModal({
           </button>
         </div>
       </div>
+      <PrintAgentDialog
+        isOpen={isPrintAgentOpen}
+        onClose={() => setIsPrintAgentOpen(false)}
+      />
     </div>
   );
 }
