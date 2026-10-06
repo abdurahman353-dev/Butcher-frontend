@@ -3,9 +3,12 @@
 import React, { useState } from "react";
 import { Shift } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
-import { Printer, X, Clock, Banknote, Smartphone, CreditCard, Pencil, Check, AlertTriangle } from "lucide-react";
+import { Printer, X, Clock, Banknote, Smartphone, CreditCard, Pencil, Check, AlertTriangle, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
+import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
+import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/services/api";
 
@@ -26,6 +29,8 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
   const [notesInput, setNotesInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
 
   if (!isOpen || !shift) return null;
 
@@ -69,8 +74,57 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
     }
   };
 
-  const handlePrint = () => {
-    printElementInWindow("shift-slip", `Shift #${shift?.id ?? ""} Z-Report`);
+  const handlePrint = async () => {
+    if (!shift) return;
+    setIsPrinting(true);
+    try {
+      const token = getToken();
+      if (!token) {
+        const detected = await detectAgentState();
+        if (!detected.health || (!detected.printer && !detected.error)) {
+          setIsPrintAgentOpen(true);
+          return;
+        }
+      }
+      const escpos = buildShiftEscPos(shift, settings);
+      const res = await printEscPos(escpos, { title: `Shift #${shift.id} Z-Report` });
+      if (res.status === "FAILED") {
+        await alert({
+          title: "Print Failed",
+          message: res.error || "The Z-Report could not be printed.",
+          type: "danger",
+        });
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      if (res.status === "PENDING" && res.reason) {
+        await alert({
+          title: "Report Queued",
+          message: "The Z-Report is waiting for the printer. It will print automatically when available.",
+          type: "info",
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (ensureTokenClearedOn401(err)) {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      try {
+        await checkHealth();
+      } catch {
+        setIsPrintAgentOpen(true);
+        return;
+      }
+      await alert({
+        title: "Print Failed",
+        message: err?.message || "The Print Agent returned an error.",
+        type: "warning",
+      });
+      setIsPrintAgentOpen(true);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const getDuration = (openedAt: string, closedAt?: string | null) => {
@@ -365,13 +419,44 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
           <button
             type="button"
             onClick={handlePrint}
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5"
+            disabled={isPrinting}
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print Z-Report</span>
+            {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+            <span>{isPrinting ? "Printing..." : "Print Z-Report"}</span>
           </button>
         </div>
       </div>
+      <PrintAgentDialog
+        isOpen={isPrintAgentOpen}
+        onClose={() => setIsPrintAgentOpen(false)}
+      />
     </div>
   );
+}
+
+function buildShiftEscPos(shift: Shift, settings?: any): any[] {
+  const divider = "-".repeat(42) + "\n";
+  const commands: any[] = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01"];
+  const storeName = settings?.shop_name || "SHIFT REPORT";
+  commands.push(`${storeName}\n`);
+  commands.push("\x1B\x45\x00", "Z-REPORT\n", "SHIFT SUMMARY\n");
+  commands.push("=".repeat(42) + "\n", "\x1B\x61\x00");
+  commands.push(`Shift: ${shift.id}\n`);
+  commands.push(`Opened: ${new Date(shift.opened_at).toLocaleString()}\n`);
+  commands.push(`Closed: ${shift.closed_at ? new Date(shift.closed_at).toLocaleString() : new Date().toLocaleString()}\n`);
+  commands.push(`Cashier: ${shift.cashier_name || ""}\n`);
+  commands.push(divider);
+  commands.push(`Gross Sales: KSh ${Number(shift.total_sales || 0).toFixed(2)}\n`);
+  commands.push(`Cash Sales: KSh ${Number(shift.cash_sales || 0).toFixed(2)}\n`);
+  commands.push(`M-Pesa: KSh ${Number(shift.mpesa_sales || 0).toFixed(2)}\n`);
+  commands.push(`Card: KSh ${Number(shift.card_sales || 0).toFixed(2)}\n`);
+  commands.push(divider);
+  commands.push(`Expected Cash: KSh ${Number(shift.expected_cash || 0).toFixed(2)}\n`);
+  if (shift.counted_cash !== null && shift.counted_cash !== undefined) {
+    commands.push(`Counted Cash: KSh ${Number(shift.counted_cash).toFixed(2)}\n`);
+    commands.push(`Difference: KSh ${Number(shift.difference || 0).toFixed(2)}\n`);
+  }
+  commands.push("=".repeat(42) + "\n", "\n\n\n\x1D\x56\x41\x03");
+  return commands;
 }
