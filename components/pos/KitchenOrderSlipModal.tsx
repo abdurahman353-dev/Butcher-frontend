@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RestaurantBill, RestaurantBillItem } from "@/types";
 import { formatDateTime } from "@/lib/formatters";
 import { ChefHat, Printer, X, Loader2, Check, ShieldAlert } from "lucide-react";
