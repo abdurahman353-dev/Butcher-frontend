@@ -12,7 +12,8 @@ import { ArrowLeft, Trash2, AlertOctagon, CheckCircle2, ChevronLeft, ChevronRigh
 
 export default function WastagePage() {
   const { confirm, alert } = useSystemDialog();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const [products, setProducts] = useState<Product[]>([]);
   const [wastageList, setWastageList] = useState<WastageRecord[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number>(0);
@@ -166,8 +167,14 @@ export default function WastagePage() {
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-zinc-900">Meat Wastage & Trimming Logs</h1>
-          <p className="text-xs text-zinc-500">Record spoiled cuts, bone trimmings, and damaged meat</p>
+          <h1 className="text-xl font-bold text-zinc-900">
+            {isRestaurant ? "Inventory Wastage & Spoilage Logs" : "Meat Wastage & Trimming Logs"}
+          </h1>
+          <p className="text-xs text-zinc-500">
+            {isRestaurant
+              ? "Record spoiled ingredients, kitchen prep loss, expired beverages, and damaged stock"
+              : "Record spoiled cuts, bone trimmings, and damaged meat"}
+          </p>
         </div>
       </div>
 
@@ -187,12 +194,12 @@ export default function WastagePage() {
           >
             <div className="flex items-center gap-2 text-rose-600 font-bold text-sm pb-2 border-b border-zinc-100">
               <Trash2 className="w-4 h-4" />
-              <span>Log Meat Wastage</span>
+              <span>{isRestaurant ? "Log Inventory Wastage" : "Log Meat Wastage"}</span>
             </div>
 
             <div>
               <label className="block font-semibold uppercase text-zinc-700 mb-1">
-                Meat Cut <span className="text-rose-500">*</span>
+                {isRestaurant ? "Item / Ingredient" : "Meat Cut"} <span className="text-rose-500">*</span>
               </label>
               <select
                 value={activeProductId}
@@ -276,9 +283,9 @@ export default function WastagePage() {
                 <thead>
                   <tr className="border-b border-zinc-200 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 bg-zinc-50/50">
                     <th className="py-3 pl-4">Date</th>
-                    <th className="py-3 px-3">Cut Name</th>
+                    <th className="py-3 px-3">{isRestaurant ? "Item Name" : "Cut Name"}</th>
                     <th className="py-3 px-3">Reason</th>
-                    <th className="py-3 px-3 text-right">Wasted (KG)</th>
+                    <th className="py-3 px-3 text-right">Quantity</th>
                     <th className="py-3 px-3 text-right">Est. Loss (KSh)</th>
                     <th className="py-3 pr-4">Reported By</th>
                   </tr>
@@ -287,7 +294,7 @@ export default function WastagePage() {
                   {wastageList.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-zinc-400">
-                        No meat wastage recorded.
+                        {isRestaurant ? "No inventory wastage recorded." : "No meat wastage recorded."}
                       </td>
                     </tr>
                   ) : (

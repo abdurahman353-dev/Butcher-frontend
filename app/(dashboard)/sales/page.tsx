@@ -44,7 +44,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSystemDialog } from "@/contexts/DialogContext";
 
 function SalesLedger() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const { confirm, alert } = useSystemDialog();
   const { settings: shopSettings } = useShopSettings();
   const searchParams = useSearchParams();
@@ -383,7 +384,7 @@ function SalesLedger() {
             </tr>
             <!-- Column Labels -->
             <tr style="background:#dcfce7">
-              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">Item / Cut</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">${isRestaurant ? "Menu Item / Product" : "Item / Cut"}</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#b45309;text-align:right">Discount</th>
@@ -422,7 +423,7 @@ function SalesLedger() {
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Daily Sales PDF Report - ${selectedDate}</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">🥩 ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || "Premium Meat Shop"} — Daily Sales PDF</div></div>
+  <div><div style="font-size:22px;font-weight:900">${isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isRestaurant ? "Restaurant & Bar F&B" : "Premium Meat Shop")} — Daily Sales PDF</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">DAILY SALES EXECUTIVE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Report Date: ${dateStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Generated: ${timeStr}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
@@ -431,7 +432,7 @@ function SalesLedger() {
   <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Volume Sold</div><div style="font-size:16px;font-weight:900;color:#b45309;margin-top:3px">${fW(analytics.total_weight || 0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">AOV: ${fK(analytics.average_order_value || 0)}</div></div>
 </div>
 <div style="padding:20px 28px">
-  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#374151;border-bottom:2px solid #16a34a;padding:6px 0;margin:10px 0 10px">Itemized Cut Sales Ledger</div>
+  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#374151;border-bottom:2px solid #16a34a;padding:6px 0;margin:10px 0 10px">${isRestaurant ? "Itemized Sales & Portions Ledger" : "Itemized Cut Sales Ledger"}</div>
   ${itemizedHTML || `<p style="padding:10px;color:#666">No sales transactions logged for ${selectedDate}.</p>`}
 </div>
 <script>window.onload=function(){window.print();};<\/script></body></html>`;
@@ -676,7 +677,7 @@ function SalesLedger() {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-          placeholder="Search by sale #, customer name, phone, cashier, or meat cut..."
+          placeholder={isRestaurant ? "Search by order #, table, customer name, phone, server, or item..." : "Search by sale #, customer name, phone, cashier, or meat cut..."}
           className="w-full h-12 bg-white border-2 border-zinc-200 rounded-2xl pl-12 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 shadow-xs transition-all hover:border-zinc-300"
         />
         {search && (
@@ -847,7 +848,7 @@ function SalesLedger() {
                       setSearch(e.target.value);
                       setCurrentPage(1);
                     }}
-                    placeholder="Sale #, customer, phone, staff, cut..."
+                    placeholder={isRestaurant ? "Order #, table, customer, phone, staff, item..." : "Sale #, customer, phone, staff, cut..."}
                     className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
                   />
                   <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1159,7 +1160,7 @@ function SalesLedger() {
                 <th className="py-3.5 px-3">Cashier / Staff</th>
                 <th className="py-3.5 px-3">Customer Details</th>
                 <th className="py-3.5 px-3">Payment Tender</th>
-                <th className="py-3.5 px-3 text-right">Items / Cuts</th>
+                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Items Ordered" : "Items / Cuts"}</th>
                 <th className="py-3.5 px-3 text-right">Amount (KSh)</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
                 <th className="py-3.5 pr-4 text-center">Actions</th>
@@ -1290,7 +1291,7 @@ function SalesLedger() {
                         {sale.items?.length ?? 0}
                       </span>{" "}
                       <span className="text-[11px] text-zinc-400">
-                        {sale.items?.length === 1 ? "cut" : "cuts"}
+                        {sale.items?.length === 1 ? (isRestaurant ? "item" : "cut") : (isRestaurant ? "items" : "cuts")}
                       </span>
                     </td>
 

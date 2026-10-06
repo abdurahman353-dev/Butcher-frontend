@@ -36,7 +36,8 @@ interface ItemRefundState {
 
 export default function SaleDetailPage() {
   const { confirm, alert } = useSystemDialog();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
@@ -249,7 +250,9 @@ export default function SaleDetailPage() {
     if (itemsToRefund.length === 0) {
       await alert({
         title: "No Items Selected",
-        message: "Please select at least one item cut with a valid weight greater than 0 KG to refund.",
+        message: isRestaurant
+          ? "Please select at least one item with a valid quantity greater than 0 to refund."
+          : "Please select at least one item cut with a valid weight greater than 0 KG to refund.",
         type: "warning",
       });
       return;
@@ -259,7 +262,7 @@ export default function SaleDetailPage() {
       title: "Confirm Refund Processing",
       message: `You are about to process a refund of ${formatCurrency(
         liveRefundTotal
-      )} for Sale #${sale.sale_number}.\n\nItems to refund: ${itemsToRefund.length} cut(s).\nInventory will be automatically restocked.\n\nReason: "${refundReason.trim()}".`,
+      )} for Sale #${sale.sale_number}.\n\nItems to refund: ${itemsToRefund.length} ${isRestaurant ? "item(s)" : "cut(s)"}.\nInventory will be automatically restocked.\n\nReason: "${refundReason.trim()}".`,
       confirmText: "Yes, Issue Refund",
       cancelText: "Cancel",
       type: "danger",
@@ -365,7 +368,7 @@ export default function SaleDetailPage() {
               className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-              <span>{isPartiallyRefunded ? "Refund Additional Cuts" : "Refund / Return Cuts"}</span>
+              <span>{isPartiallyRefunded ? (isRestaurant ? "Refund Additional Items" : "Refund Additional Cuts") : (isRestaurant ? "Refund / Return Items" : "Refund / Return Cuts")}</span>
             </button>
           )}
 
@@ -517,17 +520,21 @@ export default function SaleDetailPage() {
         <div className="p-4 border-b border-zinc-200 bg-zinc-50/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-zinc-500" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700">Items Sold & Refund Status</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700">
+              {isRestaurant ? "Menu Items Sold & Refund Status" : "Items Sold & Refund Status"}
+            </h3>
           </div>
-          <span className="text-xs text-zinc-500">{sale.items.length} meat cuts</span>
+          <span className="text-xs text-zinc-500">
+            {sale.items.length} {isRestaurant ? (sale.items.length === 1 ? "item" : "items") : (sale.items.length === 1 ? "cut" : "meat cuts")}
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-zinc-200 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 bg-zinc-50/50">
-                <th className="py-3 pl-4">Product Cut</th>
-                <th className="py-3 px-3">Original Weight</th>
+                <th className="py-3 pl-4">{isRestaurant ? "Menu Item" : "Product Cut"}</th>
+                <th className="py-3 px-3">{isRestaurant ? "Portions / Qty" : "Original Weight"}</th>
                 <th className="py-3 px-3">Refunded</th>
                 <th className="py-3 px-3">Price / Unit</th>
                 <th className="py-3 pr-4 text-right">Subtotal</th>
@@ -674,7 +681,7 @@ export default function SaleDetailPage() {
                     Process Item-Level / Partial Refund
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Sale #{sale.sale_number} &bull; Select cuts and specify weight to return
+                    Sale #{sale.sale_number} &bull; {isRestaurant ? "Select items and specify quantity to refund" : "Select cuts and specify weight to return"}
                   </p>
                 </div>
               </div>
@@ -703,7 +710,9 @@ export default function SaleDetailPage() {
               <div className="text-xs text-zinc-600 bg-blue-50/70 border border-blue-100 rounded-xl p-3 flex items-start gap-2">
                 <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <span>
-                  Check the cuts customer is returning and enter the exact weight. Stock will automatically be restored to your inventory, and the register shift totals adjusted.
+                  {isRestaurant
+                    ? "Check the items being refunded and enter the exact quantity. Stock will automatically be restored to your inventory, and register totals adjusted."
+                    : "Check the cuts customer is returning and enter the exact weight. Stock will automatically be restored to your inventory, and the register shift totals adjusted."}
                 </span>
               </div>
 
@@ -830,7 +839,11 @@ export default function SaleDetailPage() {
                     setRefundReason(e.target.value);
                     if (e.target.value.trim()) setReasonError(false);
                   }}
-                  placeholder="e.g. Customer returned wrong cut, quality issue, entered wrong weight at checkout..."
+                  placeholder={
+                    isRestaurant
+                      ? "e.g. Customer changed mind, wrong order served, kitchen void, entered wrong qty..."
+                      : "e.g. Customer returned wrong cut, quality issue, entered wrong weight at checkout..."
+                  }
                   rows={2}
                   disabled={isRefunding}
                   className={`w-full bg-white border rounded-xl p-3 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs disabled:bg-zinc-50 transition-colors ${

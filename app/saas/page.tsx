@@ -88,13 +88,14 @@ function StatusBadge({ company }: { company: SaasCompany }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function SaasPortalPage() {
   const router = useRouter();
-  const { user, isLoading, logout } = useAuth();
+  const { user, isLoading, logout, refresh } = useAuth();
   const { confirm } = useSystemDialog();
 
   const [companies, setCompanies] = useState<SaasCompany[]>([]);
-  const [summary, setSummary] = useState({ total: 0, active: 0, suspended: 0 });
+  const [summary, setSummary] = useState<{ total: number; active: number; suspended: number; butcheries?: number; restaurants?: number }>({ total: 0, active: 0, suspended: 0 });
   const [isFetching, setIsFetching] = useState(true);
   const [actionLoading, setActionLoading] = useState<Record<number, string>>({});
+  const [enteringId, setEnteringId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   // ── Actions Menu State (Fixed Viewport Floating Menu) ──
@@ -107,6 +108,7 @@ export default function SaasPortalPage() {
 
   // ── Filters & Search State ──
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "butchery" | "restaurant">("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -123,10 +125,11 @@ export default function SaasPortalPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [successInfo, setSuccessInfo] = useState<null | { company: string; email: string; password: string }>(null);
+  const [successInfo, setSuccessInfo] = useState<null | { company: string; companyId: number; business_type: string; email: string; password: string }>(null);
 
   const defaultForm = {
     name: "",
+    business_type: "restaurant" as "butchery" | "restaurant",
     phone: "",
     email: "",
     address: "",
@@ -222,6 +225,34 @@ export default function SaasPortalPage() {
       right: Math.max(12, window.innerWidth - rect.right),
       company,
     });
+  };
+
+  // ── Enter / Switch to specific organisation ──
+  const handleEnterCompany = async (c: SaasCompany, targetRoute: "/pos" | "/" = "/pos") => {
+    setOpenMenu(null);
+    setEnteringId(c.id);
+    try {
+      const res = await saasService.enterCompany(c.id);
+
+      if (res.impersonate && res.token) {
+        // Save the platform admin's original token so we can restore it on leave
+        const originalToken = localStorage.getItem("prime_cut_token");
+        if (originalToken) {
+          localStorage.setItem("prime_cut_saas_token", originalToken);
+        }
+        // Swap to the tenant admin's impersonation token
+        localStorage.setItem("prime_cut_token", res.token);
+      }
+
+      showToast(`Switched into "${c.name}"! Directing to POS...`, "success");
+      // Hard reload — loads the POS fully authenticated as the tenant admin
+      setTimeout(() => {
+        window.location.href = targetRoute;
+      }, 400);
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || err?.message || "Failed to switch organisation", "error");
+      setEnteringId(null);
+    }
   };
 
   // ── Yes/No Confirmation on Block / Unblock ──
@@ -447,7 +478,7 @@ export default function SaasPortalPage() {
     const errors: Record<string, string> = {};
 
     if (!form.name.trim()) {
-      errors.name = "Butchery name is required.";
+      errors.name = form.business_type === "restaurant" ? "Restaurant or Hotel name is required." : "Butchery name is required.";
     }
 
     if (!form.admin_name.trim()) {
@@ -487,10 +518,11 @@ export default function SaasPortalPage() {
     }
     setFieldErrors({});
 
+    const typeLabel = form.business_type === "restaurant" ? "Restaurant & Hotel POS" : "Butchery POS";
     const confirmed = await confirm({
-      title: "Create New Butchery?",
-      message: `Are you sure you want to create "${form.name.trim()}" with plan "${form.plan === "lifetime" ? "Lifetime VIP" : "Monthly (30 Days)"}"?`,
-      confirmText: "Yes, Create Butchery",
+      title: `Create New ${typeLabel}?`,
+      message: `Are you sure you want to create "${form.name.trim()}" (${typeLabel}) with plan "${form.plan === "lifetime" ? "Lifetime VIP" : "Monthly (30 Days)"}"?`,
+      confirmText: `Yes, Create ${form.business_type === "restaurant" ? "Restaurant" : "Butchery"}`,
       cancelText: "No, Review",
       type: "info",
     });
@@ -501,6 +533,7 @@ export default function SaasPortalPage() {
     try {
       const payload: CreateCompanyPayload = {
         name: form.name.trim(),
+        business_type: form.business_type,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
         address: form.address.trim() || undefined,
@@ -516,6 +549,8 @@ export default function SaasPortalPage() {
       const res = await saasService.createCompany(payload);
       setSuccessInfo({
         company: res.company.name,
+        companyId: res.company.id,
+        business_type: res.company.business_type || form.business_type,
         email: res.superadmin.email,
         password: res.superadmin.password ?? "(hidden)",
       });
@@ -565,9 +600,11 @@ export default function SaasPortalPage() {
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter((c) => {
+        const typeStr = c.business_type === "restaurant" ? "restaurant hotel dining food bar" : "butchery meat cuts butcher";
         return (
           c.name.toLowerCase().includes(q) ||
           c.slug?.toLowerCase().includes(q) ||
+          typeStr.includes(q) ||
           c.phone?.toLowerCase().includes(q) ||
           c.email?.toLowerCase().includes(q) ||
           c.address?.toLowerCase().includes(q) ||
@@ -576,6 +613,10 @@ export default function SaasPortalPage() {
           c.superadmin?.phone?.toLowerCase().includes(q)
         );
       });
+    }
+
+    if (typeFilter !== "all") {
+      list = list.filter((c) => (c.business_type || "butchery") === typeFilter);
     }
 
     if (statusFilter !== "all") {
@@ -610,16 +651,18 @@ export default function SaasPortalPage() {
     });
 
     return list;
-  }, [companies, search, statusFilter, planFilter, sortBy]);
+  }, [companies, search, typeFilter, statusFilter, planFilter, sortBy]);
 
   const activeFiltersCount =
     (search.trim() ? 1 : 0) +
+    (typeFilter !== "all" ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
     (planFilter !== "all" ? 1 : 0) +
     (sortBy !== "newest" ? 1 : 0);
 
   const resetAllFilters = () => {
     setSearch("");
+    setTypeFilter("all");
     setStatusFilter("all");
     setPlanFilter("all");
     setSortBy("newest");
@@ -687,6 +730,14 @@ export default function SaasPortalPage() {
                 {openMenu.company.name}
               </p>
             </div>
+
+            <button
+              onClick={() => handleEnterCompany(openMenu.company)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Enter Organisation POS</span>
+            </button>
 
             <button
               onClick={() => handleToggleBlock(openMenu.company)}
@@ -806,12 +857,13 @@ export default function SaasPortalPage() {
       {/* ── Main Content Area ──────────────────────────────────────────────── */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
           {[
-            { label: "Total Butcheries", value: summary.total, icon: Building2, iconBg: "bg-blue-50 text-blue-600 border-blue-100" },
+            { label: "Total Organisations", value: summary.total, icon: Building2, iconBg: "bg-blue-50 text-blue-600 border-blue-100" },
+            { label: "Restaurants & Hotels", value: companies.filter(c => c.business_type === "restaurant").length, icon: Users, iconBg: "bg-amber-50 text-amber-600 border-amber-100" },
+            { label: "Butcheries", value: companies.filter(c => (c.business_type || "butchery") === "butchery").length, icon: Building2, iconBg: "bg-rose-50 text-rose-600 border-rose-100" },
             { label: "Active", value: summary.active, icon: CheckCircle2, iconBg: "bg-green-50 text-green-600 border-green-100" },
-            { label: "Suspended", value: summary.suspended, icon: XCircle, iconBg: "bg-red-50 text-red-600 border-red-100" },
-            { label: "Lifetime VIP", value: lifetimeCount, icon: Crown, iconBg: "bg-amber-50 text-amber-600 border-amber-100" },
+            { label: "Lifetime VIP", value: lifetimeCount, icon: Crown, iconBg: "bg-violet-50 text-violet-600 border-violet-100" },
           ].map((stat) => (
             <div
               key={stat.label}
@@ -832,17 +884,17 @@ export default function SaasPortalPage() {
           ))}
         </div>
 
-        {/* Primary Action Bar */}
+        {/* Primary Action Bar with Quick Filter Tabs */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white border border-zinc-200 rounded-2xl p-3 sm:p-4 shadow-2xs">
           <div>
             <h1 className="text-base sm:text-lg font-bold text-zinc-900 flex items-center gap-2">
-              <span>Tenant Butcheries</span>
+              <span>Tenant Organisations</span>
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
                 {total} {total === 1 ? "Result" : "Results"}
               </span>
             </h1>
             <p className="text-xs text-zinc-600 font-medium mt-0.5">
-              Manage accounts, subscriptions, quotas, and access permissions.
+              Manage multi-tenant Restaurant and Butchery POS subscriptions and direct access.
             </p>
           </div>
 
@@ -852,9 +904,57 @@ export default function SaasPortalPage() {
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-green-600 hover:bg-green-700 active:scale-95 transition-all shadow-xs"
             >
               <Plus className="w-4 h-4" />
-              <span>Add New Butchery</span>
+              <span>Add Organisation</span>
             </button>
           </div>
+        </div>
+
+        {/* Quick Filter Tabs for Restaurant vs Butchery */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => { setTypeFilter("all"); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              typeFilter === "all"
+                ? "bg-zinc-900 text-white shadow-xs"
+                : "bg-white text-zinc-600 hover:bg-zinc-100 border border-zinc-200"
+            }`}
+          >
+            <span>All Organisations</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${typeFilter === "all" ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-700"}`}>
+              {companies.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setTypeFilter("restaurant"); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              typeFilter === "restaurant"
+                ? "bg-amber-600 text-white shadow-xs"
+                : "bg-white text-amber-800 hover:bg-amber-50 border border-amber-200"
+            }`}
+          >
+            <span>🍽️ Restaurants & Hotels</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${typeFilter === "restaurant" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"}`}>
+              {companies.filter((c) => c.business_type === "restaurant").length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setTypeFilter("butchery"); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              typeFilter === "butchery"
+                ? "bg-rose-600 text-white shadow-xs"
+                : "bg-white text-rose-800 hover:bg-rose-50 border border-rose-200"
+            }`}
+          >
+            <span>🥩 Butcheries</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${typeFilter === "butchery" ? "bg-white/20 text-white" : "bg-rose-100 text-rose-800"}`}>
+              {companies.filter((c) => (c.business_type || "butchery") === "butchery").length}
+            </span>
+          </button>
         </div>
 
         {/* Search & Filter Bar */}
@@ -955,7 +1055,7 @@ export default function SaasPortalPage() {
           )}
 
           {isFilterOpen && (
-            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white">
+            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-white">
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider flex items-center gap-1">
                   <Search className="w-3 h-3 text-zinc-500" /> Search
@@ -985,6 +1085,24 @@ export default function SaasPortalPage() {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-zinc-700 uppercase tracking-wider flex items-center gap-1">
+                  <Building2 className="w-3 h-3 text-zinc-500" /> Business Type
+                </label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => {
+                    setTypeFilter(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl px-3 text-xs text-zinc-900 font-medium focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                >
+                  <option value="all">All Types (All)</option>
+                  <option value="restaurant">🍽️ Restaurant & Hotel</option>
+                  <option value="butchery">🥩 Butchery</option>
+                </select>
               </div>
 
               <div className="flex flex-col gap-1">
@@ -1059,6 +1177,14 @@ export default function SaasPortalPage() {
                   </button>
                 </span>
               )}
+              {typeFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold">
+                  {typeFilter === "restaurant" ? "🍽️ RESTAURANT & HOTEL" : "🥩 BUTCHERY"}
+                  <button onClick={() => { setTypeFilter("all"); setCurrentPage(1); }}>
+                    <X className="w-3 h-3 text-amber-700 hover:text-amber-900" />
+                  </button>
+                </span>
+              )}
               {statusFilter !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-900 text-[11px] font-bold">
                   🏷️ {statusFilter.toUpperCase()}
@@ -1121,7 +1247,7 @@ export default function SaasPortalPage() {
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-bold uppercase tracking-wider text-zinc-700">
-                      <th className="py-3.5 pl-4 pr-3">Butchery</th>
+                      <th className="py-3.5 pl-4 pr-3">Organisation</th>
                       <th className="py-3.5 px-3">Superadmin</th>
                       <th className="py-3.5 px-3">Status</th>
                       <th className="py-3.5 px-3">Subscription Countdown</th>
@@ -1134,19 +1260,37 @@ export default function SaasPortalPage() {
                   <tbody className="divide-y divide-zinc-100">
                     {paginatedCompanies.map((company) => {
                       const loading = actionLoading[company.id];
+                      const isEntering = enteringId === company.id;
+                      const isRest = company.business_type === "restaurant";
+
                       return (
                         <tr key={company.id} className="hover:bg-zinc-50/70 transition-colors">
                           <td className="py-3 pl-4 pr-3">
                             <div className="flex items-center gap-2.5">
                               <div
-                                className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0 shadow-2xs ${
-                                  company.is_active ? "bg-green-600" : "bg-zinc-400"
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-white shrink-0 shadow-2xs ${
+                                  !company.is_active
+                                    ? "bg-zinc-400"
+                                    : isRest
+                                    ? "bg-amber-600"
+                                    : "bg-green-600"
                                 }`}
                               >
                                 {company.name.charAt(0).toUpperCase()}
                               </div>
                               <div className="min-w-0">
-                                <p className="font-bold text-zinc-900 leading-tight truncate">{company.name}</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-bold text-zinc-900 leading-tight truncate">{company.name}</p>
+                                  {isRest ? (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
+                                      🍽️ Restaurant
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200/80 shrink-0">
+                                      🥩 Butchery
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 mt-0.5">
                                   {company.phone && <span className="text-zinc-800">{company.phone}</span>}
                                   {company.address && (
@@ -1232,23 +1376,44 @@ export default function SaasPortalPage() {
                           </td>
 
                           <td className="py-3 pr-4 pl-3 text-right">
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleMenu(e, company)}
-                              disabled={!!loading}
-                              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors shadow-2xs active:scale-95 ${
-                                openMenu?.id === company.id
-                                  ? "bg-green-50 text-green-700 border-green-600 ring-2 ring-green-600/20"
-                                  : "bg-white text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 border-zinc-200"
-                              }`}
-                            >
-                              {loading ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <MoreVertical className="w-3.5 h-3.5" />
-                              )}
-                              <span>{loading || "Manage"}</span>
-                            </button>
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEnterCompany(company)}
+                                disabled={isEntering || !company.is_active}
+                                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 ${
+                                  !company.is_active
+                                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200"
+                                    : "bg-green-600 hover:bg-green-700 text-white"
+                                }`}
+                                title={!company.is_active ? "Organisation is suspended/blocked" : `Directly enter ${company.name} POS`}
+                              >
+                                {isEntering ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Activity className="w-3.5 h-3.5" />
+                                )}
+                                <span>Enter POS</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => handleToggleMenu(e, company)}
+                                disabled={!!loading}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-colors shadow-2xs active:scale-95 ${
+                                  openMenu?.id === company.id
+                                    ? "bg-green-50 text-green-700 border-green-600 ring-2 ring-green-600/20"
+                                    : "bg-white text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 border-zinc-200"
+                                }`}
+                                title="Manage Organisation"
+                              >
+                                {loading ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <MoreVertical className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1261,19 +1426,37 @@ export default function SaasPortalPage() {
               <div className="block md:hidden divide-y divide-zinc-100">
                 {paginatedCompanies.map((company) => {
                   const loading = actionLoading[company.id];
+                  const isEntering = enteringId === company.id;
+                  const isRest = company.business_type === "restaurant";
+
                   return (
                     <div key={company.id} className="p-3.5 sm:p-4 space-y-3 bg-white">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black text-white shrink-0 shadow-2xs ${
-                              company.is_active ? "bg-green-600" : "bg-zinc-400"
+                              !company.is_active
+                                ? "bg-zinc-400"
+                                : isRest
+                                ? "bg-amber-600"
+                                : "bg-green-600"
                             }`}
                           >
                             {company.name.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <h4 className="font-bold text-zinc-900 text-sm truncate">{company.name}</h4>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="font-bold text-zinc-900 text-sm truncate">{company.name}</h4>
+                              {isRest ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
+                                  🍽️ Restaurant
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200">
+                                  🥩 Butchery
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <StatusBadge company={company} />
                               <span className="text-[10px] font-bold text-zinc-600">
@@ -1283,18 +1466,34 @@ export default function SaasPortalPage() {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={(e) => handleToggleMenu(e, company)}
-                          disabled={!!loading}
-                          className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 shadow-2xs"
-                        >
-                          {loading ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-green-600" />
-                          ) : (
-                            <MoreVertical className="w-4 h-4" />
-                          )}
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleEnterCompany(company)}
+                            disabled={isEntering || !company.is_active}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 ${
+                              !company.is_active
+                                ? "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed"
+                                : "bg-green-600 text-white hover:bg-green-700 active:scale-95"
+                            }`}
+                          >
+                            {isEntering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                            <span>Enter</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleMenu(e, company)}
+                            disabled={!!loading}
+                            className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-700 hover:text-zinc-900 hover:bg-zinc-50 shadow-2xs"
+                          >
+                            {loading ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-green-600" />
+                            ) : (
+                              <MoreVertical className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-zinc-50 border border-zinc-100 text-xs">
@@ -1331,7 +1530,7 @@ export default function SaasPortalPage() {
                         <div className="flex items-center gap-1.5">
                           <Users className="w-3.5 h-3.5 text-zinc-500" />
                           <span>
-                            <strong className="text-zinc-900">{company.total_users}</strong> Total Staff (
+                            <strong className="text-zinc-900">{company.total_users}</strong> Staff (
                             {company.cashiers_count} Cashier{company.cashiers_count !== 1 ? "s" : ""})
                           </span>
                         </div>
@@ -1374,9 +1573,9 @@ export default function SaasPortalPage() {
           <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden my-auto">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-zinc-100 bg-white">
               <div>
-                <h2 className="text-base font-bold text-zinc-900">Add New Butchery</h2>
+                <h2 className="text-base font-bold text-zinc-900">Add New Organisation</h2>
                 <p className="text-xs text-zinc-600 font-medium mt-0.5">
-                  Onboard a new tenant and configure their superadmin credentials
+                  Onboard a new Restaurant or Butchery tenant and launch their POS
                 </p>
               </div>
               <button
@@ -1392,10 +1591,15 @@ export default function SaasPortalPage() {
                 <div className="flex items-start gap-3 p-4 rounded-xl bg-green-50 border border-green-200">
                   <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-bold text-green-900">Butchery Created Successfully!</p>
-                    <p className="text-xs text-green-800 font-medium mt-0.5">{successInfo.company} is now active.</p>
+                    <p className="text-sm font-bold text-green-900">
+                      {successInfo.business_type === "restaurant" ? "🍽️ Restaurant & Hotel" : "🥩 Butchery"} Created Successfully!
+                    </p>
+                    <p className="text-xs text-green-800 font-medium mt-0.5">
+                      &quot;{successInfo.company}&quot; has been initialized and is ready for use.
+                    </p>
                   </div>
                 </div>
+
                 <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3">
                   <p className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
                     Superadmin Login Credentials
@@ -1415,16 +1619,59 @@ export default function SaasPortalPage() {
                     </div>
                   </div>
                 </div>
+
                 <p className="text-xs text-zinc-600 font-medium flex items-start gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  Share these credentials with the tenant owner — the password will not be shown again.
+                  Save these credentials for the business owner — the password will not be shown again.
                 </p>
-                <button
-                  onClick={closeCreate}
-                  className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-colors shadow-xs active:scale-95"
-                >
-                  Done
-                </button>
+
+                {/* Direct Action: Direct user to the specific saved organisation */}
+                <div className="space-y-2 pt-1">
+                  <button
+                    onClick={async () => {
+                      const cid = successInfo.companyId;
+                      closeCreate();
+                      try {
+                        await saasService.enterCompany(cid);
+                        await refresh();
+                        showToast(`Switched into "${successInfo.company}"! Launching POS...`, "success");
+                        router.push("/pos");
+                      } catch (err: any) {
+                        showToast(err?.message || "Failed to switch context", "error");
+                      }
+                    }}
+                    className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <Activity className="w-4 h-4" />
+                    <span>Launch & Enter {successInfo.company} POS Now</span>
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      const cid = successInfo.companyId;
+                      closeCreate();
+                      try {
+                        await saasService.enterCompany(cid);
+                        await refresh();
+                        showToast(`Switched into "${successInfo.company}"! Loading Dashboard...`, "success");
+                        router.push("/");
+                      } catch (err: any) {
+                        showToast(err?.message || "Failed to switch context", "error");
+                      }
+                    }}
+                    className="w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 border border-zinc-200"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-zinc-600" />
+                    <span>Enter Organisation Dashboard</span>
+                  </button>
+
+                  <button
+                    onClick={closeCreate}
+                    className="w-full py-1.5 text-zinc-500 hover:text-zinc-800 text-xs font-semibold text-center"
+                  >
+                    Done (Stay in SaaS Control Center)
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleCreate} className="p-4 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
@@ -1435,6 +1682,55 @@ export default function SaasPortalPage() {
                   </div>
                 )}
 
+                {/* 1. Organisation Type Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-800 mb-2">Organisation Type *</label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => updateFormField("business_type", "restaurant")}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+                        form.business_type === "restaurant"
+                          ? "border-amber-500 bg-amber-50/80 text-amber-950 ring-2 ring-amber-500/20 shadow-xs"
+                          : "border-zinc-200 hover:border-zinc-300 bg-white text-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl">🍽️</span>
+                        {form.business_type === "restaurant" && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                        )}
+                      </div>
+                      <p className="text-xs font-black">Restaurant & Hotel F&B</p>
+                      <p className="text-[10px] text-zinc-500 font-medium leading-tight">
+                        Tables, dining, takeaway, kitchen tickets, bar & meals POS
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateFormField("business_type", "butchery")}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+                        form.business_type === "butchery"
+                          ? "border-rose-500 bg-rose-50/80 text-rose-950 ring-2 ring-rose-500/20 shadow-xs"
+                          : "border-zinc-200 hover:border-zinc-300 bg-white text-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl">🥩</span>
+                        {form.business_type === "butchery" && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span>
+                        )}
+                      </div>
+                      <p className="text-xs font-black">Butchery POS</p>
+                      <p className="text-[10px] text-zinc-500 font-medium leading-tight">
+                        Meat cuts, carcass breakdown, scale weight/kg input
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Subscription Plan */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-800 mb-2">Subscription Plan *</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -1472,12 +1768,19 @@ export default function SaasPortalPage() {
                 </div>
 
                 <hr className="border-zinc-100" />
-                <p className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider">Butchery Details</p>
+                <p className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
+                  {form.business_type === "restaurant" ? "🍽️ Restaurant / Hotel Details" : "🥩 Butchery Details"}
+                </p>
 
                 {[
-                  { label: "Butchery Name *", field: "name" as const, type: "text", placeholder: "e.g. Prime Cuts Butchery" },
+                  {
+                    label: form.business_type === "restaurant" ? "Restaurant / Hotel Name *" : "Butchery Name *",
+                    field: "name" as const,
+                    type: "text",
+                    placeholder: form.business_type === "restaurant" ? "e.g. The Grand Hotel & Restaurant" : "e.g. Prime Cuts Butchery",
+                  },
                   { label: "Phone", field: "phone" as const, type: "tel", placeholder: "0712345678" },
-                  { label: "Email", field: "email" as const, type: "email", placeholder: "shop@email.com" },
+                  { label: "Email", field: "email" as const, type: "email", placeholder: "business@email.com" },
                   { label: "Address", field: "address" as const, type: "text", placeholder: "City / Mall / Location" },
                 ].map(({ label, field, type, placeholder }) => (
                   <div key={field}>

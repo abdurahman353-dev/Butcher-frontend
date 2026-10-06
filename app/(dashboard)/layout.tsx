@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -178,7 +178,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const pathname = usePathname();
-  const { user, isLoading, isInitialized, isAdmin } = useAuth();
+  const router = useRouter();
+  const { user, isLoading, isInitialized, isAdmin, isWaiter } = useAuth();
+
+  // Waiters are strictly restricted to POS Terminal only
+  useEffect(() => {
+    if (isInitialized && user?.role === "waiter" && pathname !== "/pos") {
+      router.replace("/pos");
+    }
+  }, [isInitialized, user, pathname, router]);
 
   useEffect(() => {
     try {
@@ -277,6 +285,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col items-center gap-2">
           <div className="w-8 h-8 rounded-full border-2 border-zinc-100 border-t-green-500 animate-spin" />
           <p className="text-xs text-zinc-400 font-medium">Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Waiter restriction: if role is waiter and not on /pos, block view while redirecting
+  if (user?.role === "waiter" && pathname !== "/pos") {
+    return (
+      <div className="h-screen w-full bg-zinc-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-8 h-8 rounded-full border-2 border-zinc-200 border-t-emerald-600 animate-spin" />
+          <p className="text-xs text-zinc-500 font-medium">Opening POS Terminal...</p>
         </div>
       </div>
     );

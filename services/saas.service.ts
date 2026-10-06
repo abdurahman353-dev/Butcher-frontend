@@ -6,6 +6,7 @@ export interface CreateCompanyPayload {
   phone?: string;
   email?: string;
   address?: string;
+  business_type?: "butchery" | "restaurant";
   admin_name: string;
   admin_email: string;
   admin_password: string;
@@ -22,6 +23,7 @@ export interface CreateCompanyResponse {
     name: string;
     slug: string;
     status: string;
+    business_type?: "butchery" | "restaurant";
     plan: string;
     subscription_starts_at: string;
     subscription_ends_at: string | null;
@@ -43,6 +45,14 @@ export const saasService = {
 
   async createCompany(payload: CreateCompanyPayload): Promise<CreateCompanyResponse> {
     const res = await apiClient.post<CreateCompanyResponse>("/saas/companies", payload);
+    return res.data;
+  },
+
+  async updateCompany(
+    companyId: number,
+    payload: Partial<CreateCompanyPayload>
+  ): Promise<{ message: string; company: any }> {
+    const res = await apiClient.put<{ message: string; company: any }>(`/saas/companies/${companyId}`, payload);
     return res.data;
   },
 
@@ -76,6 +86,16 @@ export const saasService = {
 
   async deleteCompany(companyId: number): Promise<{ message: string }> {
     const res = await apiClient.delete<{ message: string }>(`/saas/companies/${companyId}`);
+    return res.data;
+  },
+
+  async enterCompany(companyId: number): Promise<{ message: string; user: any; company: any; impersonate?: boolean; token?: string }> {
+    const res = await apiClient.post<{ message: string; user: any; company: any; impersonate?: boolean; token?: string }>(`/saas/companies/${companyId}/enter`);
+    return res.data;
+  },
+
+  async leaveCompany(): Promise<{ message: string; user: any }> {
+    const res = await apiClient.post<{ message: string; user: any }>('/saas/leave-company');
     return res.data;
   },
 };

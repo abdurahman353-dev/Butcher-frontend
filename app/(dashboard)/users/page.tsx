@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { usersService } from "@/services/users.service";
-import { User } from "@/types";
+import { User, Waiter } from "@/types";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useAuth } from "@/hooks/useAuth";
 import { Pagination } from "@/components/shared/Pagination";
@@ -22,6 +22,8 @@ import {
     AlertTriangle,
     Eye,
     EyeOff,
+    Utensils,
+    Sparkles,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -60,12 +62,34 @@ export default function UsersManagementPage() {
         name: "",
         email: "",
         phone: "",
-        role: "cashier" as "admin" | "cashier",
+        role: "cashier" as "admin" | "cashier" | "waiter",
         password: "",
+        pin: "",
     });
     const [newUserConfirmPassword, setNewUserConfirmPassword] = useState("");
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showNewConfirmPassword, setShowNewConfirmPassword] = useState(false);
+
+    // Tab State: "staff" (User Accounts) vs "waiters" (Waitstaff PINs)
+    const [activeTab, setActiveTab] = useState<"staff" | "waiters">("staff");
+
+    // Waitstaff & Servers State
+    const [waiters, setWaiters] = useState<Waiter[]>([]);
+    const [isLoadingWaiters, setIsLoadingWaiters] = useState(false);
+    const [showAddWaiterModal, setShowAddWaiterModal] = useState(false);
+    const [newWaiter, setNewWaiter] = useState({ name: "", pin: "", phone: "" });
+    const [isSubmittingWaiter, setIsSubmittingWaiter] = useState(false);
+    const [revealedPins, setRevealedPins] = useState<Record<number, boolean>>({});
+    const [waitersPage, setWaitersPage] = useState(1);
+    const [waitersPerPage, setWaitersPerPage] = useState(10);
+    const [waitersPaginated, setWaitersPaginated] = useState({
+        current_page: 1,
+        last_page: 1,
+        per_page: 10,
+        total: 0,
+        from: 0,
+        to: 0,
+    });
 
     // Reset Password Modal state
     const [resetTarget, setResetTarget] = useState<User | null>(null);
@@ -79,6 +103,45 @@ export default function UsersManagementPage() {
     useEffect(() => {
         setCurrentPage(1);
     }, [search, roleFilter, statusFilter]);
+
+    const loadWaiters = useCallback(async () => {
+        try {
+            setIsLoadingWaiters(true);
+            const res = await usersService.getWaiters({
+                page: waitersPage,
+                per_page: waitersPerPage,
+            });
+            const list = Array.isArray(res) ? res : (res?.data || []);
+            setWaiters(list);
+            if (res && !Array.isArray(res)) {
+                setWaitersPaginated({
+                    current_page: res.current_page ?? waitersPage,
+                    last_page: res.last_page ?? 1,
+                    per_page: res.per_page ?? waitersPerPage,
+                    total: res.total ?? list.length,
+                    from: res.from ?? 0,
+                    to: res.to ?? 0,
+                });
+            } else {
+                setWaitersPaginated({
+                    current_page: 1,
+                    last_page: 1,
+                    per_page: waitersPerPage,
+                    total: list.length,
+                    from: list.length > 0 ? 1 : 0,
+                    to: list.length,
+                });
+            }
+        } catch (e: any) {
+            console.error("Failed to load waiters list:", e);
+        } finally {
+            setIsLoadingWaiters(false);
+        }
+    }, [waitersPage, waitersPerPage]);
+
+    useEffect(() => {
+        loadWaiters();
+    }, [loadWaiters]);
 
     const loadUsers = useCallback(async () => {
         try {
@@ -130,10 +193,12 @@ export default function UsersManagementPage() {
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Common validation: all roles need name, email, password
         if (!newUser.name || !newUser.email || !newUser.password) {
             await alert({
                 title: "Validation Error",
-                message: "Please fill in all required fields (Name, Email, and Password).",
+                message: "Please fill in Name, Email, and Password.",
                 type: "warning",
             });
             return;
@@ -147,30 +212,125 @@ export default function UsersManagementPage() {
             return;
         }
         if (newUser.password !== newUserConfirmPassword) {
-            await alert({ title: "Password Mismatch", message: "Passwords do not match. Please confirm the password correctly.", type: "warning" });
+            await alert({ title: "Password Mismatch", message: "Passwords do not match.", type: "warning" });
             return;
         }
 
         setIsSubmitting(true);
         try {
-            await usersService.createUser(newUser);
+            await usersService.createUser({
+                name: newUser.name,
+                email: newUser.email,
+                phone: newUser.phone || undefined,
+                role: newUser.role,
+                password: newUser.password,
+            });
             await alert({
-                title: "Staff Created",
-                message: `New ${newUser.role} "${newUser.name}" created successfully! They will be prompted to set a new password on first login.`,
+                title: "Account Created",
+                message: newUser.role === "waiter"
+                    ? `Waiter login account "${newUser.name}" (${newUser.email}) created! All waitstaff can now use this email and password to log in to the POS. For every bill they make, they will enter their personal 4-digit PIN.`
+                    : `New ${newUser.role} "${newUser.name}" created successfully!`,
                 type: "success",
             });
-            setNewUser({ name: "", email: "", phone: "", role: "cashier", password: "" });
+            setNewUser({ name: "", email: "", phone: "", role: "cashier", password: "", pin: "" });
             setNewUserConfirmPassword("");
             setShowAddModal(false);
             loadUsers();
         } catch (e: any) {
             await alert({
                 title: "Creation Failed",
-                message: e?.response?.data?.message || e.message || "Failed to create cashier.",
+                message: e?.response?.data?.message || e.message || "Failed to create user account.",
                 type: "danger",
             });
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleCreateWaiter = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newWaiter.name.trim()) {
+            await alert({ title: "Validation Error", message: "Please enter waiter / waitress name.", type: "warning" });
+            return;
+        }
+        if (!/^[0-9]{4}$/.test(newWaiter.pin)) {
+            await alert({ title: "Invalid PIN", message: "PIN must be exactly 4 numeric digits.", type: "warning" });
+            return;
+        }
+
+        try {
+            setIsSubmittingWaiter(true);
+            await usersService.createWaiter({
+                name: newWaiter.name.trim(),
+                pin: newWaiter.pin,
+                phone: newWaiter.phone.trim() || undefined,
+            });
+            await alert({
+                title: "Waiter Registered",
+                message: `Server "${newWaiter.name}" registered with PIN ${newWaiter.pin}. Every bill they make on the POS will require this PIN.`,
+                type: "success",
+            });
+            setNewWaiter({ name: "", pin: "", phone: "" });
+            setShowAddWaiterModal(false);
+            loadWaiters();
+        } catch (e: any) {
+            await alert({
+                title: "Registration Failed",
+                message: e?.response?.data?.message || e.message || "Failed to register waiter.",
+                type: "danger",
+            });
+        } finally {
+            setIsSubmittingWaiter(false);
+        }
+    };
+
+    const handleToggleWaiterStatus = async (waiter: Waiter) => {
+        const action = waiter.is_active ? "Suspend" : "Activate";
+        const confirmed = await confirm({
+            title: `${action} Waiter / Server`,
+            message: `Are you sure you want to ${action.toLowerCase()} ${waiter.name}?`,
+            confirmText: `Yes, ${action}`,
+            cancelText: "Cancel",
+            type: waiter.is_active ? "warning" : "info",
+        });
+        if (!confirmed) return;
+
+        try {
+            await usersService.updateWaiter(waiter.id, { is_active: !waiter.is_active });
+            loadWaiters();
+        } catch (e: any) {
+            await alert({
+                title: "Update Failed",
+                message: e?.response?.data?.message || "Failed to update waiter status.",
+                type: "danger",
+            });
+        }
+    };
+
+    const handleDeleteWaiter = async (waiter: Waiter) => {
+        const confirmed = await confirm({
+            title: "Delete Waiter / Server",
+            message: `Are you sure you want to delete ${waiter.name} (PIN: ${waiter.pin})? They will no longer be able to post orders.`,
+            confirmText: "Yes, Delete",
+            cancelText: "Cancel",
+            type: "danger",
+        });
+        if (!confirmed) return;
+
+        try {
+            await usersService.deleteWaiter(waiter.id);
+            await alert({
+                title: "Waiter Removed",
+                message: `${waiter.name} removed successfully.`,
+                type: "success",
+            });
+            loadWaiters();
+        } catch (e: any) {
+            await alert({
+                title: "Delete Failed",
+                message: e?.response?.data?.message || "Failed to delete waiter.",
+                type: "danger",
+            });
         }
     };
 
@@ -329,17 +489,65 @@ export default function UsersManagementPage() {
                         <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing || isLoading ? "animate-spin text-green-600" : ""}`} />
                         <span className="hidden sm:inline">Sync</span>
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setShowAddModal(true)}
-                        className="h-10 px-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-98"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        <span>Add New Cashier</span>
-                    </button>
+                    {activeTab === "staff" ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowAddModal(true)}
+                            className="h-10 px-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-98"
+                        >
+                            <UserPlus className="w-4 h-4" />
+                            <span>Add Staff / Waiter Account</span>
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => setShowAddWaiterModal(true)}
+                            className="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-98"
+                        >
+                            <KeyRound className="w-4 h-4" />
+                            <span>Register Waiter PIN</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
+            {/* ── TABS: Staff Login Accounts vs Waitstaff 4-Digit PINs ── */}
+            <div className="flex items-center gap-3 border-b border-zinc-200">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("staff")}
+                    className={`pb-3 px-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+                        activeTab === "staff"
+                            ? "border-green-600 text-green-700"
+                            : "border-transparent text-zinc-500 hover:text-zinc-800"
+                    }`}
+                >
+                    <Users className="w-4 h-4" />
+                    <span>Staff Login Accounts</span>
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700">
+                        {users.length}
+                    </span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("waiters")}
+                    className={`pb-3 px-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+                        activeTab === "waiters"
+                            ? "border-amber-500 text-amber-700"
+                            : "border-transparent text-zinc-500 hover:text-zinc-800"
+                    }`}
+                >
+                    <KeyRound className="w-4 h-4" />
+                    <span>Waitstaff &amp; Servers (4-Digit PINs)</span>
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                        {waitersPaginated.total || waiters.length}
+                    </span>
+                </button>
+            </div>
+
+            {activeTab === "staff" && (
+                <>
             {/* ── KPI METRICS ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <div className="p-4 rounded-2xl bg-white border border-zinc-200 shadow-xs">
@@ -397,6 +605,7 @@ export default function UsersManagementPage() {
                         >
                             <option value="all">All Roles</option>
                             <option value="cashier">Cashiers Only</option>
+                            <option value="waiter">Waiters Only</option>
                             <option value="admin">Super Admins Only</option>
                         </select>
                     </div>
@@ -444,8 +653,9 @@ export default function UsersManagementPage() {
                                         <tr key={staff.id} className="hover:bg-zinc-50/80 transition-colors">
                                             <td className="py-3.5 px-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs text-white ${staff.role === "admin" ? "bg-emerald-600" : "bg-blue-600"
-                                                        }`}>
+                                                    <div className={`w-9 h-9 rounded-full font-bold flex items-center justify-center text-xs text-white ${
+                                                        staff.role === "admin" ? "bg-emerald-600" : staff.role === "waiter" ? "bg-amber-500" : "bg-blue-600"
+                                                    }`}>
                                                         {staff.name.charAt(0)}
                                                     </div>
                                                     <div>
@@ -461,12 +671,18 @@ export default function UsersManagementPage() {
                                             </td>
 
                                             <td className="py-3.5 px-4">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${staff.role === "admin"
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                                    staff.role === "admin"
                                                         ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                                        : staff.role === "waiter"
+                                                        ? "bg-amber-50 text-amber-800 border border-amber-200"
                                                         : "bg-blue-50 text-blue-800 border border-blue-200"
-                                                    }`}>
+                                                }`}>
                                                     <Shield className="w-3 h-3" />
-                                                    {staff.role === "admin" ? "Super Admin" : "Cashier"}
+                                                    {staff.role === "admin" ? "Super Admin" : staff.role === "waiter" ? "Waiter" : "Cashier"}
+                                                    {staff.role === "waiter" && staff.pin && (
+                                                        <span className="ml-1 font-mono tracking-widest">· PIN {staff.pin}</span>
+                                                    )}
                                                 </span>
                                             </td>
 
@@ -544,6 +760,224 @@ export default function UsersManagementPage() {
                     />
                 </div>
             </div>
+            </>
+            )}
+
+            {/* ── TAB 2: WAITSTAFF & SERVERS (4-DIGIT PINS) ── */}
+            {activeTab === "waiters" && (
+                <div className="space-y-4">
+                    {/* Guidance / Info Banner */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                                <KeyRound className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-amber-950">Waitstaff &amp; Servers (4-Digit PINs)</h3>
+                                <p className="text-xs text-amber-800/90 mt-0.5 max-w-2xl leading-relaxed">
+                                    All waiters and waitresses sign in to the POS with the shared Waiter account (Email &amp; Password). For <strong>every bill they want to make on the POS</strong>, they must enter their individual 4-digit PIN so you always know who posted the order.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowAddWaiterModal(true)}
+                            className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95 shrink-0 self-end sm:self-center"
+                        >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>Add Waiter PIN</span>
+                        </button>
+                    </div>
+
+                    {/* KPI metrics for Waiters */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div className="p-4 rounded-2xl bg-white border border-zinc-200 shadow-xs">
+                            <div className="text-xs text-zinc-500 font-semibold flex items-center justify-between">
+                                <span>Total Registered Servers</span>
+                                <Users className="w-4 h-4 text-zinc-400" />
+                            </div>
+                            <div className="text-2xl font-black text-zinc-900 mt-2">
+                                {waitersPaginated.total || waiters.length}
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-white border border-zinc-200 shadow-xs">
+                            <div className="text-xs text-zinc-500 font-semibold flex items-center justify-between">
+                                <span>Active Servers</span>
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <div className="text-2xl font-black text-emerald-700 mt-2">
+                                {waiters.filter((w) => w.is_active).length}
+                            </div>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-white border border-zinc-200 shadow-xs">
+                            <div className="text-xs text-zinc-500 font-semibold flex items-center justify-between">
+                                <span>Suspended Servers</span>
+                                <AlertTriangle className="w-4 h-4 text-rose-500" />
+                            </div>
+                            <div className="text-2xl font-black text-rose-600 mt-2">
+                                {waiters.filter((w) => !w.is_active).length}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Waiters Table */}
+                    <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
+                        <div className="p-4 border-b border-zinc-100 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold text-zinc-900">Waiters &amp; Waitresses Registry</h3>
+                                <p className="text-xs text-zinc-500">Each server has their own unique 4-digit PIN for punching in orders on the POS</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => loadWaiters()}
+                                className="h-8 px-2.5 rounded-lg border border-zinc-200 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 flex items-center gap-1.5 transition-colors"
+                            >
+                                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingWaiters ? "animate-spin text-amber-600" : ""}`} />
+                                <span className="hidden sm:inline">Refresh</span>
+                            </button>
+                        </div>
+
+                        {waiters.length === 0 ? (
+                            <div className="p-10 text-center space-y-3">
+                                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+                                    <KeyRound className="w-6 h-6" />
+                                </div>
+                                <h4 className="text-sm font-bold text-zinc-800">No Waiter PINs registered yet</h4>
+                                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                                    Register your waitresses and waiters here with their individual 4-digit PINs so they can punch in bills on the POS.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddWaiterModal(true)}
+                                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs inline-flex items-center gap-2 shadow-xs transition-all active:scale-95"
+                                >
+                                    <KeyRound className="w-4 h-4" />
+                                    <span>Register First Waiter PIN</span>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                        <tr className="border-b border-zinc-100 bg-zinc-50/70 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                                            <th className="py-3 px-4">Waiter / Waitress</th>
+                                            <th className="py-3 px-4">4-Digit POS PIN</th>
+                                            <th className="py-3 px-4">Phone</th>
+                                            <th className="py-3 px-4">Status</th>
+                                            <th className="py-3 px-4 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-100">
+                                        {waiters.map((waiter) => {
+                                            const isRevealed = revealedPins[waiter.id];
+                                            return (
+                                                <tr key={waiter.id} className="hover:bg-zinc-50/80 transition-colors">
+                                                    <td className="py-3.5 px-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-amber-500 text-white font-black flex items-center justify-center text-xs">
+                                                                {waiter.name.charAt(0)}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-zinc-900 text-sm">{waiter.name}</p>
+                                                                <p className="text-[10px] text-zinc-400">Waitstaff / Server</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="py-3.5 px-4">
+                                                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-100 border border-zinc-200 font-mono text-sm font-black text-zinc-800">
+                                                            <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                                                            <span>{isRevealed ? waiter.pin : "● ● ● ●"}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setRevealedPins((prev) => ({ ...prev, [waiter.id]: !isRevealed }))}
+                                                                className="ml-1 text-zinc-400 hover:text-zinc-700"
+                                                                title={isRevealed ? "Hide PIN" : "Show PIN"}
+                                                            >
+                                                                {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="py-3.5 px-4 text-zinc-600 font-medium">
+                                                        {waiter.phone || "—"}
+                                                    </td>
+
+                                                    <td className="py-3.5 px-4">
+                                                        <span
+                                                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                                                waiter.is_active
+                                                                    ? "bg-green-50 text-green-700 border border-green-200"
+                                                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                                            }`}
+                                                        >
+                                                            {waiter.is_active ? (
+                                                                <CheckCircle2 className="w-3 h-3 text-green-600" />
+                                                            ) : (
+                                                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                                            )}
+                                                            {waiter.is_active ? "Active" : "Suspended"}
+                                                        </span>
+                                                    </td>
+
+                                                    <td className="py-3.5 px-4 text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleToggleWaiterStatus(waiter)}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all active:scale-95 ${
+                                                                    waiter.is_active
+                                                                        ? "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+                                                                        : "bg-green-50 hover:bg-green-100 text-green-800 border border-green-200"
+                                                                }`}
+                                                            >
+                                                                {waiter.is_active ? (
+                                                                    <UserX className="w-3.5 h-3.5 text-amber-700" />
+                                                                ) : (
+                                                                    <UserCheck className="w-3.5 h-3.5 text-green-700" />
+                                                                )}
+                                                                <span>{waiter.is_active ? "Suspend" : "Activate"}</span>
+                                                            </button>
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteWaiter(waiter)}
+                                                                className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold text-xs inline-flex items-center gap-1.5 transition-all active:scale-95"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                <span>Delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Server-Side Pagination for Waiters */}
+                        <div className="p-3 bg-zinc-50/70 border-t border-zinc-200">
+                            <Pagination
+                                currentPage={waitersPaginated.current_page}
+                                lastPage={waitersPaginated.last_page}
+                                total={waitersPaginated.total}
+                                from={waitersPaginated.from}
+                                to={waitersPaginated.to}
+                                perPage={waitersPerPage}
+                                onPageChange={(page) => setWaitersPage(page)}
+                                onPerPageChange={(newPerPage) => {
+                                    setWaitersPerPage(newPerPage);
+                                    setWaitersPage(1);
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── RESET PASSWORD MODAL ── */}
             {resetTarget && (
@@ -681,18 +1115,6 @@ export default function UsersManagementPage() {
                                 />
                             </div>
 
-                            <div>
-                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Email Address *</label>
-                                <input
-                                    type="email"
-                                    required
-                                    placeholder="staff@example.com"
-                                    value={newUser.email}
-                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-                                />
-                            </div>
-
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block font-semibold uppercase text-zinc-700 mb-1">Phone Number</label>
@@ -709,13 +1131,39 @@ export default function UsersManagementPage() {
                                     <label className="block font-semibold uppercase text-zinc-700 mb-1">Access Role *</label>
                                     <select
                                         value={newUser.role}
-                                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value as "admin" | "cashier" })}
+                                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value as "admin" | "cashier" | "waiter" })}
                                         className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                                     >
                                         <option value="cashier">Cashier</option>
+                                        <option value="waiter">Waitress / Waiter (POS Account)</option>
                                         <option value="admin">Super Admin / Owner</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Informative banner for waiter account */}
+                            {newUser.role === "waiter" && (
+                                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                                    <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                                        <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+                                        Shared Waitstaff POS Login
+                                    </p>
+                                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                                        All waiters and waitresses share this email &amp; password to sign in to the POS terminal. Once logged in, each waiter enters their 4-digit PIN for every bill they make.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Email Address *</label>
+                                <input
+                                    type="email"
+                                    required
+                                    placeholder="waiters@example.com"
+                                    value={newUser.email}
+                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                                />
                             </div>
 
                             <div>
@@ -779,10 +1227,108 @@ export default function UsersManagementPage() {
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold flex items-center gap-2 shadow-xs transition-all"
+                                    className={`px-5 py-2.5 rounded-xl text-white font-bold flex items-center gap-2 shadow-xs transition-all ${
+                                        newUser.role === "waiter" ? "bg-amber-600 hover:bg-amber-700" : "bg-green-600 hover:bg-green-700"
+                                    }`}
                                 >
                                     <UserPlus className="w-4 h-4" />
-                                    <span>{isSubmitting ? "Creating..." : "Create Cashier Account"}</span>
+                                    <span>{isSubmitting ? "Creating..." : newUser.role === "waiter" ? "Create Waiter Account" : "Create Staff Account"}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── REGISTER WAITER PIN MODAL (IMAGE 3) ── */}
+            {showAddWaiterModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-zinc-200">
+                        <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                                    <KeyRound className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-zinc-900 text-base">Register Waiter / Waitress PIN</h3>
+                                    <p className="text-[11px] text-zinc-500">Every bill they make requires this 4-digit PIN</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowAddWaiterModal(false)}
+                                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateWaiter} className="space-y-4 text-xs">
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Full Name *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. Mary Wanjiku"
+                                    value={newWaiter.name}
+                                    onChange={(e) => setNewWaiter({ ...newWaiter, name: e.target.value })}
+                                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-900 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-400 shadow-2xs"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">Phone Number (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="+254 7..."
+                                    value={newWaiter.phone}
+                                    onChange={(e) => setNewWaiter({ ...newWaiter, phone: e.target.value })}
+                                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2.5 text-sm text-zinc-900 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-400 shadow-2xs"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block font-semibold uppercase text-zinc-700 mb-1">4-Digit POS PIN *</label>
+                                <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    maxLength={4}
+                                    pattern="[0-9]{4}"
+                                    required
+                                    placeholder="e.g. 1234"
+                                    value={newWaiter.pin}
+                                    onChange={(e) => setNewWaiter({ ...newWaiter, pin: e.target.value.replace(/[^0-9]/g, "").slice(0, 4) })}
+                                    className={`w-full bg-white border rounded-xl px-3 py-3 text-2xl font-mono text-center tracking-[0.5em] font-black text-zinc-900 focus:outline-hidden focus:ring-2 shadow-2xs ${
+                                        newWaiter.pin.length === 4
+                                            ? "border-green-500 focus:ring-green-500/20 text-emerald-700 bg-emerald-50/30"
+                                            : "border-zinc-200 focus:border-amber-500 focus:ring-amber-400/20"
+                                    }`}
+                                />
+                                {newWaiter.pin.length === 4 ? (
+                                    <p className="text-[10px] text-green-600 font-semibold mt-1 flex items-center gap-1">
+                                        <CheckCircle2 className="w-3.5 h-3.5" /> 4-digit PIN ready!
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-zinc-400 mt-1">
+                                        Server will enter this PIN on the POS when opening any bill.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddWaiterModal(false)}
+                                    className="px-4 py-2.5 rounded-xl border border-zinc-200 font-semibold text-zinc-600 hover:bg-zinc-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmittingWaiter || newWaiter.pin.length !== 4 || !newWaiter.name.trim()}
+                                    className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-50 text-white font-bold flex items-center gap-2 shadow-xs transition-all"
+                                >
+                                    <KeyRound className="w-4 h-4" />
+                                    <span>{isSubmittingWaiter ? "Registering..." : "Save Waiter PIN"}</span>
                                 </button>
                             </div>
                         </form>

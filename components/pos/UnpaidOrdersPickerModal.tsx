@@ -143,7 +143,7 @@ export function UnpaidOrdersPickerModal({
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-bold uppercase">Unpaid</span>
                         <span className="px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-600 text-[10px] font-semibold flex items-center gap-1">
                           <ShoppingBag className="w-2.5 h-2.5" />
-                          {itemCount} cut{itemCount !== 1 ? "s" : ""}
+                          {itemCount} item{itemCount !== 1 ? "s" : ""}
                         </span>
                       </div>
 

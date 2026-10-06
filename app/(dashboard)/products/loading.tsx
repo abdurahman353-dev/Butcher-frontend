@@ -1,4 +1,4 @@
-﻿import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 export default function Loading() {
-  return <PageSkeleton variant="table" title="Products & Meat Cuts" />;
+  return <PageSkeleton variant="table" title="Products & Menu Catalog" />;
 }

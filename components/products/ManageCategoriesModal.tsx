@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Category } from "@/types";
 import { productsService } from "@/services/products.service";
 import { useSystemDialog } from "@/contexts/DialogContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   X,
   Plus,
@@ -40,6 +41,8 @@ export function ManageCategoriesModal({
   onCategoriesChange,
 }: ManageCategoriesModalProps) {
   const { confirm, alert } = useSystemDialog();
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
 
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -137,8 +140,12 @@ export function ManageCategoriesModal({
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-900 leading-tight">Manage Meat Categories</h2>
-              <p className="text-[11px] text-zinc-500 leading-tight mt-0.5">Add or organise for products &amp; reports</p>
+              <h2 className="text-base font-bold text-zinc-900 leading-tight">
+                {isRestaurant ? "Manage Menu Categories" : "Manage Meat Categories"}
+              </h2>
+              <p className="text-[11px] text-zinc-500 leading-tight mt-0.5">
+                {isRestaurant ? "Organise your menu sections (Starters, Mains, Drinks…)" : "Add or organise for products & reports"}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-colors -mr-1" aria-label="Close">
@@ -161,7 +168,7 @@ export function ManageCategoriesModal({
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. Camel, Lamb, Marinated..."
+                  placeholder={isRestaurant ? "e.g. Starters, Mains, Desserts, Beverages..." : "e.g. Beef, Lamb, Camel, Marinated..."}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="flex-1 min-w-0 h-11 bg-white border border-zinc-200 rounded-xl px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 font-semibold shadow-xs"
@@ -240,7 +247,7 @@ export function ManageCategoriesModal({
                         <div className="font-bold text-sm text-zinc-900 truncate">{cat.name}</div>
                         <div className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5">
                           <Package className="w-3 h-3 text-zinc-400 shrink-0" />
-                          <span>{cat.products_count ?? 0} cuts recorded</span>
+                          <span>{cat.products_count ?? 0} {isRestaurant ? "menu items" : "cuts"} recorded</span>
                         </div>
                       </div>
                     </div>

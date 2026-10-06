@@ -12,9 +12,10 @@ interface ProductGridProps {
   categories: Category[];
   onSelectProduct: (product: Product) => void;
   isLoading?: boolean;
+  isRestaurant?: boolean;
 }
 
-export function ProductGrid({ products, categories, onSelectProduct, isLoading = false }: ProductGridProps) {
+export function ProductGrid({ products, categories, onSelectProduct, isLoading = false, isRestaurant = false }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
@@ -64,8 +65,8 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search cut, meat name, or SKU..."
-            className="w-full bg-zinc-50 border border-zinc-300 rounded-lg pl-9 pr-8 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
+            placeholder={isRestaurant ? "Search item, dish, or SKU..." : "Search cut, meat name, or SKU..."}
+            className="w-full bg-zinc-50 border-2 border-emerald-500 rounded-lg pl-9 pr-8 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 transition-colors"
           />
           {searchQuery && (
             <button
@@ -84,6 +85,7 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
           onSelectCategory={setSelectedCategory}
           productCounts={categoryCounts.counts}
           totalCount={categoryCounts.total}
+          isRestaurant={isRestaurant}
         />
       </div>
 
@@ -104,11 +106,11 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
           </div>
         ) : filteredProducts.length === 0 ? (
           <EmptyState
-            title="No cuts found"
+            title={isRestaurant ? "No menu items found" : "No cuts found"}
             description={
               searchQuery
-                ? `No products matching "${searchQuery}". Try a different term or clear the search.`
-                : "No products available in this category."
+                ? `No ${isRestaurant ? "items" : "products"} matching "${searchQuery}". Try a different term or clear the search.`
+                : `No ${isRestaurant ? "menu items" : "products"} available in this category.`
             }
             icon={PackageOpen}
             actionLabel={searchQuery || selectedCategory !== "all" ? "Clear Filters" : undefined}

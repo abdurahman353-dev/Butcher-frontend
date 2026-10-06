@@ -47,7 +47,7 @@ export function HeldOrdersModal({
       const proceed = await confirm({
         title: "Replace Current Cart?",
         message:
-          "You currently have active cuts in your cart. Loading this saved order will replace your current cart.\n\nTip: You can hold your current cart first before resuming another order.",
+          "You currently have active items in your cart. Loading this saved order will replace your current cart.\n\nTip: You can hold your current cart first before resuming another order.",
         confirmText: "Load Order Anyway",
         cancelText: "Cancel",
         type: "warning",
@@ -107,7 +107,7 @@ export function HeldOrdersModal({
                 </span>
               </div>
               <p className="text-xs text-zinc-500">
-                Recall any parked customer order to resume checkout or add cuts.
+                Recall any parked customer order to resume checkout or add items.
               </p>
             </div>
           </div>
@@ -145,7 +145,7 @@ export function HeldOrdersModal({
             </h4>
             <p className="text-xs text-zinc-500 max-w-sm">
               When serving a customer who steps away or wants to pay later, click
-              <strong> "Hold Order"</strong> in the cart to save their cuts and start
+              <strong> "Hold Order"</strong> in the cart to save their items and start
               a fresh bill for the next customer.
             </p>
           </div>
@@ -177,7 +177,7 @@ export function HeldOrdersModal({
 
                     <div className="mt-1 flex items-center justify-between text-xs">
                       <span className="text-zinc-500 text-[11px]">
-                        {order.items.length} cut{order.items.length !== 1 ? "s" : ""} •{" "}
+                        {order.items.length} item{order.items.length !== 1 ? "s" : ""} •{" "}
                         {formatWeight(order.totalWeight)}
                       </span>
                       <span className="font-bold text-zinc-900 tabular-nums">

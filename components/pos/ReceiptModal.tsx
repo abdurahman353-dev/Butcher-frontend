@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Sale } from "@/types";
 import { formatCurrency, formatWeight, formatDateTime, formatUnitLabel } from "@/lib/formatters";
-import { Printer, X } from "lucide-react";
+import { Printer, X, Settings, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useAuth } from "@/hooks/useAuth";
 import { printElementInWindow } from "@/lib/printWindow";
+import { printService } from "@/lib/qz/printService";
+import { buildEscPosReceipt } from "@/lib/qz/receipt";
+import { PrinterSettingsModal } from "@/components/pos/PrinterSettingsModal";
 
 interface ReceiptModalProps {
   sale: Sale | null;
@@ -16,23 +20,52 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: ReceiptModalProps) {
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const { settings } = useShopSettings();
+  const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Auto-print when the modal opens with autoPrint=true
-  // Using a short timeout so the DOM has fully painted before we snapshot innerHTML
   useEffect(() => {
     if (isOpen && sale && autoPrint) {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        const savedPrinter = printService.getSavedPrinter();
+        if (savedPrinter) {
+          try {
+            const escpos = buildEscPosReceipt(sale, settings);
+            await printService.printRaw(savedPrinter, escpos);
+            return;
+          } catch (err) {
+            console.warn("[QZ Auto-print] Fallback:", err);
+          }
+        }
         printElementInWindow("thermal-receipt", `Receipt #${sale.sale_number}`);
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, sale, autoPrint]);
+  }, [isOpen, sale, autoPrint, settings]);
 
   if (!isOpen || !sale) return null;
 
-  const handlePrint = () => {
-    printElementInWindow("thermal-receipt", `Receipt #${sale?.sale_number ?? ""}`);
+  const handlePrint = async () => {
+    if (!sale) return;
+    setIsPrinting(true);
+    try {
+      const savedPrinter = printService.getSavedPrinter();
+      if (savedPrinter) {
+        try {
+          const escpos = buildEscPosReceipt(sale, settings);
+          await printService.printRaw(savedPrinter, escpos);
+          return;
+        } catch (err) {
+          console.warn("[QZ Print] Fallback to window print:", err);
+        }
+      }
+      printElementInWindow("thermal-receipt", `Receipt #${sale?.sale_number ?? ""}`);
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   return (
@@ -45,14 +78,23 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         {/* Top Control Bar (Hidden when printing) - Always visible & sticky at top */}
         <div className="p-3 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between shrink-0 z-20 print:hidden">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-700">Receipt Preview</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsPrinterSettingsOpen(true)}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200 transition-colors"
+              title="Receipt Printer Settings (QZ Tray)"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors active:scale-95"
+              disabled={isPrinting}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors active:scale-95 disabled:opacity-50"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
+              {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+              <span>{isPrinting ? "Printing..." : "Print"}</span>
             </button>
             <button
               type="button"
@@ -348,11 +390,18 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             </div>
             <p className="text-xs font-black leading-snug whitespace-pre-line">
               {settings.receipt_footer ||
-                `Thank you for choosing ${settings.shop_name || "HALAL CHICKEN HUB"}! Fresh cuts daily.`}
+                (isRestaurant
+                  ? `Thank you for dining with us at ${settings.shop_name || "our restaurant"}! Please visit again soon.`
+                  : `Thank you for choosing ${settings.shop_name || "our butchery"}! Fresh cuts daily.`)}
             </p>
           </div>
         </div>
       </div>
+
+      <PrinterSettingsModal
+        isOpen={isPrinterSettingsOpen}
+        onClose={() => setIsPrinterSettingsOpen(false)}
+      />
     </div>
   );
 }

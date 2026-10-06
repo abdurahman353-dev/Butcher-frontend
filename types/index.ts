@@ -3,7 +3,7 @@
  * Designed for 1-to-1 mapping with Laravel Eloquent models & API resources.
  */
 
-export type UserRole = "superadmin" | "admin" | "cashier";
+export type UserRole = "superadmin" | "admin" | "cashier" | "waiter";
 
 export interface Company {
   id: number;
@@ -14,6 +14,7 @@ export interface Company {
   address?: string;
   tax_pin?: string;
   status: "active" | "suspended";
+  business_type?: "butchery" | "restaurant";
   is_blocked_manually?: boolean;
   subscription_starts_at?: string;
   subscription_ends_at?: string;
@@ -28,6 +29,7 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  pin?: string | null;
   avatar?: string;
   is_active?: boolean;
   must_change_password?: boolean;
@@ -35,6 +37,17 @@ export interface User {
   company_id?: number;
   company?: Company;
   created_at?: string;
+}
+
+export interface Waiter {
+  id: number;
+  company_id?: number;
+  name: string;
+  pin: string;
+  phone?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SaasCompany extends Company {
@@ -54,6 +67,8 @@ export interface SaasSummary {
   total: number;
   active: number;
   suspended: number;
+  butcheries?: number;
+  restaurants?: number;
 }
 export interface Category {
   id: number;
@@ -76,7 +91,7 @@ export interface Product {
   buying_cost_per_kg?: number;
   image?: string;
   is_active: boolean;
-  unit: "KG" | "PACK" | "PCS" | string;
+  unit: "KG" | "PACK" | "PCS" | "PLATE" | "PORTION" | "BOTTLE" | "CUP" | "BOWL" | "GLASS" | string;
   created_at?: string;
   updated_at?: string;
 }
@@ -132,6 +147,8 @@ export interface Sale {
   total: number;
   refunded_amount?: number;
   payment_method: PaymentMethod;
+  order_type?: "counter" | "dine_in" | "takeaway";
+  table_number?: string | null;
   payment_status: PaymentStatus;
   sale_status: SaleStatus;
   amount_received?: number;
@@ -157,8 +174,69 @@ export interface HeldOrder {
   totalDiscount: number;
   total: number;
   totalWeight: number;
+  order_type?: "counter" | "dine_in" | "takeaway";
+  table_number?: string | null;
   createdAt: string;
   notes?: string;
+}
+
+export interface RestaurantBillItem {
+  product_id: number;
+  product_name: string;
+  price_per_kg: number;
+  weight: number;
+  unit?: string;
+  discount?: number;
+  notes?: string;
+  line_total: number;
+}
+
+export interface RestaurantBill {
+  id: number;
+  table_id: number;
+  table_number: string;
+  bill_number: string;
+  waiter_id?: number | null;
+  waiter_name: string;
+  waiter_pin?: string | null;
+  cashier_id?: number | null;
+  cashier_name: string;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  guest_count: number;
+  status: "open" | "printed" | "settled" | "cancelled";
+  items: RestaurantBillItem[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  kitchen_printed_at?: string | null;
+  bill_printed_at?: string | null;
+  bill_printed_by?: string | null;
+  settled_at?: string | null;
+  settled_by?: string | null;
+  sale_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RestaurantTable {
+  id: number;
+  company_id: number;
+  name: string;
+  table_number: string;
+  capacity: number;
+  zone: string;
+  is_active: boolean;
+  sort_order: number;
+  status: "grey" | "red" | "yellow";
+  total_active_amount: number;
+  active_bills_count: number;
+  active_bills: RestaurantBill[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Shift {

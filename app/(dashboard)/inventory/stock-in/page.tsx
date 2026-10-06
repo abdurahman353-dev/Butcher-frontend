@@ -8,9 +8,12 @@ import { inventoryService } from "@/services/inventory.service";
 import { Product } from "@/types";
 import { formatWeight } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
+import { useAuth } from "@/hooks/useAuth";
 import { ArrowLeft, PlusCircle, CheckCircle2 } from "lucide-react";
 
 function StockInForm() {
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProductId = searchParams.get("product_id");
@@ -136,7 +139,11 @@ function StockInForm() {
         </Link>
         <div>
           <h1 className="text-xl font-bold text-zinc-900">Stock-In Replenishment</h1>
-          <p className="text-xs text-zinc-500">Record incoming meat cuts delivered by suppliers</p>
+          <p className="text-xs text-zinc-500">
+            {isRestaurant
+              ? "Record incoming inventory, drinks, and ingredients delivered by suppliers"
+              : "Record incoming meat cuts delivered by suppliers"}
+          </p>
         </div>
       </div>
 
@@ -150,7 +157,7 @@ function StockInForm() {
       <form onSubmit={handleSubmit} className="p-6 bg-white border border-zinc-200 rounded-2xl space-y-4 text-xs shadow-xs">
         <div>
           <label className="block font-semibold uppercase text-zinc-700 mb-1">
-            Select Meat Cut <span className="text-rose-500">*</span>
+            {isRestaurant ? "Select Item / Ingredient" : "Select Meat Cut"} <span className="text-rose-500">*</span>
           </label>
           <select
             value={activeProductId}

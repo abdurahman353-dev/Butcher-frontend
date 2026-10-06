@@ -31,6 +31,9 @@ interface CheckoutModalProps {
   total: number;
   customer: Customer | null;
   initialMethod?: "cash" | "mpesa" | "credit";
+  isRestaurant?: boolean;
+  orderType?: string;
+  tableNumber?: string;
   onCompleteSale: (payload: {
     payment_method: "cash" | "mpesa" | "credit";
     amount_received?: number;
@@ -53,6 +56,9 @@ export function CheckoutModal({
   total,
   customer,
   initialMethod = "cash",
+  isRestaurant = false,
+  orderType = "counter",
+  tableNumber = "",
   onCompleteSale,
   onViewReceipt,
   onPrintReceipt,
@@ -209,7 +215,7 @@ export function CheckoutModal({
                 {isPendingCredit ? "Order Saved — Payment Pending" : "Transaction Complete"}
               </span>
               <h2 className="text-xl font-black text-zinc-900 mt-2 tracking-tight">
-                {isPendingCredit ? "PAY LATER BILL ISSUED" : "SALE COMPLETED"}
+                {isPendingCredit ? (isRestaurant ? "OPEN TAB RECORDED" : "PAY LATER BILL ISSUED") : (isRestaurant ? "ORDER PLACED" : "SALE COMPLETED")}
               </h2>
               <p className="text-xs font-mono text-zinc-400 mt-0.5">
                 Sale #{completedSale.sale_number}
@@ -244,7 +250,7 @@ export function CheckoutModal({
                     isPendingCredit ? "text-amber-700" : "text-green-700"
                   }`}
                 >
-                  {isPendingCredit ? "Unpaid (Pay Later)" : completedSale.payment_method}
+                  {isPendingCredit ? (isRestaurant ? "Open Tab (Unpaid)" : "Unpaid (Pay Later)") : completedSale.payment_method}
                 </span>
               </div>
               {completedSale.mpesa_reference && (
@@ -279,7 +285,9 @@ export function CheckoutModal({
 
             {isPendingCredit && (
               <p className="text-[11px] text-zinc-500 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100">
-                Meat stock has been properly deducted from inventory. When the customer returns to pay, settle the bill in the Sales history or POS.
+                {isRestaurant
+                  ? "Menu items have been recorded. When the guest is ready to pay, settle the tab from Sales or POS."
+                  : "Meat stock has been properly deducted from inventory. When the customer returns to pay, settle the bill in the Sales history or POS."}
               </p>
             )}
 
@@ -316,7 +324,7 @@ export function CheckoutModal({
               className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-xs"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Next Sale / New Bill</span>
+              <span>{isRestaurant ? "Next Order / New Bill" : "Next Sale / New Bill"}</span>
             </button>
           </div>
         ) : (
@@ -325,12 +333,17 @@ export function CheckoutModal({
             {/* Header */}
             <div className="px-5 py-4 border-b border-zinc-200 flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-zinc-900">Checkout</h3>
+                <h3 className="text-base font-bold text-zinc-900">{isRestaurant ? "Place Order" : "Checkout"}</h3>
                 <p className="text-xs text-zinc-500">
                   Customer:{" "}
                   <span className="text-zinc-800 font-semibold">
                     {customer?.name || "Walk-in Customer"}
                   </span>
+                  {isRestaurant && orderType !== "counter" && (
+                    <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-800 rounded-md font-bold text-[10px] uppercase">
+                      {orderType === "dine_in" ? `Dine-In${tableNumber ? ` · ${tableNumber}` : ""}` : "Takeaway"}
+                    </span>
+                  )}
                 </p>
               </div>
               <button
@@ -367,7 +380,7 @@ export function CheckoutModal({
                     method === "mpesa"
                       ? "M-Pesa"
                       : method === "credit"
-                      ? "Pay Later"
+                      ? isRestaurant ? "Open Tab" : "Pay Later"
                       : "Cash";
                   return (
                     <button
@@ -415,7 +428,7 @@ export function CheckoutModal({
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                     <div>
-                      <strong>Pay Later (Credit Sale):</strong> Customer takes the cuts now with payment due later. Meat inventory is deducted immediately.
+                      <strong>Pay Later (Credit Sale):</strong> Customer receives the order now with payment settled later. Inventory is deducted immediately.
                     </div>
                   </div>
 

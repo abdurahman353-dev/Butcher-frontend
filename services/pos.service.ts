@@ -4,6 +4,8 @@ import { Sale, CartItem } from "@/types";
 export interface CheckoutPayload {
   items: CartItem[];
   payment_method: "cash" | "mpesa" | "card" | "credit";
+  order_type?: "counter" | "dine_in" | "takeaway";
+  table_number?: string | null;
   amount_received?: number;
   customer_id?: number | null;
   customer_name?: string | null;
@@ -21,16 +23,20 @@ export const posService = {
       weight: item.weight,
       price_per_kg: item.price_per_kg,
       discount: item.discount,
+      notes: item.notes,
     }));
 
     const res = await apiClient.post<Sale>("/pos/checkout", {
       items: formattedItems,
       payment_method: payload.payment_method,
+      order_type: payload.order_type || "counter",
+      table_number: payload.table_number || null,
       amount_received: payload.amount_received,
       customer_id: payload.customer_id,
       customer_name: payload.customer_name,
       customer_phone: payload.customer_phone || payload.mpesa_phone,
       mpesa_reference: payload.mpesa_reference,
+      card_reference: payload.card_reference,
       notes: payload.notes,
     });
 

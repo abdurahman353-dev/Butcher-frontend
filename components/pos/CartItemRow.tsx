@@ -11,6 +11,7 @@ interface CartItemRowProps {
   onOpenWeightEdit: (item: CartItem) => void;
   onRemove: (id: string) => void;
   onUpdateDiscount: (id: string, discount: number) => void;
+  readOnly?: boolean;
 }
 
 export function CartItemRow({
@@ -19,9 +20,12 @@ export function CartItemRow({
   onOpenWeightEdit,
   onRemove,
   onUpdateDiscount,
+  readOnly = false,
 }: CartItemRowProps) {
   const isAtMaxStock =
-    typeof item.available_stock === "number" && item.weight >= item.available_stock;
+    typeof item.available_stock === "number" &&
+    item.available_stock < 9999 &&
+    item.weight >= item.available_stock;
   const isCountable =
     item.unit?.toUpperCase() === "PACK" || item.unit?.toUpperCase() === "PCS";
   const stepDelta = isCountable ? 1 : 0.25;
@@ -147,80 +151,95 @@ export function CartItemRow({
         </div>
       )}
 
-      {/* Bottom: weight adjuster + discount badge + remove */}
-      <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100">
-        {/* Weight stepper — larger touch targets on mobile */}
-        <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-md p-0.5">
-          <button
-            type="button"
-            onClick={() => onAdjustWeight(item.id, -stepDelta)}
-            className="w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200 transition-colors"
-            title={isCountable ? "Decrease 1" : "Decrease 250g"}
-          >
-            <Minus className="w-4 h-4 sm:w-3 sm:h-3" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpenWeightEdit(item)}
-            className="px-2 py-1 sm:py-0.5 text-xs font-bold text-zinc-800 hover:text-green-700 tabular-nums flex items-center gap-0.5 transition-colors"
-            title="Click to enter exact quantity"
-          >
-            <span>{formatWeight(item.weight, item.unit)}</span>
-            <Edit2 className="w-2.5 h-2.5 text-zinc-400" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onAdjustWeight(item.id, stepDelta)}
-            disabled={isAtMaxStock}
-            className={`w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center border transition-colors ${
-              isAtMaxStock
-                ? "bg-zinc-100 border-zinc-200 text-zinc-300 cursor-not-allowed"
-                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200"
-            }`}
-            title={
-              isAtMaxStock
-                ? `Max available stock reached (${formatWeight(item.available_stock ?? 0)})`
-                : "Increase 250g"
-            }
-          >
-            <Plus className="w-4 h-4 sm:w-3 sm:h-3" />
-          </button>
+      {/* Bottom: weight adjuster + discount badge + remove — hidden when readOnly (order saved) */}
+      {readOnly ? (
+        /* Read-only saved state */
+        <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100">
+          <span className="text-xs font-semibold text-zinc-500">
+            {formatWeight(item.weight, item.unit)}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Sent to Kitchen
+          </span>
         </div>
+      ) : (
+        <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100">
+          {/* Weight stepper — larger touch targets on mobile */}
+          <div className="flex items-center gap-1 bg-zinc-50 border border-zinc-200 rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => onAdjustWeight(item.id, -stepDelta)}
+              className="w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200 transition-colors"
+              title={isCountable ? "Decrease 1" : "Decrease 250g"}
+            >
+              <Minus className="w-4 h-4 sm:w-3 sm:h-3" />
+            </button>
 
-        <div className="flex items-center gap-1.5">
-          {isAtMaxStock && (
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-              Max ({formatWeight(item.available_stock ?? 0)})
-            </span>
-          )}
+            <button
+              type="button"
+              onClick={() => onOpenWeightEdit(item)}
+              className="px-2 py-1 sm:py-0.5 text-xs font-bold text-zinc-800 hover:text-green-700 tabular-nums flex items-center gap-0.5 transition-colors"
+              title="Click to enter exact quantity"
+            >
+              <span>{formatWeight(item.weight, item.unit)}</span>
+              <Edit2 className="w-2.5 h-2.5 text-zinc-400" />
+            </button>
 
-          {/* Discount toggle badge — larger touch target on mobile */}
-          <button
-            type="button"
-            onClick={handleDiscountToggle}
-            title={item.discount > 0 ? `Discount: -${formatCurrency(item.discount)} (click to edit)` : "Add item discount"}
-            className={`flex items-center gap-1.5 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-xs font-bold border transition-colors ${
-              item.discount > 0
-                ? "bg-amber-500 border-amber-600 text-white hover:bg-amber-600 active:bg-amber-700"
-                : "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 hover:border-amber-400"
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5 shrink-0" />
-            <span>{item.discount > 0 ? `-${formatCurrency(item.discount)}` : "Disc"}</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => onAdjustWeight(item.id, stepDelta)}
+              disabled={isAtMaxStock}
+              className={`w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center border transition-colors ${
+                isAtMaxStock
+                  ? "bg-zinc-100 border-zinc-200 text-zinc-300 cursor-not-allowed"
+                  : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200"
+              }`}
+              title={
+                isAtMaxStock
+                  ? `Max available stock reached (${formatWeight(item.available_stock ?? 0)})`
+                  : "Increase 250g"
+              }
+            >
+              <Plus className="w-4 h-4 sm:w-3 sm:h-3" />
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => onRemove(item.id)}
-            className="p-2.5 sm:p-1.5 rounded-lg bg-red-50 border border-red-200 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 active:bg-red-600 transition-colors"
-            title="Remove from sale"
-          >
-            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {isAtMaxStock && (
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                Max ({formatWeight(item.available_stock ?? 0)})
+              </span>
+            )}
+
+            {/* Discount toggle badge — larger touch target on mobile */}
+            <button
+              type="button"
+              onClick={handleDiscountToggle}
+              title={item.discount > 0 ? `Discount: -${formatCurrency(item.discount)} (click to edit)` : "Add item discount"}
+              className={`flex items-center gap-1.5 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-xs font-bold border transition-colors ${
+                item.discount > 0
+                  ? "bg-amber-500 border-amber-600 text-white hover:bg-amber-600 active:bg-amber-700"
+                  : "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 hover:border-amber-400"
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5 shrink-0" />
+              <span>{item.discount > 0 ? `-${formatCurrency(item.discount)}` : "Disc"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="p-2.5 sm:p-1.5 rounded-lg bg-red-50 border border-red-200 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 active:bg-red-600 transition-colors"
+              title="Remove from sale"
+            >
+              <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

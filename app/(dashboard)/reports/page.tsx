@@ -31,6 +31,7 @@ import {
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { Pagination } from "@/components/shared/Pagination";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useAuth } from "@/hooks/useAuth";
 
 import {
   AreaChart,
@@ -45,6 +46,8 @@ import {
 type MetricView = "revenue" | "weight" | "profit";
 
 export default function ReportsPage() {
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const { settings: shopSettings } = useShopSettings();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -254,8 +257,8 @@ export default function ReportsPage() {
           </tr>
           <!-- Column Labels -->
           <tr style="background:#dcfce7">
-            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">Item / Cut</th>
-            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">${isRestaurant ? "Menu Item / Product" : "Item / Cut"}</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">${isRestaurant ? "Qty Sold" : "Qty (KG)"}</th>
             <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th>
             <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#b45309;text-align:right">Discount</th>
             <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#15803d;text-align:right">Profit</th>
@@ -300,7 +303,7 @@ export default function ReportsPage() {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${shopSettings.shop_name} Report</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">🥩 ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || "Premium Meat Shop"}</div></div>
+  <div><div style="font-size:22px;font-weight:900">${isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isRestaurant ? "Restaurant & Bar F&B" : "Premium Meat Shop")}</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">EXECUTIVE PERFORMANCE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Generated: ${dateStr} at ${timeStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Range: ${rangeLabel}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
@@ -318,8 +321,8 @@ ${sec("Payment Method Breakdown","Tender collection channels")}
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #15803d;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">📱 M-Pesa Mobile</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(mpesaAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${mpesaCount} transactions · ${mpesaPercent}% share</div></div>
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #1d4ed8;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">💳 Card Payment</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(cardAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${cardCount} transactions · ${cardPercent}% share</div></div>
 </div>
-${(analytics.itemized_categories||[]).length>0?`${sec("Sales by Meat Category","All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Discount</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.total_discount||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Weight</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Reinvest (Cost)</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK((analytics.itemized_categories||[]).reduce((s,c)=>s+(c.subtotal_cost||0),0))}</div></div></div>`:""}
-${(analytics.top_products||[]).length>0?`${sec("Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>Meat Cut</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
+${(analytics.itemized_categories||[]).length>0?`${sec(isRestaurant ? "Sales by Category" : "Sales by Meat Category", isRestaurant ? "All items grouped by category" : "All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Discount</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.total_discount||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Weight</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Reinvest (Cost)</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK((analytics.itemized_categories||[]).reduce((s,c)=>s+(c.subtotal_cost||0),0))}</div></div></div>`:""}
+${(analytics.top_products||[]).length>0?`${sec(isRestaurant ? "Top Selling Items & Margins" : "Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>${isRestaurant ? "Menu Item" : "Meat Cut"}</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
 ${(analytics.category_breakdown||[]).length>0?`${sec("Category Performance","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Category</th><th ${thr}>Weight</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Share</th></tr></thead><tbody>${catHTML}</tbody></table>`:""}
 ${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Staff</th><th ${thr}>Transactions</th><th ${thr}>Revenue</th><th ${thr}>Weight</th><th ${thr}>AOV</th></tr></thead><tbody>${cashierHTML}</tbody></table>`:""}
 ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between"><span>⚠️ Wastage & Loss Audit</span><span>Total: ${fK(analytics.wastage_cost||0)} · ${fW(analytics.wastage_weight||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Reason</th><th ${thr}>Incidents</th><th ${thr}>Weight</th><th ${thr}>Cost Loss</th></tr></thead><tbody>${wastageHTML}</tbody></table></div>`:""}
@@ -1094,14 +1097,14 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
         <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-zinc-900">
-              Top Selling Meat Cuts & Profit Margins
+              {isRestaurant ? "Top Selling Menu & Bar Items & Profit Margins" : "Top Selling Meat Cuts & Profit Margins"}
             </h2>
             <p className="text-xs text-zinc-500">
               Ranked by revenue contribution, volume sold, and profit margin
             </p>
           </div>
           <span className="text-xs font-semibold text-zinc-500">
-            {topProducts.length} Cuts Recorded
+            {topProducts.length} {isRestaurant ? "Items Recorded" : "Cuts Recorded"}
           </span>
         </div>
 
@@ -1111,7 +1114,7 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 <th className="py-3.5 pl-4"># Rank</th>
-                <th className="py-3.5 px-3">Meat Cut Name</th>
+                <th className="py-3.5 px-3">{isRestaurant ? "Item / Dish Name" : "Meat Cut Name"}</th>
                 <th className="py-3.5 px-3">Category</th>
                 <th className="py-3.5 px-3 text-right">Volume Sold</th>
                 <th className="py-3.5 px-3 text-right">Total Revenue</th>

@@ -30,12 +30,14 @@ import {
   Loader2,
   Trash,
   Lock,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { ManageCategoriesModal } from "@/components/products/ManageCategoriesModal";
 
 export default function ProductsPage() {
-  const { isAdmin, isCashier } = useAuth();
+  const { user, isAdmin, isCashier } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const { confirm, alert } = useSystemDialog();
   const [paginated, setPaginated] = useState<PaginatedResponse<Product>>({
     data: [],
@@ -84,7 +86,7 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState({
     name: "",
     sku: "",
-    category_id: 1,
+    category_id: 0,
     unit: "KG",
     price_per_kg: "",
     buying_cost_per_kg: "",
@@ -175,8 +177,8 @@ export default function ProductsPage() {
   const downloadCsvTemplate = () => {
     const catList = categories.map(c => c.name).join(" | ");
     const header = `name,sku,category,unit,price per kg,buying cost,initial stock,min stock`;
-    const example1 = `Prime Rib,,Beef,KG,1200,,50,10`;
-    const example2 = `Beef Sausages 250g,,Sausages,PACK,220,,40,10`;
+    const example1 = isRestaurant ? `Grilled Wings,,Starters,PORTION,650,300,50,10` : `Prime Rib,,Beef,KG,1200,,50,10`;
+    const example2 = isRestaurant ? `Tusker Lager,,Beverages,BOTTLE,300,180,100,20` : `Beef Sausages 250g,,Sausages,PACK,220,,40,10`;
     const note = `# Available categories: ${catList}`;
     const csv = `${header}\n${example1}\n${example2}\n${note}`;
     const blob = new Blob([csv], { type: "text/csv" });
@@ -205,10 +207,12 @@ export default function ProductsPage() {
       const rowNum = bulkRows.indexOf(r) + 1;
       if (!r.name.trim())              rowErrors.push(`Row ${rowNum}: Product Name is required.`);
       if (!r.category_id)              rowErrors.push(`Row ${rowNum}: Category is required.`);
-      if (!r.price_per_kg)             rowErrors.push(`Row ${rowNum}: Price per KG is required.`);
-      if (r.buying_cost_per_kg === "") rowErrors.push(`Row ${rowNum}: Buying Cost per KG is required.`);
-      if (r.current_stock === "")      rowErrors.push(`Row ${rowNum}: Initial Stock is required.`);
-      if (r.min_stock === "")          rowErrors.push(`Row ${rowNum}: Min Stock is required.`);
+      if (!r.price_per_kg)             rowErrors.push(`Row ${rowNum}: Price per unit is required.`);
+      if (!isRestaurant) {
+        if (r.buying_cost_per_kg === "") rowErrors.push(`Row ${rowNum}: Buying Cost per KG is required for butcheries.`);
+        if (r.current_stock === "")      rowErrors.push(`Row ${rowNum}: Initial Stock is required for butcheries.`);
+        if (r.min_stock === "")          rowErrors.push(`Row ${rowNum}: Min Stock is required for butcheries.`);
+      }
     });
 
     if (rowErrors.length > 0) {
@@ -226,9 +230,9 @@ export default function ProductsPage() {
         sku: r.sku.trim() || undefined,
         category_id: Number(r.category_id),
         price_per_kg: parseFloat(r.price_per_kg),
-        buying_cost_per_kg: parseFloat(r.buying_cost_per_kg),
-        current_stock: parseFloat(r.current_stock),
-        min_stock: parseFloat(r.min_stock),
+        buying_cost_per_kg: r.buying_cost_per_kg !== "" ? parseFloat(r.buying_cost_per_kg) : 0,
+        current_stock: r.current_stock !== "" ? parseFloat(r.current_stock) : (isRestaurant ? 9999 : 0),
+        min_stock: r.min_stock !== "" ? parseFloat(r.min_stock) : 0,
         unit: r.unit || "KG",
       }));
       const res = await productsService.bulkCreateProducts(payload);
@@ -292,7 +296,7 @@ export default function ProductsPage() {
     setFormData({
       name: "",
       sku: "",
-      category_id: categories[0]?.id || 1,
+      category_id: categories[0]?.id || 0,
       unit: "KG",
       price_per_kg: "",
       buying_cost_per_kg: "",
@@ -312,8 +316,8 @@ export default function ProductsPage() {
       unit: product.unit || "KG",
       price_per_kg: product.price_per_kg.toString(),
       buying_cost_per_kg: product.buying_cost_per_kg ? product.buying_cost_per_kg.toString() : "",
-      current_stock: product.current_stock.toString(),
-      min_stock: product.min_stock.toString(),
+      current_stock: product.current_stock >= 9999 ? "" : product.current_stock.toString(),
+      min_stock: product.current_stock >= 9999 ? "" : product.min_stock.toString(),
     });
     setIsModalOpen(true);
   };
@@ -333,7 +337,18 @@ export default function ProductsPage() {
       return;
     }
 
-    if (formData.buying_cost_per_kg === "") {
+    if (!formData.category_id || formData.category_id === 0) {
+      const errMsg = "Please select a category before saving.";
+      setModalError(errMsg);
+      await alert({
+        title: "Category Required",
+        message: errMsg,
+        type: "warning",
+      });
+      return;
+    }
+
+    if (!isRestaurant && formData.buying_cost_per_kg === "") {
       const errMsg = "Please enter the buying cost per KG.";
       setModalError(errMsg);
       await alert({
@@ -344,7 +359,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (!editingProduct && formData.current_stock === "") {
+    if (!isRestaurant && !editingProduct && formData.current_stock === "") {
       const errMsg = "Please enter the initial stock quantity in KG.";
       setModalError(errMsg);
       await alert({
@@ -355,7 +370,7 @@ export default function ProductsPage() {
       return;
     }
 
-    if (formData.min_stock === "") {
+    if (!isRestaurant && formData.min_stock === "") {
       const errMsg = "Please enter the minimum alert stock level in KG.";
       setModalError(errMsg);
       await alert({
@@ -373,9 +388,11 @@ export default function ProductsPage() {
         sku: formData.sku.trim() || undefined,
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
-        buying_cost_per_kg: parseFloat(formData.buying_cost_per_kg),
-        current_stock: editingProduct && !isAdmin ? editingProduct.current_stock : parseFloat(formData.current_stock),
-        min_stock: parseFloat(formData.min_stock),
+        buying_cost_per_kg: formData.buying_cost_per_kg !== "" ? parseFloat(formData.buying_cost_per_kg) : 0,
+        current_stock: editingProduct && !isAdmin
+          ? editingProduct.current_stock
+          : (formData.current_stock !== "" ? parseFloat(formData.current_stock) : (isRestaurant ? 9999 : 0)),
+        min_stock: formData.min_stock !== "" ? parseFloat(formData.min_stock) : 0,
         unit: formData.unit || "KG",
       };
 
@@ -403,7 +420,9 @@ export default function ProductsPage() {
   const handleToggleStatus = async (product: Product) => {
     const isActivating = !product.is_active;
     const confirmed = await confirm({
-      title: isActivating ? "Activate Meat Cut" : "Deactivate Meat Cut",
+      title: isActivating
+        ? (isRestaurant ? "Activate Menu Item" : "Activate Meat Cut")
+        : (isRestaurant ? "Deactivate Menu Item" : "Deactivate Meat Cut"),
       message: isActivating
         ? `Make "${product.name}" active and visible on the POS terminal?`
         : `Deactivate "${product.name}"? It will no longer be sellable on the POS terminal until re-activated.`,
@@ -428,8 +447,8 @@ export default function ProductsPage() {
 
   const handleDeleteProduct = async (product: Product) => {
     const confirmed = await confirm({
-      title: "Delete Meat Cut",
-      message: `Are you sure you want to delete "${product.name}" (${product.sku})?\n\nThis will permanently remove this meat cut from inventory and POS terminal. This action cannot be undone.`,
+      title: isRestaurant ? "Delete Menu / Stock Item" : "Delete Meat Cut",
+      message: `Are you sure you want to delete "${product.name}" (${product.sku})?\n\nThis will permanently remove this ${isRestaurant ? "item" : "meat cut"} from inventory and POS terminal. This action cannot be undone.`,
       confirmText: "Yes, Delete Product",
       cancelText: "No, Keep Product",
       type: "danger",
@@ -450,7 +469,7 @@ export default function ProductsPage() {
   };
 
   if (isLoading && paginated.data.length === 0) {
-    return <PageSkeleton variant="table" title="Products & Meat Cuts" />;
+    return <PageSkeleton variant="table" title={isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"} />;
   }
 
   return (
@@ -463,11 +482,13 @@ export default function ProductsPage() {
               <Package className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-              Products & Meat Cuts
+              {isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            Manage your butcher inventory cuts, pricing per KG, minimum thresholds, and availability.
+            {isRestaurant
+              ? "Manage your restaurant menu, beverage lists, portions, pricing, and stock thresholds."
+              : "Manage your butcher inventory cuts, pricing per KG, minimum thresholds, and availability."}
           </p>
         </div>
 
@@ -494,7 +515,7 @@ export default function ProductsPage() {
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New Cut</span>
+            <span>{isRestaurant ? "Add Menu Item" : "Add New Cut"}</span>
           </button>
         </div>
       </div>
@@ -521,7 +542,7 @@ export default function ProductsPage() {
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-500">
-                    {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : "Filter cuts by name, category, or status."}
+                    {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : (isRestaurant ? "Filter menu & stock items by name, category, or status." : "Filter cuts by name, category, or status.")}
                   </p>
                 </div>
               </div>
@@ -560,7 +581,7 @@ export default function ProductsPage() {
                       type="text"
                       value={search}
                       onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                      placeholder="Cut name or SKU..."
+                      placeholder={isRestaurant ? "Item name or SKU..." : "Cut name or SKU..."}
                       className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
                     />
                     <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -642,11 +663,11 @@ export default function ProductsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                <th className="py-3.5 pl-4">Cut Name</th>
+                <th className="py-3.5 pl-4">{isRestaurant ? "Item / Dish Name" : "Cut Name"}</th>
                 <th className="py-3.5 px-3">SKU</th>
                 <th className="py-3.5 px-3">Category</th>
-                <th className="py-3.5 px-3 text-right">Selling Price / KG</th>
-                <th className="py-3.5 px-3 text-right">Cost Price / KG</th>
+                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Selling Price / Unit" : "Selling Price / KG"}</th>
+                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Cost Price / Unit" : "Cost Price / KG"}</th>
                 <th className="py-3.5 px-3 text-right">Current Stock</th>
                 <th className="py-3.5 px-3 text-right">Min Stock</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
@@ -657,12 +678,13 @@ export default function ProductsPage() {
               {paginated.data.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-zinc-400">
-                    No meat products found matching your search.
+                    {isRestaurant ? "No menu or inventory items found matching your search." : "No meat products found matching your search."}
                   </td>
                 </tr>
               ) : (
                 paginated.data.map((product) => {
-                  const isLow = product.current_stock <= product.min_stock;
+                  const isInfinite = product.current_stock >= 9999;
+                  const isLow = !isInfinite && product.current_stock <= product.min_stock;
                   return (
                     <tr key={product.id} className="hover:bg-zinc-50/60 transition-colors">
                       <td className="py-3 pl-4">
@@ -687,17 +709,30 @@ export default function ProductsPage() {
                         {product.buying_cost_per_kg ? formatCurrency(product.buying_cost_per_kg) : <span className="text-zinc-300 font-normal">—</span>}
                       </td>
                       <td className="py-3 px-3 text-right font-semibold tabular-nums">
-                        <span className={isLow ? "text-amber-700" : "text-zinc-800"}>
-                          {formatWeight(product.current_stock, product.unit)}
-                        </span>
-                        {isLow && (
-                          <span className="block text-[9px] font-semibold text-amber-600">
-                            Low Stock
+                        {isInfinite ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Unlimited / Infinite Stock">
+                            <InfinityIcon className="w-3.5 h-3.5" />
+                            <span>Unlimited</span>
                           </span>
+                        ) : (
+                          <>
+                            <span className={isLow ? "text-amber-700" : "text-zinc-800"}>
+                              {formatWeight(product.current_stock, product.unit)}
+                            </span>
+                            {isLow && (
+                              <span className="block text-[9px] font-semibold text-amber-600">
+                                Low Stock
+                              </span>
+                            )}
+                          </>
                         )}
                       </td>
                       <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                        {formatWeight(product.min_stock, product.unit)}
+                        {isInfinite ? (
+                          <span className="text-zinc-300 font-normal">—</span>
+                        ) : (
+                          formatWeight(product.min_stock, product.unit)
+                        )}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <button
@@ -722,7 +757,7 @@ export default function ProductsPage() {
                             type="button"
                             onClick={() => openEditModal(product)}
                             className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 transition-colors shadow-2xs"
-                            title="Edit meat cut"
+                            title={isRestaurant ? "Edit item" : "Edit meat cut"}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -730,7 +765,7 @@ export default function ProductsPage() {
                             type="button"
                             onClick={() => handleDeleteProduct(product)}
                             className="p-1.5 rounded-lg border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors shadow-2xs"
-                            title="Delete meat cut"
+                            title={isRestaurant ? "Delete item" : "Delete meat cut"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -767,7 +802,7 @@ export default function ProductsPage() {
           <div className="relative w-full max-w-md bg-white border border-zinc-200 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
               <h3 className="text-base font-bold text-zinc-900">
-                {editingProduct ? "Edit Meat Cut" : "Add New Meat Cut"}
+                {editingProduct ? (isRestaurant ? "Edit Menu / Stock Item" : "Edit Meat Cut") : (isRestaurant ? "Add Menu / Stock Item" : "Add New Meat Cut")}
               </h3>
               <button
                 type="button"
@@ -795,7 +830,7 @@ export default function ProductsPage() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Beef Ribeye"
+                  placeholder={isRestaurant ? "e.g. Grilled Chicken Wings, Wagyu Burger, Tusker" : "e.g. Beef Ribeye, Lamb Chops"}
                   className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                 />
               </div>
@@ -810,9 +845,19 @@ export default function ProductsPage() {
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-semibold focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                   >
-                    <option value="KG">KG (Weight)</option>
-                    <option value="PACK">PACK (Package)</option>
+                    <option value="PORTION">PORTION</option>
+                    <option value="PLATE">PLATE</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                    <option value="GLASS">GLASS</option>
+                    <option value="CUP">CUP</option>
+                    <option value="SHOT">SHOT</option>
+                    <option value="BOWL">BOWL</option>
                     <option value="PCS">PCS (Pieces)</option>
+                    <option value="PACK">PACK (Package)</option>
+                    <option value="KG">KG (Weight)</option>
+                    <option value="G">G (Grams)</option>
+                    <option value="L">L (Liters)</option>
+                    <option value="ML">ML (Milliliters)</option>
                   </select>
                 </div>
                 <div>
@@ -829,17 +874,42 @@ export default function ProductsPage() {
                       <span>New Category</span>
                     </button>
                   </div>
-                  <select
-                    value={formData.category_id}
-                    onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+
+                  {categories.length === 0 ? (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 text-xs">
+                        <p className="font-bold text-amber-900">No categories yet</p>
+                        <p className="text-amber-700 mt-0.5">
+                          {isRestaurant
+                            ? "Create at least one menu category (e.g. Starters, Mains) before adding items."
+                            : "Create at least one meat category (e.g. Beef, Lamb) before adding products."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryModalOpen(true)}
+                          className="mt-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-lg transition-colors"
+                        >
+                          + Create First Category
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.category_id}
+                      onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
+                      className={`w-full bg-white border rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs ${
+                        !formData.category_id ? "border-rose-300 text-zinc-400" : "border-zinc-200"
+                      }`}
+                    >
+                      <option value={0} disabled>— Select a category —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -857,7 +927,7 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Selling Price / {formData.unit === "PACK" ? "Pack" : formData.unit === "PCS" ? "Pc" : "KG"} (KSh) <span className="text-rose-500">*</span>
+                    Selling Price / {formData.unit} (KSh) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -872,15 +942,15 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Buying Cost / {formData.unit === "PACK" ? "Pack" : formData.unit === "PCS" ? "Pc" : "KG"} (KSh) <span className="text-rose-500">*</span>
+                    Buying Cost / {formData.unit} (KSh) {!isRestaurant && <span className="text-rose-500">*</span>}
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    required
+                    required={!isRestaurant}
                     value={formData.buying_cost_per_kg}
                     onChange={(e) => setFormData({ ...formData, buying_cost_per_kg: e.target.value })}
-                    placeholder="720"
+                    placeholder={isRestaurant ? "Optional (e.g. 0)" : "720"}
                     className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                   />
                 </div>
@@ -890,8 +960,8 @@ export default function ProductsPage() {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-semibold text-zinc-700">
-                      {editingProduct ? "Current Stock (KG)" : "Initial Stock (KG)"}
-                      {!editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
+                      {editingProduct ? `Current Stock (${formData.unit})` : `Initial Stock (${formData.unit})`}
+                      {!isRestaurant && !editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
                     </label>
                     {editingProduct && !isAdmin && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
@@ -904,12 +974,12 @@ export default function ProductsPage() {
                     type="number"
                     step="0.001"
                     min="0"
-                    required={!editingProduct}
+                    required={!isRestaurant && !editingProduct}
                     readOnly={Boolean(editingProduct && !isAdmin)}
                     disabled={Boolean(editingProduct && !isAdmin)}
                     value={formData.current_stock}
                     onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
-                    placeholder="e.g. 42.5"
+                    placeholder={isRestaurant ? "Optional (infinite)" : "e.g. 42.5"}
                     className={`w-full rounded-xl px-3 py-2 font-bold shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                       editingProduct && !isAdmin
                         ? "bg-zinc-100 text-zinc-500 border border-zinc-200 cursor-not-allowed select-none"
@@ -925,16 +995,16 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
-                    Minimum Alert Stock (KG) <span className="text-rose-500">*</span>
+                    Minimum Alert Stock ({formData.unit}) {!isRestaurant && <span className="text-rose-500">*</span>}
                   </label>
                   <input
                     type="number"
                     step="0.001"
                     min="0"
-                    required
+                    required={!isRestaurant}
                     value={formData.min_stock}
                     onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })}
-                    placeholder="e.g. 5"
+                    placeholder={isRestaurant ? "Optional (e.g. 0)" : "e.g. 5"}
                     className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
@@ -954,7 +1024,7 @@ export default function ProductsPage() {
                   disabled={isSaving}
                   className="w-1/2 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors shadow-xs"
                 >
-                  {isSaving ? "Saving..." : editingProduct ? "Update Cut" : "Create Cut"}
+                  {isSaving ? "Saving..." : editingProduct ? (isRestaurant ? "Update Item" : "Update Cut") : (isRestaurant ? "Create Item" : "Create Cut")}
                 </button>
               </div>
             </form>
@@ -973,7 +1043,11 @@ export default function ProductsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold">Bulk Add Products</h3>
-                  <p className="text-xs text-blue-100">Import multiple cuts at once — fast, reliable, isolated to your company</p>
+                  <p className="text-xs text-blue-100">
+                    {isRestaurant
+                      ? "Import multiple menu items and beverages at once — fast, reliable, isolated to your venue"
+                      : "Import multiple cuts at once — fast, reliable, isolated to your company"}
+                  </p>
                 </div>
               </div>
               <button type="button" onClick={() => setIsBulkModalOpen(false)}
@@ -1039,24 +1113,26 @@ export default function ProductsPage() {
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">SKU</th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[130px]">Category <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[95px]">Unit <span className="text-red-500">*</span></th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Price/KG <span className="text-red-500">*</span></th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Buy Cost/KG <span className="text-red-500">*</span></th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">Stock (KG) <span className="text-red-500">*</span></th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">Min Stock <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Price/Unit <span className="text-red-500">*</span></th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Buy Cost/Unit {!isRestaurant && <span className="text-red-500">*</span>}</th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">Stock {!isRestaurant && <span className="text-red-500">*</span>}</th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">Min Stock {!isRestaurant && <span className="text-red-500">*</span>}</th>
                             <th className="p-2 w-8"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100">
                           {bulkRows.map((row, i) => {
                             const isFilled = row.name.trim() || row.price_per_kg || row.category_id || row.buying_cost_per_kg || row.current_stock || row.min_stock;
-                            const isRowValid = row.name.trim() && row.category_id && row.price_per_kg && row.buying_cost_per_kg !== "" && row.current_stock !== "" && row.min_stock !== "";
+                            const isRowValid = isRestaurant
+                              ? Boolean(row.name.trim() && row.category_id && row.price_per_kg)
+                              : Boolean(row.name.trim() && row.category_id && row.price_per_kg && row.buying_cost_per_kg !== "" && row.current_stock !== "" && row.min_stock !== "");
                             // Per-field error classes (only show red after user clicked Import)
                             const errName    = bulkValidated && isFilled && !row.name.trim();
                             const errCat     = bulkValidated && isFilled && !row.category_id;
                             const errPrice   = bulkValidated && isFilled && !row.price_per_kg;
-                            const errBuying  = bulkValidated && isFilled && row.buying_cost_per_kg === "";
-                            const errStock   = bulkValidated && isFilled && row.current_stock === "";
-                            const errMinStk  = bulkValidated && isFilled && row.min_stock === "";
+                            const errBuying  = !isRestaurant && bulkValidated && isFilled && row.buying_cost_per_kg === "";
+                            const errStock   = !isRestaurant && bulkValidated && isFilled && row.current_stock === "";
+                            const errMinStk  = !isRestaurant && bulkValidated && isFilled && row.min_stock === "";
                             const fieldBase  = "w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs focus:outline-none focus:ring-1 transition-colors";
                             const ok         = `${fieldBase} border-zinc-200 focus:ring-blue-500 focus:border-blue-500`;
                             const err        = `${fieldBase} border-red-400 bg-red-50 focus:ring-red-500 focus:border-red-500`;
@@ -1085,9 +1161,19 @@ export default function ProductsPage() {
                                 <td className="p-1.5">
                                   <select value={row.unit || "KG"} onChange={e => updateBulkRow(i, "unit", e.target.value)}
                                     className={ok}>
-                                    <option value="KG">KG</option>
+                                    <option value="PORTION">PORTION</option>
+                                    <option value="PLATE">PLATE</option>
+                                    <option value="BOTTLE">BOTTLE</option>
+                                    <option value="GLASS">GLASS</option>
+                                    <option value="CUP">CUP</option>
+                                    <option value="SHOT">SHOT</option>
+                                    <option value="BOWL">BOWL</option>
                                     <option value="PACK">PACK</option>
                                     <option value="PCS">PCS</option>
+                                    <option value="KG">KG</option>
+                                    <option value="G">G</option>
+                                    <option value="L">L</option>
+                                    <option value="ML">ML</option>
                                   </select>
                                 </td>
                                 <td className="p-1.5">

@@ -24,11 +24,35 @@ export function WeightInput({
   onConfirm,
   onCancel,
 }: WeightInputProps) {
-  const isPack = unit?.toUpperCase() === "PACK";
-  const isPcs = unit?.toUpperCase() === "PCS";
-  const isCountable = isPack || isPcs;
-  const unitLabel = isPack ? "PACK" : isPcs ? "PC" : "KG";
+  const COUNTABLE_UNITS = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS"];
+  const unitUp = (unit || "KG").toUpperCase();
+  const isCountable = COUNTABLE_UNITS.includes(unitUp);
+  const unitLabel = (() => {
+    const labels: Record<string, string> = {
+      KG: "KG", PACK: "Pack", PCS: "Pc",
+      PLATE: "Plate", PORTION: "Portion", BOTTLE: "Bottle",
+      CUP: "Cup", BOWL: "Bowl", GLASS: "Glass",
+    };
+    return labels[unitUp] ?? unitUp;
+  })();
+  const unitLabelPlural = (() => {
+    const labels: Record<string, string> = {
+      KG: "KG", PACK: "Packs", PCS: "Pcs",
+      PLATE: "Plates", PORTION: "Portions", BOTTLE: "Bottles",
+      CUP: "Cups", BOWL: "Bowls", GLASS: "Glasses",
+    };
+    return labels[unitUp] ?? `${unitUp}s`;
+  })();
+  // Pick a contextual emoji for the header
+  const headerEmoji = (() => {
+    if (["PLATE", "PORTION"].includes(unitUp)) return "🍽️";
+    if (["CUP", "GLASS"].includes(unitUp)) return "☕";
+    if (unitUp === "BOTTLE") return "🍺";
+    if (unitUp === "BOWL") return "🍜";
+    return "🥩";
+  })();
 
+  const isInfinite = availableStock >= 9999;
   const [weightStr, setWeightStr] = useState<string>(
     isCountable ? Math.max(1, Math.round(initialWeight)).toString() : initialWeight.toString()
   );
@@ -38,14 +62,14 @@ export function WeightInput({
   const subtotal = calculateSubtotal(numericWeight, pricePerKg);
 
   useEffect(() => {
-    if (numericWeight > availableStock) {
+    if (!isInfinite && numericWeight > availableStock) {
       setError(`Exceeds available stock (${formatWeight(availableStock, unit)})`);
     } else if (numericWeight <= 0) {
       setError(`Enter a valid quantity greater than 0`);
     } else {
       setError(null);
     }
-  }, [numericWeight, availableStock, unit]);
+  }, [numericWeight, availableStock, unit, isInfinite]);
 
   const handleKeypadPress = (val: string) => {
     if (val === "C") { setWeightStr("0"); return; }
@@ -73,7 +97,7 @@ export function WeightInput({
 
   const handleConfirm = () => {
     if (numericWeight <= 0) { setError("Quantity must be greater than 0"); return; }
-    if (numericWeight > availableStock) {
+    if (!isInfinite && numericWeight > availableStock) {
       setError(`Cannot exceed available stock of ${formatWeight(availableStock, unit)}`);
       return;
     }
@@ -90,7 +114,7 @@ export function WeightInput({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [weightStr, numericWeight, availableStock, isCountable]);
+  }, [weightStr, numericWeight, availableStock, isCountable, isInfinite]);
 
   return (
     <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-xl max-w-sm w-full text-zinc-900 select-none">
@@ -98,7 +122,7 @@ export function WeightInput({
       <div className="flex items-start justify-between border-b border-zinc-100 pb-3 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-lg">🥩</span>
+            <span className="text-lg">{headerEmoji}</span>
             <h3 className="text-sm font-bold text-zinc-900">{productName}</h3>
           </div>
           <p className="text-xs text-zinc-500 mt-0.5">
@@ -107,7 +131,9 @@ export function WeightInput({
         </div>
         <div className="text-right">
           <span className="text-[11px] uppercase text-zinc-400 font-medium">Available</span>
-          <p className="text-xs font-bold text-zinc-700">{formatWeight(availableStock, unit)}</p>
+          <p className="text-xs font-bold text-zinc-700">
+            {isInfinite ? "∞ Unlimited" : formatWeight(availableStock, unit)}
+          </p>
         </div>
       </div>
 
@@ -134,7 +160,9 @@ export function WeightInput({
                 : "0.000"}
             </span>
             <span className="text-sm font-bold text-zinc-400 shrink-0">
-              {isPack ? (numericWeight === 1 ? "PACK" : "PACKS") : isPcs ? (numericWeight === 1 ? "PC" : "PCS") : "KG"}
+              {isCountable
+                ? (numericWeight === 1 ? unitLabel : unitLabelPlural)
+                : "KG"}
             </span>
           </div>
           <span className="text-lg font-bold text-green-700 tabular-nums shrink-0">
@@ -151,14 +179,14 @@ export function WeightInput({
       {/* Quick presets */}
       <div className="grid grid-cols-4 gap-1.5 mb-3">
         {isCountable
-          ? [1, 2, 5, 10].map((qty) => (
+          ? [1, 2, 3, 5].map((qty) => (
               <button
                 key={qty}
                 type="button"
                 onClick={() => handleSetPreset(qty)}
                 className="py-2 bg-white hover:bg-green-50 border border-zinc-200 rounded-lg text-xs font-semibold text-zinc-700 transition-colors"
               >
-                {qty} {isPack ? (qty === 1 ? "Pack" : "Packs") : qty === 1 ? "Pc" : "Pcs"}
+                {qty} {qty === 1 ? unitLabel : unitLabelPlural}
               </button>
             ))
           : [0.25, 0.5, 1.0, 2.0].map((kg) => (
@@ -213,7 +241,7 @@ export function WeightInput({
           }`}
         >
           <Check className="w-4 h-4" />
-          Add to Sale ({formatCurrency(subtotal)})
+          {isCountable ? `Add to Order (${formatCurrency(subtotal)})` : `Add to Sale (${formatCurrency(subtotal)})`}
         </button>
       </div>
     </div>

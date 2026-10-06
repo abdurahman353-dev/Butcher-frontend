@@ -1,5 +1,5 @@
 import apiClient from "./api";
-import { User, PaginatedResponse, PaginationParams } from "@/types";
+import { User, Waiter, PaginatedResponse, PaginationParams } from "@/types";
 
 export const usersService = {
   async getUsers(params?: PaginationParams): Promise<PaginatedResponse<User>> {
@@ -9,10 +9,11 @@ export const usersService = {
 
   async createUser(data: {
     name: string;
-    email: string;
+    email?: string;
     phone?: string;
-    role: "admin" | "cashier";
-    password: string;
+    role: "admin" | "cashier" | "waiter";
+    password?: string;
+    pin?: string;
   }): Promise<User> {
     const res = await apiClient.post<User>("/users", data);
     if (typeof window !== "undefined") {
@@ -27,8 +28,9 @@ export const usersService = {
       name: string;
       email: string;
       phone: string;
-      role: "admin" | "cashier";
+      role: "admin" | "cashier" | "waiter";
       password: string;
+      pin: string;
     }>
   ): Promise<User> {
     const res = await apiClient.put<User>(`/users/${id}`, data);
@@ -64,5 +66,37 @@ export const usersService = {
       password,
       password_confirmation: passwordConfirmation,
     });
+  },
+
+  // ── Waiters & Servers (PINs) ──
+  async getWaiters(params?: PaginationParams): Promise<PaginatedResponse<Waiter>> {
+    const res = await apiClient.get<PaginatedResponse<Waiter>>("/waiters", { params });
+    return res.data;
+  },
+
+  async createWaiter(data: { name: string; pin: string; phone?: string }): Promise<Waiter> {
+    const res = await apiClient.post<{ message: string; data: Waiter }>("/waiters", data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data.data;
+  },
+
+  async updateWaiter(
+    id: number,
+    data: Partial<{ name: string; pin: string; phone: string; is_active: boolean }>
+  ): Promise<Waiter> {
+    const res = await apiClient.put<{ message: string; data: Waiter }>(`/waiters/${id}`, data);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data.data;
+  },
+
+  async deleteWaiter(id: number): Promise<void> {
+    await apiClient.delete(`/waiters/${id}`);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
   },
 };

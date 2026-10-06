@@ -11,6 +11,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   isCashier: boolean;
+  isWaiter: boolean;
   login: (identifier: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<User | null>;
@@ -56,10 +57,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Route protection: redirect unauthenticated users to /login
+  // Waiters are POS-only: redirect them away from all non-POS routes
   useEffect(() => {
     if (isLoading) return;
     if (!user && !PUBLIC_PATHS.includes(pathname)) {
       router.replace("/login");
+      return;
+    }
+    if (user?.role === "waiter" && pathname !== "/pos" && !PUBLIC_PATHS.includes(pathname)) {
+      router.replace("/pos");
     }
   }, [user, isLoading, pathname, router]);
 
@@ -101,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     isAdmin: user?.role === "admin" || user?.role === "superadmin",
     isCashier: user?.role === "cashier",
+    isWaiter: user?.role === "waiter",
     login,
     logout,
     refresh,

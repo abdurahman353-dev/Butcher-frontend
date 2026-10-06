@@ -40,7 +40,7 @@ interface SidebarProps {
 
 export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isWaiter, logout } = useAuth();
   const { isShiftOpen } = useShift();
   const { confirm } = useSystemDialog();
   const outOfStockCount = useOutOfStock();
@@ -59,11 +59,13 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
     }
   };
 
+  const isRestaurant = user?.company?.business_type === "restaurant";
+
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "POS Terminal", href: "/pos", icon: ShoppingCart },
+    { name: isRestaurant ? "F&B Terminal" : "POS Terminal", href: "/pos", icon: ShoppingCart },
     { name: "Sales", href: "/sales", icon: Receipt },
-    { name: "Products", href: "/products", icon: Package },
+    { name: isRestaurant ? "Menu & Items" : "Products", href: "/products", icon: Package },
     { name: "Inventory", href: "/inventory", icon: Boxes },
     { name: "Customers", href: "/customers", icon: Users },
     { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
@@ -93,7 +95,9 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
               <h1 suppressHydrationWarning className="text-sm font-black text-zinc-900 leading-tight tracking-tight truncate">
                 {settings.shop_name.toUpperCase()}
               </h1>
-              <p className="text-[10px] text-zinc-400 font-medium truncate">Butcher POS System</p>
+              <p className="text-[10px] text-zinc-500 font-medium truncate">
+                {isRestaurant ? "Hotel & Restaurant POS" : "Butcher POS System"}
+              </p>
             </div>
           )}
         </div>
@@ -103,6 +107,8 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-1">
         {navigation.map((item) => {
           if (item.adminOnly && !isAdmin) return null;
+          // Waiters: show only the POS/F&B Terminal link
+          if (isWaiter && item.href !== "/pos") return null;
           const isActive = pathname === item.href;
           const Icon = item.icon;
           const isInventory = item.href === "/inventory";
@@ -157,8 +163,8 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
         })}
       </div>
 
-      {/* Support hint */}
-      {!isCollapsed && (
+      {/* Support hint: only show to non-waiters */}
+      {!isCollapsed && !isWaiter && (
         <div className="px-3 pb-2">
           <div className="p-2.5 rounded-xl bg-zinc-50 border border-zinc-200/80 flex items-center gap-2 text-xs text-zinc-500">
             <HelpCircle className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
@@ -179,7 +185,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-zinc-800 truncate">{user?.name || "User"}</p>
                   <p className="text-[10px] text-zinc-400 capitalize truncate">
-                    {user?.role === "admin" ? "Super Admin" : "Cashier"}
+                    {user?.role === "admin" ? "Super Admin" : user?.role === "waiter" ? "Waiter / Server" : "Cashier"}
                   </p>
                 </div>
               </div>
@@ -196,9 +202,11 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
             {/* Role badge (read-only) */}
             <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1">
               <span>Role:</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${isAdmin ? "bg-green-600 text-white" : "bg-zinc-100 text-zinc-500"}`}>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                isAdmin ? "bg-green-600 text-white" : isWaiter ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"
+              }`}>
                 <UserCheck className="w-2.5 h-2.5" />
-                {isAdmin ? "Admin" : "Cashier"}
+                {isAdmin ? "Admin" : isWaiter ? "Waiter" : "Cashier"}
               </span>
             </div>
           </>

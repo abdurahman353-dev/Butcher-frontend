@@ -10,6 +10,7 @@ interface CategoryBarProps {
   onSelectCategory: (id: string) => void;
   productCounts?: Record<string, number>;
   totalCount?: number;
+  isRestaurant?: boolean;
 }
 
 function getCategoryCountBadgeStyle(name: string, count: number, isSelected: boolean): string {
@@ -55,6 +56,7 @@ export function CategoryBar({
   onSelectCategory,
   productCounts = {},
   totalCount,
+  isRestaurant = false,
 }: CategoryBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -134,7 +136,7 @@ export function CategoryBar({
               : "bg-white border-zinc-300 text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400"
           }`}
         >
-          <span className="tracking-tight">All Cuts</span>
+          <span className="tracking-tight">{isRestaurant ? "All Items" : "All Cuts"}</span>
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-mono leading-none transition-transform group-hover:scale-105 ${
               selectedCategoryId === "all"

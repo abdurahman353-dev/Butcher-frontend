@@ -27,11 +27,16 @@ interface MobileNavProps {
 
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isWaiter, logout } = useAuth();
   const outOfStockCount = useOutOfStock();
   const { settings } = useShopSettings();
 
   if (!isOpen) return null;
+
+  const roleLabel =
+    user?.role === "admin" ? "Super Admin" :
+    user?.role === "waiter" ? "Waiter / Server" :
+    "Cashier";
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -54,6 +59,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {navigation.map((item) => {
             if (item.adminOnly && !isAdmin) return null;
+            if (isWaiter && item.href !== "/pos") return null;
             const Icon = item.icon;
             const isActive = pathname === item.href;
             const isInventory = item.href === "/inventory";
@@ -64,16 +70,16 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${isActive
-                  ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
-                  : hasAlert
-                    ? "text-rose-600 hover:bg-rose-50 hover:text-rose-800"
-                    : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
-                  }`}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                  isActive
+                    ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
+                    : hasAlert
+                      ? "text-rose-600 hover:bg-rose-50 hover:text-rose-800"
+                      : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+                }`}
               >
                 <div className="relative shrink-0">
-                  <Icon className={`w-4 h-4 ${isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"
-                    }`} />
+                  <Icon className={`w-4 h-4 ${isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"}`} />
                   {hasAlert && (
                     <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center">
                       <span className="absolute inline-flex w-3 h-3 rounded-full bg-rose-500 opacity-75 animate-ping" />
@@ -94,12 +100,14 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
         <div className="p-4 border-t border-zinc-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-600">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+              user?.role === "admin" ? "bg-emerald-600" : user?.role === "waiter" ? "bg-amber-500" : "bg-blue-600"
+            }`}>
               {user?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-zinc-800 truncate">{user?.name || "User"}</p>
-              <p className="text-[11px] text-zinc-400">{user?.role}</p>
+              <p className="text-[11px] text-zinc-400">{roleLabel}</p>
             </div>
             <button onClick={logout} className="p-1.5 text-zinc-400 hover:text-red-600">
               <LogOut className="w-4 h-4" />

@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { useAuth } from "@/hooks/useAuth";
 import {
   AreaChart,
   Area,
@@ -32,6 +33,8 @@ import {
 } from "recharts";
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [chartPeriod, setChartPeriod] = useState<"today" | "week" | "month">("today");
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +74,7 @@ export default function DashboardPage() {
         : summary?.sales_chart.month || [];
 
   if (isLoading && !summary) {
-    return <PageSkeleton variant="dashboard" title="Butcher Shop Overview" />;
+    return <PageSkeleton variant="dashboard" title={isRestaurant ? "Restaurant & Hotel Overview" : "Butcher Shop Overview"} />;
   }
 
   return (
@@ -80,9 +83,9 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs">
         <div>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">🥩</span>
+            <span className="text-2xl">{isRestaurant ? "🍽️" : "🥩"}</span>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-              Butcher Shop Overview
+              {isRestaurant ? "Restaurant & Hotel Overview" : "Butcher Shop Overview"}
             </h1>
             <button
               type="button"
@@ -95,7 +98,9 @@ export default function DashboardPage() {
             </button>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            Real-time monitoring of daily sales, profit margins, inventory levels, and counter transactions.
+            {isRestaurant
+              ? "Real-time monitoring of dining and takeaway sales, food & drink profit margins, and orders."
+              : "Real-time monitoring of daily sales, profit margins, inventory levels, and counter transactions."}
           </p>
         </div>
 
@@ -104,7 +109,7 @@ export default function DashboardPage() {
           className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0"
         >
           <ShoppingCart className="w-4 h-4" />
-          <span>Launch POS Terminal</span>
+          <span>{isRestaurant ? "Launch F&B Terminal" : "Launch POS Terminal"}</span>
         </Link>
       </div>
 
@@ -199,7 +204,7 @@ export default function DashboardPage() {
               {formatCurrency(summary?.today_profit)}
             </div>
             <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-              Revenue Less Meat Cost
+              {isRestaurant ? "Revenue Less Item Cost" : "Revenue Less Meat Cost"}
             </p>
           </div>
         </div>
@@ -217,7 +222,7 @@ export default function DashboardPage() {
               {formatCurrency(summary?.current_stock_value)}
             </div>
             <p className="text-[11px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> {summary?.low_stock_count || 0} cuts low
+              <AlertTriangle className="w-3 h-3" /> {summary?.low_stock_count || 0} {isRestaurant ? "items low" : "cuts low"}
             </p>
           </div>
         </div>
@@ -302,7 +307,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Low Stock Cuts</h2>
+                <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{isRestaurant ? "Low Stock Items" : "Low Stock Cuts"}</h2>
               </div>
               <Link
                 href="/inventory"
@@ -313,14 +318,14 @@ export default function DashboardPage() {
               </Link>
             </div>
             <p className="text-xs text-zinc-500 mb-4">
-              Meat cuts requiring immediate supplier order or stock-in.
+              {isRestaurant ? "Menu & bar items requiring immediate order or stock-in." : "Meat cuts requiring immediate supplier order or stock-in."}
             </p>
 
             <div className="space-y-2.5">
               {!summary?.low_stock_products || summary.low_stock_products.length === 0 ? (
                 <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-center text-xs text-zinc-500">
                   <CheckCircle2 className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                  All meat inventory levels are healthy!
+                  {isRestaurant ? "All menu inventory levels are healthy!" : "All meat inventory levels are healthy!"}
                 </div>
               ) : (
                 summary.low_stock_products.slice(0, 5).map((p) => (
@@ -330,12 +335,12 @@ export default function DashboardPage() {
                   >
                     <div>
                       <h4 className="text-xs font-semibold text-zinc-900">{p.name}</h4>
-                      <p className="text-[10px] text-zinc-500">Min: {formatWeight(p.min_stock)}</p>
+                      <p className="text-[10px] text-zinc-500">Min: {p.unit === "KG" ? formatWeight(p.min_stock) : `${p.min_stock} ${p.unit}`}</p>
                     </div>
 
                     <div className="text-right">
                       <span className="text-xs font-bold text-amber-700 tabular-nums">
-                        {formatWeight(p.current_stock)}
+                        {p.unit === "KG" ? formatWeight(p.current_stock) : `${p.current_stock} ${p.unit}`}
                       </span>
                       <p className="text-[9px] font-bold text-rose-600 uppercase">
                         {p.current_stock <= 0 ? "Out" : "Low"}

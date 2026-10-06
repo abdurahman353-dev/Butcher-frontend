@@ -4,11 +4,14 @@ import React, { useState, useEffect } from "react";
 import { ShopSettings } from "@/types";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useAuth } from "@/hooks/useAuth";
 import { Settings, Save, CheckCircle2 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function SettingsPage() {
   const { alert } = useSystemDialog();
+  const { user } = useAuth();
+  const isRestaurant = user?.company?.business_type === "restaurant";
 
   const { settings: globalSettings, saveSettings, isLoading } = useShopSettings();
 
@@ -86,11 +89,13 @@ export default function SettingsPage() {
         {/* Store Profile */}
         <div className="space-y-3">
           <h2 className="text-sm font-bold text-zinc-900 border-b border-zinc-100 pb-2">
-            🏪 Store Identity
+            {isRestaurant ? "🍽️ Restaurant & Venue Identity" : "🏪 Store Identity"}
           </h2>
 
           <div>
-            <label className="block font-semibold uppercase text-zinc-700 mb-1">Butcher Shop Name</label>
+            <label className="block font-semibold uppercase text-zinc-700 mb-1">
+              {isRestaurant ? "Restaurant / Business Name" : "Butcher Shop Name"}
+            </label>
             <input
               type="text"
               required
@@ -157,7 +162,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Receipt Top Tagline</label>
             <textarea
               rows={2}
-              placeholder="e.g. Fresh Gourmet Meats • Halal Certified"
+              placeholder={isRestaurant ? "e.g. Fine Dining & Bar • Table Service & Takeaway" : "e.g. Fresh Gourmet Meats • Halal Certified"}
               value={settings.receipt_header ?? ""}
               onChange={(e) => updateField("receipt_header", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs resize-y"
@@ -169,7 +174,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Receipt Bottom Footer Note</label>
             <textarea
               rows={2}
-              placeholder="e.g. Thank you for shopping with us! Fresh cuts daily."
+              placeholder={isRestaurant ? "e.g. Thank you for dining with us! Come back soon." : "e.g. Thank you for shopping with us! Fresh cuts daily."}
               value={settings.receipt_footer ?? ""}
               onChange={(e) => updateField("receipt_footer", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs resize-y"

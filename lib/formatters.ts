@@ -21,17 +21,21 @@ export function formatWeight(weight: number | string | null | undefined, unit: s
   const num = typeof weight === "string" ? parseFloat(weight) : Number(weight ?? 0);
   const u = (unit || "KG").toUpperCase();
   if (isNaN(num)) {
-    return u === "PACK" ? "0 Packs" : u === "PCS" ? "0 Pcs" : `0.000 ${u}`;
+    return `0 ${formatUnitLabel(u)}`;
   }
 
-  if (u === "PACK") {
+  const isWholeUnit = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS", "UNIT"].includes(u);
+  if (isWholeUnit) {
     const formatted = Number.isInteger(num) ? num.toString() : num.toFixed(2);
-    return `${formatted} ${num === 1 ? "Pack" : "Packs"}`;
-  }
-
-  if (u === "PCS") {
-    const formatted = Number.isInteger(num) ? num.toString() : num.toFixed(2);
-    return `${formatted} ${num === 1 ? "Pc" : "Pcs"}`;
+    if (u === "PACK") return `${formatted} ${num === 1 ? "Pack" : "Packs"}`;
+    if (u === "PCS") return `${formatted} ${num === 1 ? "Pc" : "Pcs"}`;
+    if (u === "PLATE") return `${formatted} ${num === 1 ? "Plate" : "Plates"}`;
+    if (u === "PORTION") return `${formatted} ${num === 1 ? "Portion" : "Portions"}`;
+    if (u === "BOTTLE") return `${formatted} ${num === 1 ? "Bottle" : "Bottles"}`;
+    if (u === "CUP") return `${formatted} ${num === 1 ? "Cup" : "Cups"}`;
+    if (u === "BOWL") return `${formatted} ${num === 1 ? "Bowl" : "Bowls"}`;
+    if (u === "GLASS") return `${formatted} ${num === 1 ? "Glass" : "Glasses"}`;
+    return `${formatted} ${u}`;
   }
 
   const formatted = new Intl.NumberFormat("en-US", {
@@ -46,6 +50,12 @@ export function formatUnitLabel(unit: string = "KG"): string {
   const u = (unit || "KG").toUpperCase();
   if (u === "PACK") return "Pack";
   if (u === "PCS") return "Pc";
+  if (u === "PLATE") return "Plate";
+  if (u === "PORTION") return "Portion";
+  if (u === "BOTTLE") return "Bottle";
+  if (u === "CUP") return "Cup";
+  if (u === "BOWL") return "Bowl";
+  if (u === "GLASS") return "Glass";
   return "KG";
 }
 

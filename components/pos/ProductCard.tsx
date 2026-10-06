@@ -4,7 +4,7 @@ import React from "react";
 import { Product } from "@/types";
 import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { MeatImage } from "@/components/shared/MeatImage";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Plus, Infinity as InfinityIcon } from "lucide-react";
 
 interface ProductCardProps {
   product: Product;
@@ -12,8 +12,9 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onSelect }: ProductCardProps) {
-  const isOutOfStock = product.current_stock <= 0;
-  const isLowStock = !isOutOfStock && product.current_stock <= product.min_stock;
+  const isInfinite = product.current_stock >= 9999;
+  const isOutOfStock = !isInfinite && product.current_stock <= 0;
+  const isLowStock = !isInfinite && !isOutOfStock && product.current_stock <= product.min_stock;
 
   return (
     <div
@@ -32,7 +33,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
         {/* Stock badge — top-right so it doesn't overlap the code text */}
         <div className="absolute top-2 right-2">
-          {isOutOfStock ? (
+          {isInfinite ? (
+            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-700/90 text-white shadow-sm backdrop-blur-sm flex items-center gap-1" title="Unlimited Stock">
+              <InfinityIcon className="w-3 h-3" />
+            </span>
+          ) : isOutOfStock ? (
             <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-red-600 text-white shadow-sm tracking-wide">
               OUT
             </span>
@@ -59,7 +64,15 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         <div className="mt-2.5 flex items-center justify-between">
           <div>
             <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
-              Per {product.unit?.toUpperCase() === "PACK" ? "Pack" : product.unit?.toUpperCase() === "PCS" ? "Pc" : "KG"}
+              {(() => {
+                const u = (product.unit || "KG").toUpperCase();
+                const labels: Record<string, string> = {
+                  KG: "Per KG", PACK: "Per Pack", PCS: "Per Pc",
+                  PLATE: "Per Plate", PORTION: "Per Portion", BOTTLE: "Per Bottle",
+                  CUP: "Per Cup", BOWL: "Per Bowl", GLASS: "Per Glass",
+                };
+                return labels[u] ?? `Per ${u}`;
+              })()}
             </span>
             <p className="text-base font-black text-green-700 tabular-nums leading-tight">
               {formatCurrency(product.price_per_kg)}

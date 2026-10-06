@@ -30,7 +30,9 @@ export function useCart() {
 
   const addItem = useCallback((product: Product, weightKg: number = 1.0, discount: number = 0) => {
     const validWeight = roundTo(Math.max(0.005, weightKg), 3);
-    const maxStock = typeof product.current_stock === "number" ? Math.max(0, product.current_stock) : Infinity;
+    const maxStock = typeof product.current_stock === "number" && product.current_stock < 9999
+      ? Math.max(0, product.current_stock)
+      : Infinity;
 
     setItems((prev) => {
       const existingIdx = prev.findIndex((it) => it.product_id === product.id);
@@ -72,7 +74,9 @@ export function useCart() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === cartItemId) {
-          const maxStock = typeof item.available_stock === "number" ? item.available_stock : Infinity;
+          const maxStock = typeof item.available_stock === "number" && item.available_stock < 9999
+            ? item.available_stock
+            : Infinity;
           const validWeight = roundTo(Math.min(Math.max(0.005, weightKg), maxStock), 3);
           const sub = calculateSubtotal(validWeight, item.price_per_kg);
           return {
@@ -91,7 +95,9 @@ export function useCart() {
       prev
         .map((item) => {
           if (item.id === cartItemId) {
-            const maxStock = typeof item.available_stock === "number" ? item.available_stock : Infinity;
+            const maxStock = typeof item.available_stock === "number" && item.available_stock < 9999
+              ? item.available_stock
+              : Infinity;
             let newWeight = roundTo(item.weight + deltaKg, 3);
             if (deltaKg > 0 && newWeight > maxStock) {
               newWeight = maxStock;
