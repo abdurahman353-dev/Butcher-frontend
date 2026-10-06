@@ -266,12 +266,16 @@ export function TableMapView({
                       {table.name}
                     </p>
 
-                    {/* Capacity & Zone */}
+                    {/* Zone & optional Capacity */}
                     <div className="flex items-center gap-1 text-[11px] text-zinc-400 mt-0.5">
-                      <Users className="w-3 h-3 shrink-0" />
-                      <span>Cap: {table.capacity}</span>
-                      <span className="text-zinc-300">•</span>
-                      <span className="truncate">{table.zone}</span>
+                      {table.capacity ? (
+                        <>
+                          <Users className="w-3 h-3 shrink-0" />
+                          <span>Cap: {table.capacity}</span>
+                          <span className="text-zinc-300">•</span>
+                        </>
+                      ) : null}
+                      <span className="truncate">{table.zone || "Main Floor"}</span>
                     </div>
                   </div>
 

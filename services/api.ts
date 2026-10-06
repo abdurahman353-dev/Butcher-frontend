@@ -95,7 +95,7 @@ async function handleRejection(error: AxiosError): Promise<never> {
     } else if (statusCode === 429) {
       message = "Too many requests. Please slow down.";
     } else if (statusCode && statusCode >= 500) {
-      message = "Server error. Please contact the administrator.";
+      message = data?.message || "Server error. Please contact the administrator.";
     } else if (data?.message) {
       message = data.message;
     }

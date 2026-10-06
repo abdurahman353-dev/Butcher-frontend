@@ -568,7 +568,7 @@ export default function PosPage() {
   };
 
   // Restaurant: Add New Table
-  const handleAddTable = async (payload: { name: string; table_number: string; capacity: number; zone: string }) => {
+  const handleAddTable = async (payload: { name: string; table_number: string; capacity?: number; zone: string }) => {
     try {
       await restaurantService.createTable(payload);
       fetchRestaurantTables();

@@ -6,13 +6,12 @@ import { X, Plus, UtensilsCrossed } from "lucide-react";
 interface AddTableModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTable: (payload: { name: string; table_number: string; capacity: number; zone: string }) => Promise<void>;
+  onAddTable: (payload: { name: string; table_number: string; capacity?: number; zone: string }) => Promise<void>;
 }
 
 export function AddTableModal({ isOpen, onClose, onAddTable }: AddTableModalProps) {
   const [name, setName] = useState("");
   const [tableNumber, setTableNumber] = useState("");
-  const [capacity, setCapacity] = useState(4);
   const [zone, setZone] = useState("Main Floor");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,12 +26,11 @@ export function AddTableModal({ isOpen, onClose, onAddTable }: AddTableModalProp
       await onAddTable({
         name: name.trim(),
         table_number: tableNumber.trim(),
-        capacity: Number(capacity) || 4,
+        capacity: 4,
         zone: zone.trim() || "Main Floor",
       });
       setName("");
       setTableNumber("");
-      setCapacity(4);
       setZone("Main Floor");
       onClose();
     } finally {
@@ -98,37 +96,21 @@ export function AddTableModal({ isOpen, onClose, onAddTable }: AddTableModalProp
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Seating Capacity
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={capacity}
-                onChange={(e) => setCapacity(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-zinc-700 mb-1">
-                Zone / Section
-              </label>
-              <select
-                value={zone}
-                onChange={(e) => setZone(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-              >
-                <option value="Main Floor">Main Floor</option>
-                <option value="Terrace">Terrace</option>
-                <option value="Garden">Garden</option>
-                <option value="VIP Lounge">VIP Lounge</option>
-                <option value="Bar Section">Bar Section</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-[11px] font-bold text-zinc-700 mb-1">
+              Zone / Section
+            </label>
+            <select
+              value={zone}
+              onChange={(e) => setZone(e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+            >
+              <option value="Main Floor">Main Floor</option>
+              <option value="Terrace">Terrace</option>
+              <option value="Garden">Garden</option>
+              <option value="VIP Lounge">VIP Lounge</option>
+              <option value="Bar Section">Bar Section</option>
+            </select>
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100">

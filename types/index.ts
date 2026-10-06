@@ -227,7 +227,7 @@ export interface RestaurantTable {
   company_id: number;
   name: string;
   table_number: string;
-  capacity: number;
+  capacity?: number;
   zone: string;
   is_active: boolean;
   sort_order: number;
