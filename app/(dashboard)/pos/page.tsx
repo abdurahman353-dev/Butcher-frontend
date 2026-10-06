@@ -88,13 +88,15 @@ export default function PosPage() {
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [isAddTableModalOpen, setIsAddTableModalOpen] = useState(false);
   const [printingKitchenBill, setPrintingKitchenBill] = useState<RestaurantBill | null>(null);
+  const [reprintProductId, setReprintProductId] = useState<number | undefined>(undefined);
+  const [isSlipReprint, setIsSlipReprint] = useState(false);
   const [printingCustomerBill, setPrintingCustomerBill] = useState<RestaurantBill | null>(null);
 
   // Modals state
   const [selectedProductForWeight, setSelectedProductForWeight] = useState<Product | null>(null);
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "credit">("cash");
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState<"cash" | "mpesa" | "credit" | "free">("cash");
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -427,7 +429,9 @@ export default function PosPage() {
 
       setActiveBill(res.data);
       setHasUnsavedOrder(false);
-      // Show & auto-print the Kitchen Order Ticket
+      // Show & auto-print the Kitchen Order Ticket (initial print)
+      setIsSlipReprint(false);
+      setReprintProductId(undefined);
       setPrintingKitchenBill(res.data);
       fetchRestaurantTables();
     } catch (e: any) {
@@ -582,6 +586,39 @@ export default function PosPage() {
     }
   };
 
+  // Restaurant: Delete Table (only if no orders)
+  const handleDeleteTable = async (table: RestaurantTable) => {
+    if (table.active_bills_count > 0 || (table.active_bills && table.active_bills.length > 0)) {
+      alert({
+        title: "Cannot Delete Table",
+        message: `Table ${table.table_number} has active orders. Please cancel or settle them before deleting.`,
+        type: "warning",
+      });
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: `Delete Table ${table.table_number}?`,
+      message: `Are you sure you want to delete table "${table.name}" (${table.table_number})? This action cannot be undone.`,
+      confirmText: "Delete Table",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await restaurantService.deleteTable(table.id);
+      fetchRestaurantTables();
+    } catch (e: any) {
+      console.error("Delete table error:", e);
+      alert({
+        title: "Delete Failed",
+        message: e?.response?.data?.message || e?.message || "Could not delete table.",
+        type: "danger",
+      });
+    }
+  };
+
   // Proceed to Checkout
   const handleProceedCheckout = async (preferredMethod: "cash" | "mpesa" | "credit" = "cash") => {
     if (activeBill && hasUnsavedOrder) {
@@ -622,7 +659,7 @@ export default function PosPage() {
 
   // Complete Sale (Counter or Restaurant Bill Settlement)
   const handleCompleteSale = async (payload: {
-    payment_method: "cash" | "mpesa" | "credit";
+    payment_method: "cash" | "mpesa" | "credit" | "free";
     amount_received?: number;
     mpesa_reference?: string;
     card_reference?: string;
@@ -844,6 +881,7 @@ export default function PosPage() {
               }}
               onRefresh={fetchRestaurantTables}
               onOpenAddTableModal={() => setIsAddTableModalOpen(true)}
+              onDeleteTable={handleDeleteTable}
               isLoading={isTablesLoading}
             />
           </div>
@@ -1142,7 +1180,11 @@ export default function PosPage() {
         onPrintCustomerBill={handlePrintCustomerBill}
         onSettleBill={handleSettleFromTableModal}
         onCancelBill={handleCancelBill}
-        onPrintKitchenSlip={(b) => setPrintingKitchenBill(b)}
+        onPrintKitchenSlip={(b, productId) => {
+          setIsSlipReprint(true);
+          setReprintProductId(productId);
+          setPrintingKitchenBill(b);
+        }}
       />
 
       {/* Add New Table Modal */}
@@ -1156,8 +1198,14 @@ export default function PosPage() {
       <KitchenOrderSlipModal
         bill={printingKitchenBill}
         isOpen={!!printingKitchenBill}
-        onClose={() => setPrintingKitchenBill(null)}
+        onClose={() => {
+          setPrintingKitchenBill(null);
+          setReprintProductId(undefined);
+          setIsSlipReprint(false);
+        }}
         autoPrint={true}
+        isReprint={isSlipReprint}
+        initialProductId={reprintProductId}
       />
 
       {/* Customer Pre-Settlement Bill Slip Print */}

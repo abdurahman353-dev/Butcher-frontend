@@ -106,6 +106,17 @@ export interface ReportAnalyticsData {
     categories: Array<{ id: number; name: string }>;
     cashiers: Array<{ id: number; name: string; role?: string }>;
   };
+  freed_meals?: {
+    total_amount: number;
+    count: number;
+    items: Array<{
+      product_id: number;
+      name: string;
+      unit?: string;
+      qty: number;
+      freed_amount: number;
+    }>;
+  };
 }
 
 export const reportsService = {

@@ -110,7 +110,7 @@ export interface CartItem {
   notes?: string;
 }
 
-export type PaymentMethod = "cash" | "mpesa" | "card" | "credit";
+export type PaymentMethod = "cash" | "mpesa" | "card" | "credit" | "free";
 
 export type PaymentStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 

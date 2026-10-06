@@ -17,6 +17,11 @@ export const restaurantService = {
     return res.data.data;
   },
 
+  async deleteTable(tableId: number): Promise<{ message: string }> {
+    const res = await apiClient.delete<{ message: string }>(`/restaurant/tables/${tableId}`);
+    return res.data;
+  },
+
   async createBill(
     tableId: number,
     payload: {

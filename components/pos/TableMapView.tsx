@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   UtensilsCrossed,
+  Trash2,
 } from "lucide-react";
 
 interface TableMapViewProps {
@@ -19,6 +20,7 @@ interface TableMapViewProps {
   onSelectTable: (table: RestaurantTable) => void;
   onRefresh: () => void;
   onOpenAddTableModal: () => void;
+  onDeleteTable?: (table: RestaurantTable) => void;
   isLoading?: boolean;
 }
 
@@ -28,6 +30,7 @@ export function TableMapView({
   onSelectTable,
   onRefresh,
   onOpenAddTableModal,
+  onDeleteTable,
   isLoading = false,
 }: TableMapViewProps) {
   const { user } = useAuth();
@@ -236,10 +239,12 @@ export function TableMapView({
               }
 
               return (
-                <button
+                <div
                   key={table.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectTable(table)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelectTable(table); }}
                   className={`group relative flex flex-col justify-between p-3.5 rounded-2xl border-2 text-left transition-all active:scale-[0.97] cursor-pointer min-h-[140px] shadow-sm ${cardClasses} ${
                     isSelected
                       ? "ring-2 ring-emerald-500 border-emerald-500 shadow-emerald-100 shadow-md scale-[1.02]"
@@ -253,12 +258,28 @@ export function TableMapView({
                       <span className={`font-mono text-2xl font-black leading-none tracking-tight ${numberColor}`}>
                         {table.table_number}
                       </span>
-                      {/* Status badge */}
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold uppercase tracking-widest shrink-0 border ${badgeClasses}`}
-                      >
-                        {badgeText}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {/* Status badge */}
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold uppercase tracking-widest shrink-0 border ${badgeClasses}`}
+                        >
+                          {badgeText}
+                        </span>
+                        {/* Delete button (Only if empty with no orders & not waiter) — solid color always for mobile */}
+                        {!isWaiter && table.active_bills_count === 0 && onDeleteTable && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteTable(table);
+                            }}
+                            className="p-1.5 bg-rose-100 hover:bg-rose-500 active:bg-rose-600 text-rose-600 hover:text-white border border-rose-300 rounded-lg transition-colors"
+                            title={`Delete empty table ${table.table_number}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Table name */}
@@ -306,7 +327,7 @@ export function TableMapView({
                       </div>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

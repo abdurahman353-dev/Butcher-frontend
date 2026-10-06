@@ -20,6 +20,7 @@ import {
   FileText,
   AlertCircle,
   Lock,
+  Gift,
 } from "lucide-react";
 
 interface CheckoutModalProps {
@@ -30,12 +31,12 @@ interface CheckoutModalProps {
   totalDiscount: number;
   total: number;
   customer: Customer | null;
-  initialMethod?: "cash" | "mpesa" | "credit";
+  initialMethod?: "cash" | "mpesa" | "credit" | "free";
   isRestaurant?: boolean;
   orderType?: string;
   tableNumber?: string;
   onCompleteSale: (payload: {
-    payment_method: "cash" | "mpesa" | "credit";
+    payment_method: "cash" | "mpesa" | "credit" | "free";
     amount_received?: number;
     mpesa_reference?: string;
     customer_name?: string;
@@ -65,16 +66,17 @@ export function CheckoutModal({
   onNewSale,
 }: CheckoutModalProps) {
   const { alert: showAlert } = useSystemDialog();
-  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "credit">(
-    initialMethod === "cash" || initialMethod === "mpesa" || initialMethod === "credit" ? initialMethod : "cash"
+  const [selectedMethod, setSelectedMethod] = useState<"cash" | "mpesa" | "credit" | "free">(
+    initialMethod || "cash"
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
 
-  // Pay Later Form State
+  // Pay Later & Free Meal Form State
   const [creditCustomerName, setCreditCustomerName] = useState(customer?.name || "");
   const [creditCustomerPhone, setCreditCustomerPhone] = useState(customer?.phone || "");
   const [creditNotes, setCreditNotes] = useState("");
+  const [freeMealReason, setFreeMealReason] = useState("");
 
   // Reset ONLY when the modal transitions from closed → open (fresh open)
   const prevIsOpenRef = React.useRef(false);
@@ -85,12 +87,11 @@ export function CheckoutModal({
     if (isOpen && !wasOpen) {
       // Fresh open: reset everything
       setCompletedSale(null);
-      setSelectedMethod(
-        initialMethod === "cash" || initialMethod === "mpesa" || initialMethod === "credit" ? initialMethod : "cash"
-      );
+      setSelectedMethod(initialMethod || "cash");
       setCreditCustomerName(customer?.name || "");
       setCreditCustomerPhone(customer?.phone || "");
       setCreditNotes("");
+      setFreeMealReason("");
       setIsProcessing(false);
     } else if (!isOpen && wasOpen) {
       // Closed: clear completed sale
@@ -179,7 +180,30 @@ export function CheckoutModal({
     }
   };
 
-  const isPendingCredit = completedSale?.payment_status === "pending" || completedSale?.payment_method === "credit";
+  const handleFreeSuccess = async () => {
+    setIsProcessing(true);
+    try {
+      const sale = await onCompleteSale({
+        payment_method: "free",
+        amount_received: 0,
+        customer_name: creditCustomerName.trim() || customer?.name || "Complimentary Guest",
+        customer_phone: creditCustomerPhone.trim() || customer?.phone || undefined,
+        notes: freeMealReason.trim() ? `[FREE MEAL / COMPLIMENTARY]: ${freeMealReason.trim()}` : "[FREE MEAL / COMPLIMENTARY]",
+      });
+      setCompletedSale(sale);
+    } catch (e: any) {
+      await showAlert({
+        title: "Free Meal Error",
+        message: e.message || "Failed to complete free meal checkout.",
+        type: "danger",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const isFreeMeal = completedSale?.payment_method === "free";
+  const isPendingCredit = !isFreeMeal && (completedSale?.payment_status === "pending" || completedSale?.payment_method === "credit");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 select-none animate-in fade-in duration-150">
@@ -196,26 +220,38 @@ export function CheckoutModal({
           <div className="p-6 text-center space-y-4">
             <div
               className={`w-14 h-14 rounded-2xl mx-auto flex items-center justify-center border ${
-                isPendingCredit
+                isFreeMeal
+                  ? "bg-purple-50 border-purple-200 text-purple-600"
+                  : isPendingCredit
                   ? "bg-amber-50 border-amber-200 text-amber-600"
                   : "bg-green-50 border-green-200 text-green-600"
               }`}
             >
-              {isPendingCredit ? <Clock className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
+              {isFreeMeal ? <Gift className="w-8 h-8" /> : isPendingCredit ? <Clock className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
             </div>
 
             <div>
               <span
                 className={`text-[11px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${
-                  isPendingCredit
+                  isFreeMeal
+                    ? "bg-purple-50 text-purple-800 border-purple-200"
+                    : isPendingCredit
                     ? "bg-amber-50 text-amber-800 border-amber-200"
                     : "bg-green-50 text-green-700 border-green-200"
                 }`}
               >
-                {isPendingCredit ? "Order Saved — Payment Pending" : "Transaction Complete"}
+                {isFreeMeal
+                  ? "Complimentary Meal (KSh 0.00)"
+                  : isPendingCredit
+                  ? "Order Saved — Payment Pending"
+                  : "Transaction Complete"}
               </span>
               <h2 className="text-xl font-black text-zinc-900 mt-2 tracking-tight">
-                {isPendingCredit ? (isRestaurant ? "OPEN TAB RECORDED" : "PAY LATER BILL ISSUED") : (isRestaurant ? "ORDER PLACED" : "SALE COMPLETED")}
+                {isFreeMeal
+                  ? "FREE MEAL COMPLETED"
+                  : isPendingCredit
+                  ? (isRestaurant ? "OPEN TAB RECORDED" : "PAY LATER BILL ISSUED")
+                  : (isRestaurant ? "ORDER PLACED" : "SALE COMPLETED")}
               </h2>
               <p className="text-xs font-mono text-zinc-400 mt-0.5">
                 Sale #{completedSale.sale_number}
@@ -366,21 +402,25 @@ export function CheckoutModal({
               </div>
             </div>
 
-            {/* Payment method tabs (3 options: Cash, M-Pesa, Pay Later) */}
+            {/* Payment method tabs (4 options: Cash, M-Pesa, Pay Later, Free Meal) */}
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-3 gap-1 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
-                {(["cash", "mpesa", "credit"] as const).map((method) => {
+              <div className="grid grid-cols-4 gap-1 bg-zinc-100 border border-zinc-200 rounded-xl p-1">
+                {(["cash", "mpesa", "credit", "free"] as const).map((method) => {
                   const Icon =
                     method === "cash"
                       ? Banknote
                       : method === "mpesa"
                       ? Smartphone
-                      : Clock;
+                      : method === "credit"
+                      ? Clock
+                      : Gift;
                   const label =
                     method === "mpesa"
                       ? "M-Pesa"
                       : method === "credit"
                       ? isRestaurant ? "Open Tab" : "Pay Later"
+                      : method === "free"
+                      ? "Free Meal"
                       : "Cash";
                   return (
                     <button
@@ -393,10 +433,12 @@ export function CheckoutModal({
                           setCreditCustomerPhone(customer.phone || "");
                         }
                       }}
-                      className={`py-2 px-1 rounded-lg text-[11px] font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 transition-all ${
+                      className={`py-2 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold flex flex-col sm:flex-row items-center justify-center gap-1 transition-all ${
                         selectedMethod === method
                           ? method === "credit"
                             ? "bg-amber-500 text-white shadow-xs"
+                            : method === "free"
+                            ? "bg-purple-600 text-white shadow-xs"
                             : "bg-white text-zinc-900 shadow-xs"
                           : "text-zinc-500 hover:text-zinc-800"
                       }`}
@@ -530,6 +572,58 @@ export function CheckoutModal({
                         ? "Saving Order..."
                         : `Record Pay Later (${formatCurrency(total)})`}
                     </span>
+                  </button>
+                </div>
+              )}
+
+              {/* Free Meal / Complimentary Panel */}
+              {selectedMethod === "free" && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-start gap-2">
+                    <Gift className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Free Meal / Complimentary Bill</p>
+                      <p className="text-[11px] text-purple-700 mt-0.5">
+                        Products are recorded as sold in stock and reporting, but KSh 0 money is collected or recorded in cash shifts.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider block mb-1">
+                        Reason for Free Meal *
+                      </label>
+                      <input
+                        type="text"
+                        value={freeMealReason}
+                        onChange={(e) => setFreeMealReason(e.target.value)}
+                        placeholder="e.g. VIP guest, Manager offer, Staff complimentary meal"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-zinc-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider block mb-1">
+                        Recipient / Guest Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={creditCustomerName}
+                        onChange={(e) => setCreditCustomerName(e.target.value)}
+                        placeholder="e.g. Table guest name"
+                        className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-zinc-900"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={handleFreeSuccess}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 active:scale-98 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Gift className="w-4 h-4" />
+                    <span>{isProcessing ? "Processing..." : `Confirm Free Meal (${formatCurrency(0)})`}</span>
                   </button>
                 </div>
               )}

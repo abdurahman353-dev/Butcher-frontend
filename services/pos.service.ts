@@ -3,7 +3,7 @@ import { Sale, CartItem } from "@/types";
 
 export interface CheckoutPayload {
   items: CartItem[];
-  payment_method: "cash" | "mpesa" | "card" | "credit";
+  payment_method: "cash" | "mpesa" | "card" | "credit" | "free";
   order_type?: "counter" | "dine_in" | "takeaway";
   table_number?: string | null;
   amount_received?: number;
