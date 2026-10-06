@@ -823,10 +823,10 @@ export default function PosPage() {
             <button
               type="button"
               onClick={() => setIsPrinterSettingsOpen(true)}
-              className="h-8 px-2.5 rounded-xl border border-zinc-200 bg-white hover:bg-zinc-50 active:bg-zinc-100 text-zinc-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs"
+              className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
               title="Receipt Printer Settings (QZ Tray)"
             >
-              <Printer className="w-3.5 h-3.5 text-zinc-600" />
+              <Printer className="w-3.5 h-3.5 text-white" />
               <span className="hidden sm:inline">Receipt Printer</span>
             </button>
           </div>
