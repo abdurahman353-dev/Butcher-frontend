@@ -226,9 +226,14 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             <div className="text-xs pt-0.5 space-y-0.5">
               <div className="grid grid-cols-2 gap-2 items-start">
                 <div className="space-y-0.5">
-                  <div>Cashier: {sale.cashier_name}</div>
                   {sale.table_number && (
                     <div className="font-black text-black">Table: Table {sale.table_number}</div>
+                  )}
+                  {sale.bill_number && (
+                    <div className="font-black text-black">Bill No: {sale.bill_number}</div>
+                  )}
+                  {sale.waiter_name && (
+                    <div>Server: {sale.waiter_name}</div>
                   )}
                   {sale.order_type && sale.order_type !== "counter" && (
                     <div>Type: {sale.order_type.toUpperCase()}</div>
@@ -383,7 +388,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
               </div>
               <div className="text-[11px] font-bold leading-snug">
                 Authorized complimentary order on {formatDateTime(sale.settled_at || sale.created_at)}
-                {sale.settled_by ? ` (${sale.settled_by})` : sale.cashier_name ? ` (${sale.cashier_name})` : ""}
+                {sale.settled_by ? ` (${sale.settled_by})` : ""}
               </div>
             </div>
           ) : (
@@ -393,7 +398,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
               </div>
               <div className="text-[11px] font-bold leading-snug">
                 Settled via {sale.payment_method.toUpperCase()} on {formatDateTime(sale.settled_at || sale.created_at)}
-                {sale.settled_by ? ` (${sale.settled_by})` : sale.cashier_name ? ` (${sale.cashier_name})` : ""}
+                {sale.settled_by ? ` (${sale.settled_by})` : ""}
               </div>
             </div>
           )}

@@ -31,6 +31,8 @@ export function KitchenOrderSlipModal({
 }: KitchenOrderSlipModalProps) {
   const { settings } = useShopSettings();
   const { alert } = useSystemDialog();
+  const { user } = useAuth();
+  const isWaiter = user?.role === "waiter";
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const pendingAutoPrint = useRef(autoPrint);
@@ -40,8 +42,6 @@ export function KitchenOrderSlipModal({
       pendingAutoPrint.current = autoPrint;
     }
   }, [isOpen, autoPrint]);
-  const { user } = useAuth();
-  const isWaiter = user?.role === "waiter";
 
   // State to filter for a single item reprint when there are multiple items
   const [selectedProductId, setSelectedProductId] = useState<number | "all">("all");
@@ -266,50 +266,48 @@ export function KitchenOrderSlipModal({
           </div>
         )}
 
-        {/* Printable Ticket Area (58mm / 80mm thermal slip design) */}
-        <div className="flex-1 overflow-y-auto p-5 text-xs bg-white text-zinc-950 font-mono">
-          <div id="kitchen-order-ticket" className="w-full text-zinc-950 space-y-3">
-            <div className="text-center border-b-2 border-dashed border-zinc-400 pb-2">
-              <div className="text-xs font-semibold tracking-wider uppercase text-zinc-600">
-                {settings?.shop_name || "RESTAURANT KITCHEN"}
+        {/* Printable Ticket Area - Boxed Receipt Design matching Image 3 */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold overscroll-contain print:overflow-visible print:p-0 print:m-0 font-mono">
+          <div id="kitchen-order-ticket" className="w-full text-black space-y-3">
+            {/* 1. Header Box */}
+            <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
+              <div className="text-base sm:text-lg font-black tracking-tight uppercase">
+                {settings?.shop_name ? settings.shop_name.toUpperCase() : "RESTAURANT KITCHEN"}
               </div>
-              <h2 className="text-lg font-black tracking-tight mt-0.5">
-                {isReprint ? "*** KITCHEN REPRINT ***" : "*** KITCHEN TICKET ***"}
-              </h2>
-              {selectedProductId !== "all" ? (
-                <div className="text-[11px] font-extrabold text-amber-900 bg-amber-50 border border-amber-300 rounded px-1 mt-0.5 inline-block">
-                  ITEM-SPECIFIC REPRINT
-                </div>
-              ) : (
-                <div className="text-[11px] font-bold text-zinc-600 mt-0.5">ORDER RECEIPT</div>
-              )}
+              <div className="text-xs font-black uppercase tracking-wider">
+                {isReprint ? "*** KITCHEN REPRINT ***" : "*** KITCHEN ORDER TICKET ***"}
+              </div>
+              <div className="pt-1 mt-1 border-t-2 border-black text-xs font-bold">
+                {selectedProductId !== "all" ? "ITEM-SPECIFIC REPRINT" : "ORDER TICKET"}
+              </div>
             </div>
 
-            {/* Table & Bill No - Big & Prominent */}
-            <div className="border-b-2 border-dashed border-zinc-400 pb-2">
-              <div className="flex justify-between items-baseline">
-                <span className="text-xl font-black">TABLE {bill.table_number}</span>
-                <span className="text-sm font-bold">{bill.bill_number}</span>
+            {/* 2. Metadata Box - NO Cashier, NO Guests */}
+            <div className="border-2 border-black p-2 text-xs font-bold text-black space-y-1">
+              <div className="flex justify-between font-black text-sm">
+                <span>TABLE {bill.table_number}</span>
+                <span>BILL: #{bill.bill_number}</span>
               </div>
-              <div className="flex justify-between text-[11px] text-zinc-600 mt-1">
-                <span>
-                  Server: <strong>{bill.waiter_name || "Staff"}{bill.waiter_pin ? ` (#${bill.waiter_pin})` : ""}</strong>
-                </span>
-                <span>Guests: <strong>{bill.guest_count}</strong></span>
+              <div>
+                <span>Time: {formatDateTime(bill.kitchen_printed_at || bill.created_at || new Date().toISOString())}</span>
               </div>
-              <div className="text-[10px] text-zinc-500 mt-0.5">
-                Time: {formatDateTime(bill.kitchen_printed_at || bill.created_at)}
-              </div>
-              {bill.customer_name && (
-                <div className="text-[11px] text-zinc-700 font-semibold mt-0.5">
-                  Guest: {bill.customer_name}
+              <div className="text-xs pt-0.5 space-y-0.5">
+                <div className="grid grid-cols-2 gap-2 items-start">
+                  <div className="space-y-0.5">
+                    <div className="font-black text-black">Table: Table {bill.table_number}</div>
+                    <div className="font-black text-black">Bill No: {bill.bill_number}</div>
+                    <div>Server: {bill.waiter_name || "Staff"}{bill.waiter_pin ? ` (#${bill.waiter_pin})` : ""}</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div>Customer: {bill.customer_name || "Table Guest"}</div>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* Order Items */}
-            <div className="border-b-2 border-dashed border-zinc-400 pb-2 space-y-2">
-              <div className="flex justify-between font-black text-xs border-b border-zinc-200 pb-1">
+            {/* 3. Items Box */}
+            <div className="border-2 border-black p-2 space-y-2 text-black">
+              <div className="flex justify-between font-black text-xs border-b-2 border-black pb-1">
                 <span>QTY / ITEM</span>
                 <span>STATUS</span>
               </div>
@@ -321,12 +319,12 @@ export function KitchenOrderSlipModal({
                       <span className="text-sm font-black mr-1.5 underline">[{item.weight}x]</span>
                       {item.product_name}
                     </span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-zinc-200 text-zinc-800 shrink-0">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-black bg-zinc-100 text-black shrink-0">
                       {isReprint ? "REPRINT" : "NEW"}
                     </span>
                   </div>
                   {item.notes && (
-                    <div className="text-[11px] font-bold text-rose-700 italic pl-6">
+                    <div className="text-[11px] font-bold text-red-700 italic pl-6">
                       * NOTE: {item.notes}
                     </div>
                   )}
@@ -334,17 +332,22 @@ export function KitchenOrderSlipModal({
               ))}
             </div>
 
-            {/* General Bill Notes */}
+            {/* 4. Special Instructions (if any) */}
             {bill.notes && (
-              <div className="p-2 border border-zinc-400 rounded text-[11px] font-bold bg-zinc-50">
-                <span className="text-zinc-500 block text-[10px] uppercase">Special Instructions:</span>
+              <div className="border-2 border-black p-2 text-xs font-bold text-black space-y-0.5">
+                <span className="text-black uppercase text-[10px] block font-black">Special Instructions:</span>
                 <span>{bill.notes}</span>
               </div>
             )}
 
-            {/* Footer */}
-            <div className="text-center text-[10px] text-zinc-500 pt-1 border-t border-zinc-300">
-              Kitchen Copy • Send to Chef / Bar
+            {/* 5. Footer Box */}
+            <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
+              <div className="font-mono text-xs tracking-widest font-black">
+                * {bill.bill_number} *
+              </div>
+              <div className="text-[10px] font-bold">
+                Kitchen Copy • Send to Chef / Bar
+              </div>
             </div>
           </div>
         </div>

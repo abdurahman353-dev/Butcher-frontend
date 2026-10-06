@@ -152,6 +152,8 @@ export interface Sale {
   payment_method: PaymentMethod;
   order_type?: "counter" | "dine_in" | "takeaway";
   table_number?: string | null;
+  bill_number?: string | null;
+  waiter_name?: string | null;
   payment_status: PaymentStatus;
   sale_status: SaleStatus;
   amount_received?: number;

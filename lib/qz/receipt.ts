@@ -75,10 +75,14 @@ export function buildEscPosReceipt(
   const saleDate = sale.created_at ? new Date(sale.created_at).toLocaleString() : new Date().toLocaleString();
 
   commands.push(padLine(`Receipt: ${saleCode}`, `Date: ${saleDate.split(",")[0]}`) + "\n");
-  commands.push(padLine(`Time: ${saleDate.split(",")[1]?.trim() || ""}`, `Cashier: ${sale.cashier_name || "Staff"}`) + "\n");
+  commands.push(padLine(`Time: ${saleDate.split(",")[1]?.trim() || ""}`, sale.waiter_name ? `Server: ${sale.waiter_name}` : "") + "\n");
 
-  if (sale.table_number) {
+  if (sale.table_number && sale.bill_number) {
+    commands.push(padLine(`Table: Table ${sale.table_number}`, `Bill: ${sale.bill_number}`) + "\n");
+  } else if (sale.table_number) {
     commands.push(padLine(`Table: Table ${sale.table_number}`, "") + "\n");
+  } else if (sale.bill_number) {
+    commands.push(padLine(`Bill: ${sale.bill_number}`, "") + "\n");
   }
 
   if (sale.customer_name) {

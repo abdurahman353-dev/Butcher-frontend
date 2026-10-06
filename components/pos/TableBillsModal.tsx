@@ -774,8 +774,8 @@ export function TableBillsModal({
                           <ChevronRight className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Settle / Checkout button — admin & cashier only */}
-                        {isPrinted && !isWaiter && (
+                        {/* Settle / Checkout button — admin & cashier only, available for ALL bills */}
+                        {!isWaiter && itemsCount > 0 && (
                           <button
                             type="button"
                             onClick={() => {

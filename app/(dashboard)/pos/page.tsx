@@ -722,7 +722,14 @@ export default function PosPage() {
         .then((r) => setProducts(r.data))
         .catch(() => {});
 
-      return res.data;
+      const settledSale = {
+        ...res.data,
+        bill_number: res.data?.bill_number || activeBill.bill_number,
+        waiter_name: res.data?.waiter_name || activeBill.waiter_name,
+        table_number: res.data?.table_number || activeBill.table_number,
+      };
+
+      return settledSale;
     }
 
     const sale = await posService.completeCheckout({
