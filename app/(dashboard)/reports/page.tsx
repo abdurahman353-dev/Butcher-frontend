@@ -243,7 +243,7 @@ export default function ReportsPage() {
           const p = fProfit(it.profit, it.cost);
           return `<tr>
             <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left">${it.name}</td>
-            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fW(it.qty)}</td>
+            <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${(it.unit||'KG').toUpperCase()==='KG' ? fW(it.qty) : `${it.qty} ${it.unit||'PCS'}`}</td>
             <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fK(it.price)}</td>
             <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.discount > 0 ? '#b45309' : '#9ca3af'}">${it.discount > 0 ? `-${fK(it.discount)}` : '-'}</td>
             <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:${p.color}">${p.label}</td>
@@ -297,7 +297,7 @@ export default function ReportsPage() {
     const cashierHTML = (analytics.cashier_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${c.transactions}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.aov)}</td></tr>`).join("");
     const catHTML = (analytics.category_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;font-weight:700;color:#14532d">${c.percent}%</td></tr>`).join("");
     const wastageHTML = (analytics.wastage_breakdown || []).map(w => `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${w.reason}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${w.count}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(w.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#be123c;font-weight:700">${fK(w.cost)}</td></tr>`).join("");
-    const freedHTML = (analytics.freed_meals?.items || []).map((it) => `<tr style="background:#faf5ff"><td style="padding:6px 10px;border:1px solid #f3e8ff;font-weight:700;color:#581c87">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:700">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:800;color:#7e22ce">${fK(it.freed_amount)}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:center"><span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px">COMPLIMENTARY</span></td></tr>`).join("");
+    const freedHTML = (analytics.freed_meals?.items || []).map((it) => `<tr style="background:#faf5ff"><td style="padding:6px 10px;border:1px solid #f3e8ff;font-weight:700;color:#581c87">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:700">${(it.unit||'KG').toUpperCase()==='KG' ? fW(it.qty) : `${it.qty} ${it.unit||'PCS'}`}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:800;color:#7e22ce">${fK(it.freed_amount)}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:center"><span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px">COMPLIMENTARY</span></td></tr>`).join("");
     const th = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151"`;
     const thr = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:right"`;
     const thc = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:center"`;
@@ -763,7 +763,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs flex flex-col justify-between hover:border-zinc-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-              Total Meat Volume Sold
+              {isRestaurant ? "Total Items Sold" : "Total Meat Volume Sold"}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
               <Scale className="w-4 h-4" />
@@ -771,15 +771,19 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
           </div>
           <div className="mt-3">
             <div className="text-xl sm:text-2xl md:text-3xl font-black text-amber-700 tabular-nums tracking-tight">
-              {formatWeight(analytics?.total_weight || 0)}
+              {isRestaurant
+                ? `${(analytics?.total_weight || 0).toFixed(2)} items`
+                : formatWeight(analytics?.total_weight || 0)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 pt-2 border-t border-zinc-100">
-              <span>Across all cuts</span>
+              <span>{isRestaurant ? "Across all categories" : "Across all cuts"}</span>
               <span className="font-semibold text-zinc-700">
                 Avg:{" "}
                 {analytics?.transactions
-                  ? formatWeight((analytics.total_weight || 0) / analytics.transactions)
-                  : "0 KG"}{" "}
+                  ? isRestaurant
+                    ? `${((analytics.total_weight || 0) / analytics.transactions).toFixed(2)} items`
+                    : formatWeight((analytics.total_weight || 0) / analytics.transactions)
+                  : "0"}{" "}
                 / order
               </span>
             </div>
@@ -1201,7 +1205,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-zinc-900 tabular-nums">
-                      {formatWeight(prod.weight)}
+                      {(prod.unit || 'KG').toUpperCase() === 'KG' ? formatWeight(prod.weight) : `${prod.weight} ${prod.unit}`}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-zinc-900 tabular-nums">
                       {formatCurrency(prod.revenue)}

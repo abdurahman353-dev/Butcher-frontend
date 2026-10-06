@@ -49,6 +49,7 @@ export interface ReportAnalyticsData {
     id: number;
     name: string;
     category: string;
+    unit?: string;
     weight: number;
     revenue: number;
     cost: number;
@@ -90,6 +91,7 @@ export interface ReportAnalyticsData {
     category_name: string;
     items: Array<{
       name: string;
+      unit?: string;   // 'KG' | 'PCS' | 'PACK' etc.
       qty: number;
       price: number;
       discount: number;
