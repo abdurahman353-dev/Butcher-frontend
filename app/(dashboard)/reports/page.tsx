@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
   FileText,
   Clock,
+  Gift,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { Pagination } from "@/components/shared/Pagination";
@@ -296,6 +297,7 @@ export default function ReportsPage() {
     const cashierHTML = (analytics.cashier_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${c.transactions}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.aov)}</td></tr>`).join("");
     const catHTML = (analytics.category_breakdown || []).map((c,i) => `<tr style="background:${i%2===0?"#f9fafb":"#fff"}"><td style="padding:6px 10px;border:1px solid #f3f4f6;font-weight:700">${c.name}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(c.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fK(c.revenue)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#16a34a;font-weight:700">${fK(c.profit)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:center;font-weight:700;color:#14532d">${c.percent}%</td></tr>`).join("");
     const wastageHTML = (analytics.wastage_breakdown || []).map(w => `<tr><td style="padding:6px 10px;border:1px solid #f3f4f6">${w.reason}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${w.count}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right">${fW(w.weight)}</td><td style="padding:6px 10px;border:1px solid #f3f4f6;text-align:right;color:#be123c;font-weight:700">${fK(w.cost)}</td></tr>`).join("");
+    const freedHTML = (analytics.freed_meals?.items || []).map((it) => `<tr style="background:#faf5ff"><td style="padding:6px 10px;border:1px solid #f3e8ff;font-weight:700;color:#581c87">${it.name}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:700">${fW(it.qty)}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:right;font-weight:800;color:#7e22ce">${fK(it.freed_amount)}</td><td style="padding:6px 10px;border:1px solid #f3e8ff;text-align:center"><span style="background:#f3e8ff;color:#6b21a8;font-size:9px;font-weight:800;padding:2px 8px;border-radius:4px">COMPLIMENTARY</span></td></tr>`).join("");
     const th = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151"`;
     const thr = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:right"`;
     const thc = `style="background:#f3f4f6;padding:8px 10px;border:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;font-weight:700;color:#374151;text-align:center"`;
@@ -326,6 +328,7 @@ ${(analytics.top_products||[]).length>0?`${sec(isRestaurant ? "Top Selling Items
 ${(analytics.category_breakdown||[]).length>0?`${sec("Category Performance","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Category</th><th ${thr}>Weight</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Share</th></tr></thead><tbody>${catHTML}</tbody></table>`:""}
 ${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Staff</th><th ${thr}>Transactions</th><th ${thr}>Revenue</th><th ${thr}>Weight</th><th ${thr}>AOV</th></tr></thead><tbody>${cashierHTML}</tbody></table>`:""}
 ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between"><span>⚠️ Wastage & Loss Audit</span><span>Total: ${fK(analytics.wastage_cost||0)} · ${fW(analytics.wastage_weight||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Reason</th><th ${thr}>Incidents</th><th ${thr}>Weight</th><th ${thr}>Cost Loss</th></tr></thead><tbody>${wastageHTML}</tbody></table></div>`:""}
+${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;border:1.5px solid #e9d5ff;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#7e22ce;margin-bottom:8px;display:flex;justify-content:space-between"><span>🎁 Complimentary / Freed Meals Audit (0 Money Recorded)</span><span>Freed Orders: ${analytics.freed_meals?.count||0} · Total Value: ${fK(analytics.freed_meals?.total_amount||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Product Freed</th><th ${thr}>Count / Weight</th><th ${thr}>Freed Value</th><th ${thc}>Status</th></tr></thead><tbody>${freedHTML}</tbody></table></div>`:""}
 </div>
 <div style="border-top:2px solid #e5e7eb;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;background:#f9fafb;margin-top:20px">
   <div style="font-size:9px;color:#9ca3af">Report ID: PCB-${Date.now()}<br/>${shopSettings.shop_name} POS</div>
@@ -829,6 +832,59 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
           </div>
         </div>
       </div>
+
+      {/* ── FREED / COMPLIMENTARY MEALS CARD ── */}
+      {analytics?.freed_meals && (analytics.freed_meals.count > 0 || (analytics.freed_meals.items && analytics.freed_meals.items.length > 0)) && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-purple-50/60 border border-purple-200 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-purple-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                🎁
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-purple-950">
+                  Freed / Complimentary Meals Offered
+                </h3>
+                <p className="text-xs text-purple-700">
+                  Product quantities are deducted as sold in stock and reports, with 0 money recorded.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider block">
+                  Total Freed Value
+                </span>
+                <span className="text-lg font-black text-purple-950">
+                  {formatCurrency(analytics.freed_meals.total_amount)}
+                </span>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-purple-200/70 text-purple-900 text-xs font-bold">
+                {analytics.freed_meals.count} Free Bill{analytics.freed_meals.count !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            {analytics.freed_meals.items.map((it) => (
+              <div
+                key={it.product_id}
+                className="p-2.5 bg-white border border-purple-100 rounded-xl flex items-center justify-between shadow-2xs"
+              >
+                <div className="min-w-0 pr-2">
+                  <p className="text-xs font-bold text-zinc-900 truncate">{it.name}</p>
+                  <p className="text-[11px] text-purple-700 font-semibold">
+                    {formatWeight(it.qty, it.unit || "KG")} freed
+                  </p>
+                </div>
+                <span className="text-xs font-black text-purple-900 shrink-0">
+                  {formatCurrency(it.freed_amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── SALES TREND CHART & PAYMENT METHOD SPLIT ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -1423,6 +1479,62 @@ ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;bor
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── FREED / COMPLIMENTARY MEALS AUDIT ── */}
+      {(analytics?.freed_meals?.items || []).length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-purple-50 border border-purple-200 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <h2 className="text-sm font-bold text-purple-900 flex items-center gap-1.5">
+                <Gift className="w-4 h-4 text-purple-600" />
+                Complimentary / Freed Meals Audit
+              </h2>
+              <p className="text-xs text-purple-700">
+                Products sold &amp; recorded in stock but <strong>KSh 0 money</strong> collected.
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-purple-600 font-bold uppercase">Total Freed Value</div>
+              <div className="text-base font-black text-purple-800">{formatCurrency(analytics?.freed_meals?.total_amount || 0)}</div>
+              <div className="text-[11px] text-purple-600">{analytics?.freed_meals?.count || 0} order(s)</div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-purple-100">
+                  <th className="text-left px-3 py-2 font-bold text-purple-800 text-[11px] uppercase tracking-wider rounded-tl-lg">Product Freed</th>
+                  <th className="text-right px-3 py-2 font-bold text-purple-800 text-[11px] uppercase tracking-wider">Qty / Weight</th>
+                  <th className="text-right px-3 py-2 font-bold text-purple-800 text-[11px] uppercase tracking-wider">Freed Value</th>
+                  <th className="text-center px-3 py-2 font-bold text-purple-800 text-[11px] uppercase tracking-wider rounded-tr-lg">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-100">
+                {(analytics?.freed_meals?.items || []).map((it) => (
+                  <tr key={it.product_id} className="bg-white hover:bg-purple-50 transition-colors">
+                    <td className="px-3 py-2.5 font-bold text-purple-900">{it.name}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-zinc-700">
+                      {it.unit?.toUpperCase() === "KG" ? formatWeight(it.qty) : `${it.qty}x`}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-black text-purple-700">{formatCurrency(it.freed_amount)}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className="inline-flex items-center gap-1 bg-purple-100 text-purple-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-purple-300">
+                        <Gift className="w-2.5 h-2.5" />
+                        COMPLIMENTARY
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-3 bg-purple-100/60 border border-purple-200 rounded-xl text-[11px] text-purple-800 font-medium">
+            ⚠️ These products are counted as <strong>sold</strong> in inventory and reports, but <strong>no money was recorded</strong> in the cash shift or revenue total.
+          </div>
         </div>
       )}
     </div>

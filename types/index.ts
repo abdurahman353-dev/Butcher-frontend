@@ -110,7 +110,7 @@ export interface CartItem {
   notes?: string;
 }
 
-export type PaymentMethod = "cash" | "mpesa" | "card" | "credit";
+export type PaymentMethod = "cash" | "mpesa" | "card" | "credit" | "free";
 
 export type PaymentStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
@@ -227,7 +227,7 @@ export interface RestaurantTable {
   company_id: number;
   name: string;
   table_number: string;
-  capacity: number;
+  capacity?: number;
   zone: string;
   is_active: boolean;
   sort_order: number;

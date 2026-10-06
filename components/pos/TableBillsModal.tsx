@@ -45,7 +45,7 @@ interface TableBillsModalProps {
   onPrintCustomerBill: (bill: RestaurantBill) => Promise<void>;
   onSettleBill: (bill: RestaurantBill) => void;
   onCancelBill: (bill: RestaurantBill) => Promise<void>;
-  onPrintKitchenSlip: (bill: RestaurantBill) => void;
+  onPrintKitchenSlip: (bill: RestaurantBill, productId?: number) => void;
 }
 
 export function TableBillsModal({
@@ -677,14 +677,28 @@ export function TableBillsModal({
                           <div className="space-y-1.5 divide-y divide-zinc-200/60">
                             {displayedItems.map((item, idx) => (
                               <div key={idx} className="flex justify-between items-center pt-1.5 first:pt-0">
-                                <span className="truncate pr-2 text-zinc-950 font-bold text-xs sm:text-[13px]">
-                                  {item.weight}x {item.product_name}
-                                  {item.notes && (
-                                    <span className="text-zinc-600 font-medium text-[11px] ml-1.5">
-                                      ({item.notes})
-                                    </span>
+                                <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                                  <span className="truncate text-zinc-950 font-bold text-xs sm:text-[13px]">
+                                    {item.weight}x {item.product_name}
+                                    {item.notes && (
+                                      <span className="text-zinc-600 font-medium text-[11px] ml-1.5">
+                                        ({item.notes})
+                                      </span>
+                                    )}
+                                  </span>
+                                  {/* Item-level reprint if multiple items & bill was kitchen-printed (Cashiers & Admins only) */}
+                                  {bill.kitchen_printed_at && !isWaiter && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onPrintKitchenSlip(bill, item.product_id)}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-colors text-[10px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
+                                      title={`Reprint slip for ${item.product_name}`}
+                                    >
+                                      <ChefHat className="w-3 h-3" />
+                                      <span className="font-bold">Reprint</span>
+                                    </button>
                                   )}
-                                </span>
+                                </div>
                                 <span className="font-extrabold text-zinc-950 text-xs sm:text-[13px] shrink-0">
                                   {formatCurrency(item.line_total)}
                                 </span>
@@ -709,7 +723,7 @@ export function TableBillsModal({
                           <button
                             type="button"
                             onClick={() => onCancelBill(bill)}
-                            className="px-2.5 py-1.5 text-xs text-rose-700 hover:bg-rose-50 rounded-xl transition-colors font-semibold flex items-center gap-1"
+                            className="px-2.5 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 active:bg-rose-300 border border-rose-300 rounded-xl transition-colors font-bold flex items-center gap-1"
                             title="Cancel this bill"
                           >
                             <Ban className="w-3.5 h-3.5" />
@@ -717,15 +731,15 @@ export function TableBillsModal({
                           </button>
                         )}
 
-                        {/* Print Kitchen Slip (KOT) */}
-                        {bill.kitchen_printed_at && (
+                        {/* Print Kitchen Slip (KOT) — Only Cashiers & Admins can reprint, Waiters blocked */}
+                        {bill.kitchen_printed_at && !isWaiter && (
                           <button
                             type="button"
                             onClick={() => onPrintKitchenSlip(bill)}
-                            className="px-2.5 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 rounded-xl transition-colors font-semibold flex items-center gap-1"
+                            className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl transition-colors font-bold flex items-center gap-1 shadow-xs"
                             title="Re-print Kitchen Slip"
                           >
-                            <ChefHat className="w-3.5 h-3.5 text-zinc-500" />
+                            <ChefHat className="w-3.5 h-3.5" />
                             <span>Kitchen Slip</span>
                           </button>
                         )}
