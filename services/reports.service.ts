@@ -94,12 +94,16 @@ export interface ReportAnalyticsData {
       unit?: string;   // 'KG' | 'PCS' | 'PACK' etc.
       qty: number;
       price: number;
+      freed_qty?: number;
+      freed_amount?: number;
       discount: number;
       cost: number;    // buying cost (reinvest amount)
       profit: number;  // price - cost
     }>;
     subtotal_qty: number;
     subtotal_price: number;
+    subtotal_freed_qty?: number;
+    subtotal_freed_amount?: number;
     subtotal_discount: number;
     subtotal_cost: number;
     subtotal_profit: number;

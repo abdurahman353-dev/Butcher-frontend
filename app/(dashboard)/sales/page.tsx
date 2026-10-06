@@ -365,28 +365,58 @@ function SalesLedger() {
           return { label: `LOSS: -${fK(Math.abs(profit))}`, color: '#be123c' };
         };
         const sections = cats.map((cat, idx) => {
+          const catUnits = Array.from(new Set(cat.items.map(it => (it.unit || 'KG').toUpperCase())));
+          const catUnit = catUnits.length === 1 ? catUnits[0] : (isRestaurant ? 'ITEMS' : 'KG');
+          const formatCatQty = (q: number) => {
+            if (q <= 0) return '-';
+            if (catUnit === 'KG') return fW(q);
+            const qVal = Number(q) % 1 === 0 ? Number(q).toFixed(0) : Number(q).toFixed(2);
+            return `${qVal} ${catUnit}`;
+          };
+          const formatItemQty = (q: number, unit?: string) => {
+            if (q <= 0) return '-';
+            const u = (unit || 'KG').toUpperCase();
+            if (u === 'KG') return fW(q);
+            const qVal = Number(q) % 1 === 0 ? Number(q).toFixed(0) : Number(q).toFixed(2);
+            return `${qVal} ${u}`;
+          };
+
           const rows = cat.items.map(it => {
             const p = fProfit(it.profit, it.cost);
+            const soldQtyDisplay = it.qty > 0 ? formatItemQty(it.qty, it.unit) : '-';
+            const soldAmountDisplay = it.price > 0 ? fK(it.price) : '-';
+            const freedQtyDisplay = (it.freed_qty || 0) > 0 ? formatItemQty(it.freed_qty || 0, it.unit) : '-';
+            const freedAmountDisplay = (it.freed_amount || 0) > 0 ? fK(it.freed_amount || 0) : '-';
+
             return `<tr>
               <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left">${it.name}</td>
-              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fW(it.qty)}</td>
-              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fK(it.price)}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${soldQtyDisplay}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${soldAmountDisplay}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${freedQtyDisplay}</td>
+              <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${freedAmountDisplay}</td>
               <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.discount > 0 ? '#b45309' : '#9ca3af'}">${it.discount > 0 ? `-${fK(it.discount)}` : '-'}</td>
               <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:${p.color}">${p.label}</td>
               <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${it.cost > 0 ? '#1d4ed8' : '#9ca3af'}">${it.cost > 0 ? fK(it.cost) : '-'}</td>
             </tr>`;
           }).join('');
           const sp = fProfit(cat.subtotal_profit, cat.subtotal_cost);
+          const subSoldQty = cat.subtotal_qty > 0 ? formatCatQty(cat.subtotal_qty) : '-';
+          const subSoldAmount = cat.subtotal_price > 0 ? fK(cat.subtotal_price) : '-';
+          const subFreedQty = (cat.subtotal_freed_qty || 0) > 0 ? formatCatQty(cat.subtotal_freed_qty || 0) : '-';
+          const subFreedAmount = (cat.subtotal_freed_amount || 0) > 0 ? fK(cat.subtotal_freed_amount || 0) : '-';
+
           return `
             <!-- Category Header -->
             <tr style="background:#14532d">
-              <th colspan="6" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:1px solid #14532d;${idx > 0 ? 'border-top:14px solid #fff;' : ''}">${cat.category_name}</th>
+              <th colspan="8" style="color:#fff;padding:8px 12px;font-size:10px;font-weight:800;letter-spacing:1px;text-align:left;border:1px solid #14532d;${idx > 0 ? 'border-top:14px solid #fff;' : ''}">${cat.category_name}</th>
             </tr>
             <!-- Column Labels -->
             <tr style="background:#dcfce7">
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:left">${isRestaurant ? "Menu Item / Product" : "Item / Cut"}</th>
-              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Qty (KG)</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">${isRestaurant ? "Qty Sold" : "Qty (KG)"}</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#14532d;text-align:right">Amount</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#7e22ce;text-align:right">Freed Quantity</th>
+              <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#7e22ce;text-align:right">Freed Amount</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#b45309;text-align:right">Discount</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#15803d;text-align:right">Profit</th>
               <th style="padding:6px 10px;border:1px solid #e5e7eb;font-size:9px;color:#1d4ed8;text-align:right">Reinvest (Cost)</th>
@@ -395,8 +425,10 @@ function SalesLedger() {
             <!-- Category Subtotal -->
             <tr style="background:#f0fdf4;border-top:2px solid #16a34a">
               <td style="padding:7px 10px;border:1px solid #e5e7eb;font-weight:800;color:#14532d">SUBTOTAL — ${cat.category_name}</td>
-              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fW(cat.subtotal_qty)}</td>
-              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${fK(cat.subtotal_price)}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${subSoldQty}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#14532d">${subSoldAmount}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:#7e22ce">${subFreedQty}</td>
+              <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:#7e22ce">${subFreedAmount}</td>
               <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#b45309">${cat.subtotal_discount > 0 ? `-${fK(cat.subtotal_discount)}` : '-'}</td>
               <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:${sp.color}">${sp.label}</td>
               <td style="padding:7px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#1d4ed8">${cat.subtotal_cost > 0 ? fK(cat.subtotal_cost) : '-'}</td>
@@ -406,12 +438,14 @@ function SalesLedger() {
           <div style="margin-bottom:14px">
             <table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5px">
               <colgroup>
-                <col style="width:30%">
+                <col style="width:24%">
+                <col style="width:10%">
                 <col style="width:12%">
-                <col style="width:14%">
+                <col style="width:11%">
                 <col style="width:12%">
-                <col style="width:16%">
-                <col style="width:16%">
+                <col style="width:9%">
+                <col style="width:11%">
+                <col style="width:11%">
               </colgroup>
               <tbody>
                 ${sections}
