@@ -16,7 +16,7 @@ import { buildEscPosReceipt } from "@/lib/qz/receipt";
 
 declare global {
   interface RequestInit {
-    targetAddressSpace?: "local" | "private" | "public";
+    targetAddressSpace?: "loopback" | "local" | "private" | "public";
   }
 }
 
@@ -97,8 +97,8 @@ function clearToken(): void {
   }
 }
 
-// Determine whether a URL is targeting the local loopback / LAN.
-function isLocalUrl(url: string): boolean {
+// Determine whether a URL is targeting loopback (127.0.0.1 / localhost).
+function isLoopbackUrl(url: string): boolean {
   return url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
 }
 
@@ -107,10 +107,10 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
     // `targetAddressSpace` is read directly from the (now-augmented) RequestInit.
-    // For local URLs we default to "local" so Chrome's Private Network Access
-    // preflight is handled correctly.
+    // For loopback URLs (127.0.0.1 / localhost) we default to "loopback" so Chrome's
+    // Local / Private Network Access security check matches the resource's actual IP space.
     const tas: RequestInit["targetAddressSpace"] =
-      init?.targetAddressSpace ?? (isLocalUrl(url) ? "local" : undefined);
+      init?.targetAddressSpace ?? (isLoopbackUrl(url) ? "loopback" : undefined);
 
     const res = await fetch(url, {
       ...init,
@@ -186,7 +186,7 @@ export async function probeLocalAccess(): Promise<LocalAccessResult> {
     try {
       res = await fetch(AGENT_HEALTH_PATH, {
         method: "GET",
-        targetAddressSpace: "local",
+        targetAddressSpace: "loopback",
         referrerPolicy: "no-referrer",
         signal: controller.signal,
         headers: { Accept: "application/json" },
