@@ -14,6 +14,7 @@ import {
 } from "@/lib/printAgent/client";
 
 const INSTALLER_URL = "/api/print-agent/download";
+const AGENT_INSTALL_FLAG = "pos_print_agent_install_attempted";
 
 export interface PrintAgentDialogProps {
   isOpen: boolean;
@@ -21,38 +22,35 @@ export interface PrintAgentDialogProps {
   onReady?: (state: Partial<PrintAgentState>) => void;
 }
 
-function statusCopy(status: AgentStatus, printerName?: string | null) {
+function statusCopy(status: string, printerName?: string | null) {
   switch (status) {
     case "ready":
-      return {
-        title: "Printer Ready",
-        subtitle: printerName ? `Default printer: ${printerName}` : "Windows default printer detected",
-        tone: "success" as const,
-      };
+      return { title: "Silent Printing Ready", subtitle: "Connected to the local Print Agent. Receipts will print silently to the Windows default printer.", tone: "success" as const };
     case "no_default_printer":
-      return {
-        title: "Printer Not Configured",
-        subtitle: "No Windows default printer was found. Set one as the Windows default printer, then check again.",
-        tone: "warning" as const,
-      };
+      return { title: "Printer Not Configured", subtitle: "No Windows default printer was found. Set one as the Windows default printer, then check again.", tone: "warning" as const };
     case "unavailable":
-      return {
-        title: "Print Agent Not Detected",
-        subtitle: "We could not reach the local Print Agent on http://127.0.0.1:9100. Ensure it is installed and running.",
-        tone: "warning" as const,
-      };
+      return { title: "Print Agent Not Detected", subtitle: "We could not reach the local Print Agent on http://127.0.0.1:9100. Download and install it, then click Check Again.", tone: "warning" as const };
     case "installed":
-      return {
-        title: "Print Agent Detected",
-        subtitle: "The agent is running but needs to be paired with this POS window. Click Check Again to finish setup.",
-        tone: "info" as const,
-      };
+      return { title: "Print Agent Detected", subtitle: "The agent is running. Complete pairing/permission if prompted, then proceed.", tone: "info" as const };
+    case "needPermission":
+      return { title: "Allow Local Printing", subtitle: "Chrome will ask for permission to communicate with the local printing service. When prompted, select Allow. This is required for silent printing.", tone: "info" as const };
+    case "permissionBlocked":
+      return { title: "Local Printing Permission Required", subtitle: "Chrome blocked access to the local printing service. Allow Local Network Access for this site in Chrome, then try again.", tone: "warning" as const };
     default:
-      return {
-        title: "Checking Print Agent",
-        subtitle: "Looking for the local silent printing component...",
-        tone: "info" as const,
-      };
+      return { title: "Checking Print Agent", subtitle: "Looking for the local silent printing component...", tone: "info" as const };
+  }
+}
+
+async function probeHealth(): Promise<boolean> {
+  try {
+    const res = await fetch("http://127.0.0.1:9100/health", {
+      method: "GET",
+      targetAddressSpace: "local",
+    } as RequestInit);
+    if (!res.ok) return false;
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -82,11 +80,15 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
         onReady(mapped);
       }
     } catch (err: any) {
+      let installAttempted = false;
+      try {
+        installAttempted = localStorage.getItem(AGENT_INSTALL_FLAG) === "1";
+      } catch {}
       setState((prev) => ({
         ...prev,
-        status: "unavailable",
+        status: installAttempted ? "needPermission" : "unavailable",
         isChecking: false,
-        error: err?.message || "Agent not detected",
+        error: installAttempted ? undefined : (err?.message || "Agent not detected"),
       }));
     }
   }, [onReady]);
@@ -98,6 +100,9 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
   }, [isOpen, runCheck]);
 
   const handleInstall = useCallback(() => {
+    try {
+      localStorage.setItem(AGENT_INSTALL_FLAG, "1");
+    } catch {}
     const anchor = document.createElement("a");
     anchor.href = INSTALLER_URL;
     anchor.download = "ButcheryPrintAgent-Setup.exe";
@@ -122,6 +127,23 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
     }
   }, [runCheck]);
 
+
+  const handlePermissionProbe = useCallback(async () => {
+    setState((prev) => ({ ...prev, isChecking: true, error: undefined }));
+    const ok = await probeHealth();
+    if (ok) {
+      await runCheck();
+    } else {
+      setState((prev) => ({
+        ...prev,
+        status: 'permissionBlocked',
+        isChecking: false,
+        error: undefined,
+      }));
+    }
+  }, [runCheck]);
+
+
   const handleTest = useCallback(async () => {
     setState((prev) => ({ ...prev, isPrinting: true, error: undefined }));
     try {
@@ -139,9 +161,11 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
   if (!isOpen) return null;
 
   const copy = statusCopy(state.status, state.printer?.name);
-  const showInstall = state.status !== "ready" && state.status !== "installed";
+  const showInstall = state.status !== "ready" && state.status !== "installed" && state.status !== "needPermission";
   const showPair = state.status === "installed" && !state.token;
   const showTest = state.status === "ready";
+  const showPermissionContinue = state.status === "needPermission";
+  const showPermissionRetry = state.status === "permissionBlocked";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 select-none">
@@ -192,6 +216,28 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
             >
               <Download className="w-4 h-4" />
               <span>Install Print Agent</span>
+            </button>
+          )}
+          {showPermissionContinue && (
+            <button
+              type="button"
+              onClick={handlePermissionProbe}
+              disabled={state.isChecking}
+              className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-2xs transition-colors disabled:opacity-50"
+            >
+              {state.isChecking ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>Continue</span>
+            </button>
+          )}
+          {showPermissionRetry && (
+            <button
+              type="button"
+              onClick={handlePermissionProbe}
+              disabled={state.isChecking}
+              className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold shadow-2xs transition-colors disabled:opacity-50"
+            >
+              {state.isChecking ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              <span>Try Again</span>
             </button>
           )}
           {showPair && (

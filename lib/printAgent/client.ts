@@ -1,3 +1,12 @@
+// Local Network Access support for requests to 127.0.0.1
+declare global {
+  interface RequestInit {
+    targetAddressSpace?: "local" | "private" | "public";
+  }
+}
+
+export {};
+
 import { buildEscPosReceipt } from "@/lib/qz/receipt";
 
 export const AGENT_HOST = "http://127.0.0.1:9100";
@@ -8,7 +17,7 @@ export const AGENT_STATUS_PATH = `${AGENT_HOST}/v1/status`;
 export const AGENT_PRINT_PATH = `${AGENT_HOST}/v1/print`;
 export const AGENT_TEST_PATH = `${AGENT_HOST}/v1/test`;
 
-export type AgentStatus = "unknown" | "installed" | "no_default_printer" | "unavailable" | "ready";
+export type AgentStatus = "unknown" | "installed" | "no_default_printer" | "unavailable" | "ready" | "needPermission" | "permissionBlocked";
 
 export interface AgentHealth {
   status?: string;
@@ -78,6 +87,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   try {
     const res = await fetch(url, {
       ...init,
+      targetAddressSpace: (init as any)?.targetAddressSpace ?? (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") ? "local" : undefined),
       signal: controller.signal,
       headers: {
         Accept: "application/json",
