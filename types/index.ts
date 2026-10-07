@@ -240,6 +240,9 @@ export interface RestaurantTable {
   total_active_amount: number;
   active_bills_count: number;
   active_bills: RestaurantBill[];
+  is_locked: boolean;
+  locked_by_user_id?: number | null;
+  locked_by_name?: string | null;
   created_at?: string;
   updated_at?: string;
 }

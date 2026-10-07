@@ -285,7 +285,7 @@ export default function PosPage() {
     removeHeldOrder(order.id);
   };
 
-  // Start a new blank bill
+  // Start a new blank bill / exit active table
   const handleNewBill = async () => {
     if (items.length > 0) {
       const shouldHold = await confirm({
@@ -309,6 +309,10 @@ export default function PosPage() {
         console.error("Clean up empty bill error:", e);
       }
     }
+    // Unlock the table so other users can access it
+    if (activeTable) {
+      try { await restaurantService.unlockTable(activeTable.id); } catch (e) { console.error("Unlock table error:", e); }
+    }
     clearCart();
     setSelectedCustomer(null);
     setActiveBill(null);
@@ -317,8 +321,25 @@ export default function PosPage() {
     fetchRestaurantTables();
   };
 
-  // Restaurant: Open Bill for Ordering
-  const handleOpenBillForOrdering = (table: RestaurantTable, bill: RestaurantBill) => {
+  // Restaurant: Open Bill for Ordering (with table lock)
+  const handleOpenBillForOrdering = async (table: RestaurantTable, bill: RestaurantBill) => {
+    // Attempt to lock table — blocks if another user already has it
+    try {
+      await restaurantService.lockTable(table.id);
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        const lockedBy = err.response.data?.locked_by_name || "another user";
+        await alert({
+          title: "Table In Use",
+          message: `Table ${table.table_number} is currently being managed by ${lockedBy}. Please ask them to exit the table first before you can access it.`,
+          type: "warning",
+        });
+        return; // Block entry
+      }
+      // Non-conflict errors: warn but allow through (network hiccup etc.)
+      console.warn("Lock table warning:", err);
+    }
+
     setActiveTable(table);
     setActiveBill(bill);
 
@@ -711,10 +732,15 @@ export default function PosPage() {
 
       clearCart();
       setSelectedCustomer(null);
+      // Unlock the table on settlement so other users can access it
+      const tableToUnlock = activeTable;
       setActiveBill(null);
       setActiveTable(null);
       setHasUnsavedOrder(false);
       setActiveTab("tables");
+      if (tableToUnlock) {
+        try { await restaurantService.unlockTable(tableToUnlock.id); } catch (e) { console.error("Unlock on settle error:", e); }
+      }
       fetchRestaurantTables();
       fetchUnpaidSales();
       productsService

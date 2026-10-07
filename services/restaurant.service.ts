@@ -101,4 +101,18 @@ export const restaurantService = {
     );
     return res.data;
   },
+
+  async lockTable(tableId: number): Promise<{ message: string; locked_by_name?: string }> {
+    const res = await apiClient.post<{ message: string; locked_by_name?: string }>(
+      `/restaurant/tables/${tableId}/lock`
+    );
+    return res.data;
+  },
+
+  async unlockTable(tableId: number): Promise<{ message: string }> {
+    const res = await apiClient.post<{ message: string }>(
+      `/restaurant/tables/${tableId}/unlock`
+    );
+    return res.data;
+  },
 };
