@@ -11,7 +11,8 @@ import { printElementInWindow } from "@/lib/printWindow";
 import { buildEscPosReceipt } from "@/lib/qz/receipt";
 import { PrinterSettingsModal } from "@/components/pos/PrinterSettingsModal";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
-import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos } from "@/lib/printAgent/client";
+import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos, printHtmlSlip } from "@/lib/printAgent/client";
+import { renderReceiptHtml } from "@/lib/printAgent/receiptHtml";
 import type { PrintAgentState } from "@/lib/printAgent/client";
 
 interface ReceiptModalProps {
@@ -55,9 +56,10 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             return;
           }
         }
-        const escpos = buildEscPosReceipt(sale, settings);
-        const res = await printEscPos(escpos, {
+        const html = renderReceiptHtml(sale, settings, isRestaurant);
+        const res = await printHtmlSlip(html, {
           title: `Receipt #${sale.sale_number}`,
+          widthMm: 80,
         });
         if (res.status === "FAILED") {
           logSetupStep(opId, "failed", { resError: res.error });
@@ -67,6 +69,16 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             type: "danger",
           });
           setIsPrintAgentOpen(true);
+          return;
+        }
+        if (res.status === "PENDING" && res.reason) {
+          logSetupStep(opId, "queued", { reason: res.reason });
+          await alert({
+            title: "Receipt Queued",
+            message:
+              "The receipt is queued in the Print Agent and will print automatically once the printer is connected.",
+            type: "info",
+          });
           return;
         }
         logSetupStep(opId, "complete");
@@ -89,15 +101,16 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
       runAutoPrint();
     }, 150);
     return () => clearTimeout(timer);
-  }, [isOpen, sale, autoPrint, settings, alert]);
+  }, [isOpen, sale, autoPrint, settings, alert, isRestaurant]);
 
   const handlePrint = async () => {
     if (!sale) return;
     setIsPrinting(true);
     try {
-      const escpos = buildEscPosReceipt(sale, settings);
-      const res = await printEscPos(escpos, {
+      const html = renderReceiptHtml(sale, settings, isRestaurant);
+      const res = await printHtmlSlip(html, {
         title: `Receipt #${sale.sale_number}`,
+        widthMm: 80,
       });
       if (res.status === "FAILED") {
         await alert({
@@ -112,7 +125,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         await alert({
           title: "Receipt Queued",
           message:
-            "The receipt is waiting for the printer. It will print automatically when the printer becomes available.",
+            "The receipt is queued in the Print Agent and will print automatically once the printer is connected.",
           type: "info",
         });
         return;

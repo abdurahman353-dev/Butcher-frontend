@@ -126,7 +126,7 @@ export function createSetupOperationId(): string {
 
 export function logSetupStep(
   operationId: string,
-  step: "health" | "printer" | "pair" | "print" | "complete" | "failed" | "permission",
+  step: "health" | "printer" | "pair" | "print" | "complete" | "failed" | "permission" | "queued",
   details?: any
 ): void {
   console.log(`[PrintSetup] operation=${operationId} step=${step}`, details ?? "");
