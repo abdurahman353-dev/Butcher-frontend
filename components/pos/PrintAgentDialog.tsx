@@ -9,6 +9,7 @@ import {
   detectAgentState,
   mapStateFromDetection,
   pairAgent,
+  probeLocalAccess,
   testPrint,
   getToken,
 } from "@/lib/printAgent/client";
@@ -41,19 +42,6 @@ function statusCopy(status: string, printerName?: string | null) {
   }
 }
 
-async function probeHealth(): Promise<boolean> {
-  try {
-    const res = await fetch("http://127.0.0.1:9100/health", {
-      method: "GET",
-      targetAddressSpace: "local",
-      referrerPolicy: "no-referrer",
-    } as RequestInit);
-    if (!res.ok) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogProps) {
   const [state, setState] = useState<PrintAgentState>({
@@ -67,10 +55,12 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
   });
 
   const runCheck = useCallback(async () => {
+    console.log("[PrintAgent] Check Again clicked");
     setState((prev) => ({ ...prev, isChecking: true, error: undefined }));
     try {
       const detected = await detectAgentState();
       const mapped = mapStateFromDetection(detected);
+      console.log("[PrintAgent] Detection result:", detected, "→ state:", mapped.status);
       setState((prev) => ({
         ...prev,
         ...mapped,
@@ -80,16 +70,20 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
       if (onReady && (mapped.status === "ready" || detected.printer)) {
         onReady(mapped);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      console.error("[PrintAgent] runCheck error:", err);
       let installAttempted = false;
       try {
         installAttempted = localStorage.getItem(AGENT_INSTALL_FLAG) === "1";
-      } catch {}
+      } catch { /* ignore */ }
+      // TypeError means "Failed to fetch" which is usually a PNA/CORS block,
+      // not a missing agent.  Show permission guidance rather than install CTA.
+      const isPnaBlock = err instanceof TypeError;
       setState((prev) => ({
         ...prev,
-        status: installAttempted ? "needPermission" : "unavailable",
+        status: isPnaBlock ? "needPermission" : (installAttempted ? "needPermission" : "unavailable"),
         isChecking: false,
-        error: installAttempted ? undefined : (err?.message || "Agent not detected"),
+        error: isPnaBlock ? undefined : (installAttempted ? undefined : (err instanceof Error ? err.message : "Agent not detected")),
       }));
     }
   }, [onReady]);
@@ -103,7 +97,7 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
   const handleInstall = useCallback(() => {
     try {
       localStorage.setItem(AGENT_INSTALL_FLAG, "1");
-    } catch {}
+    } catch { }
     const anchor = document.createElement("a");
     anchor.href = INSTALLER_URL;
     anchor.download = "ButcheryPrintAgent-Setup.exe";
@@ -130,16 +124,18 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
 
 
   const handlePermissionProbe = useCallback(async () => {
+    console.log("[PrintAgent] Permission probe triggered");
     setState((prev) => ({ ...prev, isChecking: true, error: undefined }));
-    const ok = await probeHealth();
-    if (ok) {
+    const result = await probeLocalAccess();
+    console.log("[PrintAgent] Permission probe result:", result);
+    if (result.outcome === "ok") {
       await runCheck();
     } else {
       setState((prev) => ({
         ...prev,
-        status: 'permissionBlocked',
+        status: result.outcome === "blocked" ? "permissionBlocked" : "unavailable",
         isChecking: false,
-        error: undefined,
+        error: result.outcome === "blocked" ? undefined : result.error,
       }));
     }
   }, [runCheck]);

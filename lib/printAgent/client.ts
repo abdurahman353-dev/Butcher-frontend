@@ -1,13 +1,24 @@
-// Local Network Access support for requests to 127.0.0.1
+// ---------------------------------------------------------------------------
+// Local / Private Network Access — type-safe RequestInit extension.
+//
+// Chrome 94+ sends an OPTIONS preflight with
+//   Access-Control-Request-Private-Network: true
+// when an HTTPS page fetches a loopback / LAN address.  The server must
+// respond with  Access-Control-Allow-Private-Network: true.
+// Passing `targetAddressSpace: "local"` signals Chrome that this fetch
+// intentionally targets the local network.
+//
+// `targetAddressSpace` is not in the TypeScript DOM lib yet, so we augment
+// the global RequestInit interface.  The import below makes this file an ES
+// module, which is required for `declare global` augmentations to be scoped
+// correctly.
+import { buildEscPosReceipt } from "@/lib/qz/receipt";
+
 declare global {
   interface RequestInit {
-    targetAddressSpace?: "local" | "private" | "public";
+    targetAddressSpace?: "loopback" | "local" | "private" | "public";
   }
 }
-
-export {};
-
-import { buildEscPosReceipt } from "@/lib/qz/receipt";
 
 export const AGENT_HOST = "http://127.0.0.1:9100";
 export const AGENT_HEALTH_PATH = `${AGENT_HOST}/health`;
@@ -18,6 +29,11 @@ export const AGENT_PRINT_PATH = `${AGENT_HOST}/v1/print`;
 export const AGENT_TEST_PATH = `${AGENT_HOST}/v1/test`;
 
 export type AgentStatus = "unknown" | "installed" | "no_default_printer" | "unavailable" | "ready" | "needPermission" | "permissionBlocked";
+
+/** Tagged error interface used to carry HTTP status codes. */
+interface HttpError extends Error {
+  status?: number;
+}
 
 export interface AgentHealth {
   status?: string;
@@ -81,13 +97,24 @@ function clearToken(): void {
   }
 }
 
+// Determine whether a URL is targeting loopback (127.0.0.1 / localhost).
+function isLoopbackUrl(url: string): boolean {
+  return url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
   try {
+    // `targetAddressSpace` is read directly from the (now-augmented) RequestInit.
+    // For loopback URLs (127.0.0.1 / localhost) we default to "loopback" so Chrome's
+    // Local / Private Network Access security check matches the resource's actual IP space.
+    const tas: RequestInit["targetAddressSpace"] =
+      init?.targetAddressSpace ?? (isLoopbackUrl(url) ? "loopback" : undefined);
+
     const res = await fetch(url, {
       ...init,
-      targetAddressSpace: (init as any)?.targetAddressSpace ?? (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") ? "local" : undefined),
+      targetAddressSpace: tas,
       referrerPolicy: "no-referrer",
       signal: controller.signal,
       headers: {
@@ -98,13 +125,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     if (!res.ok) {
       let detail: string | undefined;
       try {
-        const data = await res.json();
-        detail = (data as any)?.detail || (data as any)?.error;
+        const data: unknown = await res.json();
+        if (data && typeof data === "object") {
+          const d = data as Record<string, unknown>;
+          detail = (typeof d.detail === "string" ? d.detail : undefined)
+            ?? (typeof d.error === "string" ? d.error : undefined);
+        }
       } catch {
-        // ignore
+        // ignore parse error
       }
       const err = new Error(detail || `Request failed (${res.status})`);
-      (err as any).status = res.status;
+      (err as HttpError).status = res.status;
       throw err;
     }
     const text = await res.text();
@@ -123,6 +154,69 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export async function checkHealth(): Promise<AgentHealth> {
   return fetchJson<AgentHealth>(AGENT_HEALTH_PATH);
+}
+
+/**
+ * Probes the local agent health endpoint and classifies the result.
+ *
+ * Returns:
+ *  - `ok`      — agent responded with HTTP 200
+ *  - `blocked` — fetch threw a network error despite the agent being known to
+ *                be running (indicates Chrome PNA / CORS blocking)
+ *  - `offline` — the agent is not running on this machine
+ *
+ * The heuristic: if the AbortError / TypeError message mentions "Failed to
+ * fetch" or "NetworkError" and the previous direct-browser test of the same
+ * URL succeeded, it's almost certainly a PNA block rather than an offline agent.
+ * We can't distinguish these 100% from JS so we leave the callers to remember
+ * context (e.g. install flag) and decide which label to show.
+ */
+export type LocalAccessResult =
+  | { outcome: "ok"; health: AgentHealth }
+  | { outcome: "blocked"; error: string }
+  | { outcome: "offline"; error: string };
+
+export async function probeLocalAccess(): Promise<LocalAccessResult> {
+  console.log("[PrintAgent] Requesting local agent health");
+  console.log("[PrintAgent] URL:", AGENT_HEALTH_PATH);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let res: Response;
+    try {
+      res = await fetch(AGENT_HEALTH_PATH, {
+        method: "GET",
+        targetAddressSpace: "loopback",
+        referrerPolicy: "no-referrer",
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    console.log("[PrintAgent] HTTP status:", res.status);
+    if (!res.ok) {
+      return { outcome: "offline", error: `HTTP ${res.status}` };
+    }
+    const data = await res.json() as AgentHealth;
+    console.log("[PrintAgent] Response:", data);
+    return { outcome: "ok", health: data };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[PrintAgent] Health check failed:", err);
+    // AbortError = timeout.  TypeError "Failed to fetch" / "NetworkError" is
+    // what Chrome throws when PNA or CORS blocks the preflight.
+    const isNetworkError =
+      (err instanceof TypeError) ||
+      (err instanceof DOMException && err.name === "AbortError");
+    if (isNetworkError) {
+      // We can't know for sure if the agent is offline vs PNA-blocked from JS.
+      // Return "blocked" — callers check the install flag to decide which
+      // message to show.
+      return { outcome: "blocked", error: msg };
+    }
+    return { outcome: "offline", error: msg };
+  }
 }
 
 export async function pairAgent(clientName = "Online Butchery POS"): Promise<string> {
@@ -257,12 +351,19 @@ export async function detectAgentState(): Promise<{
   health?: AgentHealth;
   printer?: AgentPrinter;
   error?: string;
+  localAccessBlocked?: boolean;
 }> {
   let health: AgentHealth | undefined;
   try {
     health = await checkHealth();
-  } catch (err: any) {
-    return { error: err?.message || "Agent not reachable" };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // TypeError = "Failed to fetch" is Chrome's signal for a network/PNA block.
+    // AbortError = our 5-second timeout fired (agent unresponsive or offline).
+    const localAccessBlocked =
+      (err instanceof TypeError) &&
+      !String(msg).toLowerCase().includes("timed out");
+    return { error: msg, localAccessBlocked };
   }
   let token = getToken();
   if (!token) {
@@ -272,11 +373,13 @@ export async function detectAgentState(): Promise<{
   if (token) {
     try {
       printer = await getPrinter();
-    } catch (err: any) {
-      if (ensureTokenClearedOn401(err)) {
+    } catch (err: unknown) {
+      const typedErr = err as HttpError;
+      if (ensureTokenClearedOn401(typedErr)) {
         token = null;
       } else {
-        return { health, error: err?.message || "Failed to query printer" };
+        const msg = err instanceof Error ? err.message : String(err);
+        return { health, error: msg };
       }
     }
   }
@@ -290,8 +393,20 @@ export function mapStateFromDetection(d: {
   health?: AgentHealth;
   printer?: AgentPrinter;
   error?: string;
+  localAccessBlocked?: boolean;
 }): Partial<PrintAgentState> {
   if (d.error && !d.health) {
+    // Distinguish Chrome PNA / CORS blocking from the agent genuinely offline.
+    // When localAccessBlocked=true the browser issued the request but Chrome
+    // blocked it at the preflight stage — the agent IS running.
+    if (d.localAccessBlocked) {
+      return {
+        status: "needPermission",
+        error: undefined, // shown as an instruction, not an error
+        printer: null,
+        token: getToken(),
+      };
+    }
     return {
       status: "unavailable",
       error: d.error,
