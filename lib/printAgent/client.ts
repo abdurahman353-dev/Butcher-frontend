@@ -88,6 +88,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     const res = await fetch(url, {
       ...init,
       targetAddressSpace: (init as any)?.targetAddressSpace ?? (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost") ? "local" : undefined),
+      referrerPolicy: "no-referrer",
       signal: controller.signal,
       headers: {
         Accept: "application/json",

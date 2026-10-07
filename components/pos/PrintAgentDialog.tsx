@@ -46,6 +46,7 @@ async function probeHealth(): Promise<boolean> {
     const res = await fetch("http://127.0.0.1:9100/health", {
       method: "GET",
       targetAddressSpace: "local",
+      referrerPolicy: "no-referrer",
     } as RequestInit);
     if (!res.ok) return false;
     return true;
