@@ -11,7 +11,7 @@ import { printElementInWindow } from "@/lib/printWindow";
 import { buildEscPosReceipt } from "@/lib/qz/receipt";
 import { PrinterSettingsModal } from "@/components/pos/PrinterSettingsModal";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
-import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
+import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos } from "@/lib/printAgent/client";
 import type { PrintAgentState } from "@/lib/printAgent/client";
 
 interface ReceiptModalProps {
@@ -31,26 +31,26 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [agentState, setAgentState] = useState<Partial<PrintAgentState>>({});
-  const pendingAutoPrint = useRef(autoPrint);
+  const autoPrintAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
-      pendingAutoPrint.current = autoPrint;
+      autoPrintAttemptedRef.current = false;
     }
-  }, [isOpen, autoPrint]);
+  }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !sale) return;
+    if (!isOpen || !sale || !autoPrint || autoPrintAttemptedRef.current) return;
+    autoPrintAttemptedRef.current = true;
+
     const runAutoPrint = async () => {
+      const opId = createSetupOperationId();
+      logSetupStep(opId, "print", { sale: sale.sale_number, autoPrint: true });
       try {
         const token = getToken();
         if (!token) {
-          const detected = await detectAgentState();
-          if (detected.health && !detected.printer && !detected.error) {
-            setIsPrintAgentOpen(true);
-            return;
-          }
-          if (!detected.health) {
+          const detected = await detectAgentState(opId);
+          if (!detected.health || (!detected.printer && !detected.error)) {
             setIsPrintAgentOpen(true);
             return;
           }
@@ -60,6 +60,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           title: `Receipt #${sale.sale_number}`,
         });
         if (res.status === "FAILED") {
+          logSetupStep(opId, "failed", { resError: res.error });
           await alert({
             title: "Print Failed",
             message: res.error || "The receipt could not be printed.",
@@ -68,12 +69,11 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           setIsPrintAgentOpen(true);
           return;
         }
-        // PRINTED or PENDING: queued locally if printer unavailable
-        pendingAutoPrint.current = false;
+        logSetupStep(opId, "complete");
       } catch (err: any) {
+        logSetupStep(opId, "failed", { error: err?.message });
         if (ensureTokenClearedOn401(err)) {
           setIsPrintAgentOpen(true);
-          pendingAutoPrint.current = true;
           return;
         }
         await alert({
@@ -82,18 +82,14 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
           type: "warning",
         });
         setIsPrintAgentOpen(true);
-        pendingAutoPrint.current = true;
       }
     };
-    if (pendingAutoPrint.current) {
-      const timer = setTimeout(() => {
-        pendingAutoPrint.current = false;
-        runAutoPrint();
-      }, 150);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [isOpen, sale, settings, alert]);
+
+    const timer = setTimeout(() => {
+      runAutoPrint();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen, sale, autoPrint, settings, alert]);
 
   const handlePrint = async () => {
     if (!sale) return;
@@ -214,10 +210,10 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                 {sale.sale_status === "partially_refunded"
                   ? "PARTIALLY REFUNDED"
                   : sale.sale_status === "refunded"
-                  ? "FULLY REFUNDED"
-                  : sale.payment_method === "free"
-                  ? "FREE MEAL"
-                  : sale.sale_status.toUpperCase()}
+                    ? "FULLY REFUNDED"
+                    : sale.payment_method === "free"
+                      ? "FREE MEAL"
+                      : sale.sale_status.toUpperCase()}
               </span>
             </div>
             <div>
@@ -308,9 +304,8 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
             )}
 
             <div
-              className={`flex justify-between font-black pt-1 border-t-2 border-black ${
-                (sale.refunded_amount || 0) > 0 ? "text-xs text-zinc-600 line-through" : "text-sm sm:text-base text-black"
-              }`}
+              className={`flex justify-between font-black pt-1 border-t-2 border-black ${(sale.refunded_amount || 0) > 0 ? "text-xs text-zinc-600 line-through" : "text-sm sm:text-base text-black"
+                }`}
             >
               <span>{(sale.refunded_amount || 0) > 0 ? "ORIGINAL TOTAL:" : "TOTAL:"}</span>
               <span>{formatCurrency(sale.total)}</span>
@@ -411,8 +406,8 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
                 {sale.payment_method === "free"
                   ? "FREE MEAL (COMPLIMENTARY)"
                   : sale.payment_status === "pending" || sale.payment_method === "credit"
-                  ? "PAY LATER (CREDIT)"
-                  : sale.payment_method}
+                    ? "PAY LATER (CREDIT)"
+                    : sale.payment_method}
               </span>
             </div>
 
@@ -516,8 +511,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         onClose={() => setIsPrintAgentOpen(false)}
         onReady={(s) => {
           setAgentState(s);
-          if (s.status === "ready" && pendingAutoPrint.current && sale) {
-            pendingAutoPrint.current = false;
+          if (s.status === "ready" && sale && !isPrinting) {
             void handlePrint();
           }
         }}

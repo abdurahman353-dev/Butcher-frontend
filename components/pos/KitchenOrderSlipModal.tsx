@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { printElementInWindow } from "@/lib/printWindow";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
 import { buildKitchenSlipEscPos } from "@/lib/qz/receipt";
-import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
+import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos } from "@/lib/printAgent/client";
 
 interface KitchenOrderSlipModalProps {
   bill: RestaurantBill | null;
@@ -35,13 +35,13 @@ export function KitchenOrderSlipModal({
   const isWaiter = user?.role === "waiter";
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
-  const pendingAutoPrint = useRef(autoPrint);
+  const autoPrintAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
-      pendingAutoPrint.current = autoPrint;
+      autoPrintAttemptedRef.current = false;
     }
-  }, [isOpen, autoPrint]);
+  }, [isOpen]);
 
   // State to filter for a single item reprint when there are multiple items
   const [selectedProductId, setSelectedProductId] = useState<number | "all">("all");
@@ -58,12 +58,16 @@ export function KitchenOrderSlipModal({
     // Waiters cannot reprint kitchen slips
     if (isReprint && isWaiter) return;
 
-    if (!isOpen || !bill) return;
+    if (!isOpen || !bill || !autoPrint || autoPrintAttemptedRef.current) return;
+    autoPrintAttemptedRef.current = true;
+
     const run = async () => {
+      const opId = createSetupOperationId();
+      logSetupStep(opId, "print", { bill: bill.bill_number, autoPrint: true });
       try {
         const token = getToken();
         if (!token) {
-          const detected = await detectAgentState();
+          const detected = await detectAgentState(opId);
           if (!detected.health || (!detected.printer && !detected.error)) {
             setIsPrintAgentOpen(true);
             return;
@@ -77,6 +81,7 @@ export function KitchenOrderSlipModal({
         );
         const res = await printEscPos(escpos, { title: `KOT #${bill.bill_number}` });
         if (res.status === "FAILED") {
+          logSetupStep(opId, "failed", { resError: res.error });
           await alert({
             title: "Print Failed",
             message: res.error || "The kitchen slip could not be printed.",
@@ -85,11 +90,11 @@ export function KitchenOrderSlipModal({
           setIsPrintAgentOpen(true);
           return;
         }
-        pendingAutoPrint.current = false;
+        logSetupStep(opId, "complete");
       } catch (err: any) {
+        logSetupStep(opId, "failed", { error: err?.message });
         if (ensureTokenClearedOn401(err)) {
           setIsPrintAgentOpen(true);
-          pendingAutoPrint.current = true;
           return;
         }
         await alert({
@@ -98,18 +103,14 @@ export function KitchenOrderSlipModal({
           type: "warning",
         });
         setIsPrintAgentOpen(true);
-        pendingAutoPrint.current = true;
       }
     };
-    if (pendingAutoPrint.current) {
-      const timer = setTimeout(() => {
-        pendingAutoPrint.current = false;
-        run();
-      }, 150);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [isOpen, bill, alert, isReprint, isWaiter]);
+
+    const timer = setTimeout(() => {
+      run();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen, bill, autoPrint, alert, isReprint, isWaiter]);
 
   if (!isOpen || !bill) return null;
 
@@ -243,8 +244,8 @@ export function KitchenOrderSlipModal({
                 type="button"
                 onClick={() => setSelectedProductId("all")}
                 className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${selectedProductId === "all"
-                    ? "bg-zinc-900 text-white"
-                    : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
+                  ? "bg-zinc-900 text-white"
+                  : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
                   }`}
               >
                 All Items ({allItems.length})
@@ -255,8 +256,8 @@ export function KitchenOrderSlipModal({
                   type="button"
                   onClick={() => setSelectedProductId(item.product_id)}
                   className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${selectedProductId === item.product_id
-                      ? "bg-emerald-600 text-white"
-                      : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
                     }`}
                 >
                   <span>{item.weight}x {item.product_name}</span>

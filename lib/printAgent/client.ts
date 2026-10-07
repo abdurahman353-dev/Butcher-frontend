@@ -69,6 +69,7 @@ export interface PrintAgentState {
 }
 
 const TOKEN_KEY = "pos_print_agent_token";
+const SETUP_COMPLETE_KEY = "pos_print_agent_setup_complete";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -95,6 +96,40 @@ function clearToken(): void {
   } catch {
     // ignore
   }
+}
+
+export function isSetupComplete(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(SETUP_COMPLETE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setSetupComplete(complete: boolean = true): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (complete) {
+      localStorage.setItem(SETUP_COMPLETE_KEY, "true");
+    } else {
+      localStorage.removeItem(SETUP_COMPLETE_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function createSetupOperationId(): string {
+  return `setup_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+}
+
+export function logSetupStep(
+  operationId: string,
+  step: "health" | "printer" | "pair" | "print" | "complete" | "failed" | "permission",
+  details?: any
+): void {
+  console.log(`[PrintSetup] operation=${operationId} step=${step}`, details ?? "");
 }
 
 // Determine whether a URL is targeting loopback (127.0.0.1 / localhost).
@@ -347,12 +382,14 @@ export function ensureTokenClearedOn401(err: any): boolean {
   return false;
 }
 
-export async function detectAgentState(): Promise<{
+export async function detectAgentState(operationId?: string): Promise<{
   health?: AgentHealth;
   printer?: AgentPrinter;
   error?: string;
   localAccessBlocked?: boolean;
 }> {
+  const opId = operationId || createSetupOperationId();
+  logSetupStep(opId, "health");
   let health: AgentHealth | undefined;
   try {
     health = await checkHealth();
@@ -363,6 +400,7 @@ export async function detectAgentState(): Promise<{
     const localAccessBlocked =
       (err instanceof TypeError) &&
       !String(msg).toLowerCase().includes("timed out");
+    logSetupStep(opId, "failed", { error: msg, localAccessBlocked });
     return { error: msg, localAccessBlocked };
   }
   let token = getToken();
@@ -371,6 +409,7 @@ export async function detectAgentState(): Promise<{
   }
   let printer: AgentPrinter | undefined;
   if (token) {
+    logSetupStep(opId, "printer");
     try {
       printer = await getPrinter();
     } catch (err: unknown) {
@@ -379,6 +418,7 @@ export async function detectAgentState(): Promise<{
         token = null;
       } else {
         const msg = err instanceof Error ? err.message : String(err);
+        logSetupStep(opId, "failed", { error: msg });
         return { health, error: msg };
       }
     }

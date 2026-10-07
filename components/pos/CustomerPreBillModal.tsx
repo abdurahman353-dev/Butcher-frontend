@@ -9,7 +9,7 @@ import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
 import { buildEscPosReceipt } from "@/lib/qz/receipt";
-import { checkHealth, detectAgentState, ensureTokenClearedOn401, getToken, printEscPos } from "@/lib/printAgent/client";
+import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos } from "@/lib/printAgent/client";
 import type { Sale } from "@/types";
 
 interface CustomerPreBillModalProps {
@@ -29,31 +29,34 @@ export function CustomerPreBillModal({
   const { alert } = useSystemDialog();
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
-  const pendingAutoPrint = useRef(autoPrint);
+  const autoPrintAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
-      pendingAutoPrint.current = autoPrint;
+      autoPrintAttemptedRef.current = false;
     }
-  }, [isOpen, autoPrint]);
+  }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !bill) return;
+    if (!isOpen || !bill || !autoPrint || autoPrintAttemptedRef.current) return;
+    autoPrintAttemptedRef.current = true;
+
     const run = async () => {
+      const opId = createSetupOperationId();
+      logSetupStep(opId, "print", { bill: bill.bill_number, autoPrint: true });
       try {
         const token = getToken();
         if (!token) {
-          const detected = await detectAgentState();
+          const detected = await detectAgentState(opId);
           if (!detected.health || (!detected.printer && !detected.error)) {
             setIsPrintAgentOpen(true);
             return;
           }
         }
-        // Try agent: if bill maps to a sale? sometimes not. But requirement says all slips via agent.
-        // Build a minimal ESC/POS fallback not needed; just queue via agent? We'll try to build receipt-like ESC/POS
         const escpos = buildPreBillEscPos(bill, settings);
         const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}` });
         if (res.status === "FAILED") {
+          logSetupStep(opId, "failed", { resError: res.error });
           await alert({
             title: "Print Failed",
             message: res.error || "The pre-bill could not be printed.",
@@ -62,11 +65,11 @@ export function CustomerPreBillModal({
           setIsPrintAgentOpen(true);
           return;
         }
-        pendingAutoPrint.current = false;
+        logSetupStep(opId, "complete");
       } catch (err: any) {
+        logSetupStep(opId, "failed", { error: err?.message });
         if (ensureTokenClearedOn401(err)) {
           setIsPrintAgentOpen(true);
-          pendingAutoPrint.current = true;
           return;
         }
         await alert({
@@ -75,18 +78,14 @@ export function CustomerPreBillModal({
           type: "warning",
         });
         setIsPrintAgentOpen(true);
-        pendingAutoPrint.current = true;
       }
     };
-    if (pendingAutoPrint.current) {
-      const timer = setTimeout(() => {
-        pendingAutoPrint.current = false;
-        run();
-      }, 150);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [isOpen, bill, alert, settings]);
+
+    const timer = setTimeout(() => {
+      run();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen, bill, autoPrint, alert, settings]);
 
   if (!isOpen || !bill) return null;
 

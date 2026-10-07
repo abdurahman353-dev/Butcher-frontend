@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Download, RefreshCw, Printer, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 
 import {
@@ -12,6 +12,9 @@ import {
   probeLocalAccess,
   testPrint,
   getToken,
+  createSetupOperationId,
+  logSetupStep,
+  setSetupComplete,
 } from "@/lib/printAgent/client";
 
 const INSTALLER_URL = "/api/print-agent/download";
@@ -54,30 +57,44 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
     token: getToken(),
   });
 
+  const operationIdRef = useRef<string | null>(null);
+  const isCheckingRef = useRef(false);
+
   const runCheck = useCallback(async () => {
-    console.log("[PrintAgent] Check Again clicked");
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
+
+    const opId = operationIdRef.current || createSetupOperationId();
+    operationIdRef.current = opId;
+
+    logSetupStep(opId, "health");
     setState((prev) => ({ ...prev, isChecking: true, error: undefined }));
+
     try {
-      const detected = await detectAgentState();
+      const detected = await detectAgentState(opId);
       const mapped = mapStateFromDetection(detected);
-      console.log("[PrintAgent] Detection result:", detected, "→ state:", mapped.status);
+      logSetupStep(opId, "complete", { status: mapped.status });
+
+      if (mapped.status === "ready") {
+        setSetupComplete(true);
+      }
+
       setState((prev) => ({
         ...prev,
         ...mapped,
         isChecking: false,
         token: getToken(),
       }));
-      if (onReady && (mapped.status === "ready" || detected.printer)) {
+
+      if (onReady && mapped.status === "ready") {
         onReady(mapped);
       }
     } catch (err: unknown) {
-      console.error("[PrintAgent] runCheck error:", err);
+      logSetupStep(opId, "failed", { error: err });
       let installAttempted = false;
       try {
         installAttempted = localStorage.getItem(AGENT_INSTALL_FLAG) === "1";
       } catch { /* ignore */ }
-      // TypeError means "Failed to fetch" which is usually a PNA/CORS block,
-      // not a missing agent.  Show permission guidance rather than install CTA.
       const isPnaBlock = err instanceof TypeError;
       setState((prev) => ({
         ...prev,
@@ -85,12 +102,18 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
         isChecking: false,
         error: isPnaBlock ? undefined : (installAttempted ? undefined : (err instanceof Error ? err.message : "Agent not detected")),
       }));
+    } finally {
+      isCheckingRef.current = false;
     }
   }, [onReady]);
 
   useEffect(() => {
     if (isOpen) {
+      operationIdRef.current = createSetupOperationId();
       runCheck();
+    } else {
+      isCheckingRef.current = false;
+      operationIdRef.current = null;
     }
   }, [isOpen, runCheck]);
 
@@ -107,11 +130,16 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
   }, []);
 
   const handlePair = useCallback(async () => {
+    if (state.isPairing) return;
+    const opId = operationIdRef.current || createSetupOperationId();
+    logSetupStep(opId, "pair");
     setState((prev) => ({ ...prev, isPairing: true, error: undefined }));
     try {
       await pairAgent();
+      logSetupStep(opId, "complete", { paired: true });
       await runCheck();
     } catch (err: any) {
+      logSetupStep(opId, "failed", { pairError: err?.message });
       setState((prev) => ({
         ...prev,
         isPairing: false,
@@ -120,17 +148,19 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
     } finally {
       setState((prev) => ({ ...prev, isPairing: false }));
     }
-  }, [runCheck]);
+  }, [state.isPairing, runCheck]);
 
 
   const handlePermissionProbe = useCallback(async () => {
-    console.log("[PrintAgent] Permission probe triggered");
+    if (isCheckingRef.current) return;
+    const opId = operationIdRef.current || createSetupOperationId();
+    logSetupStep(opId, "permission");
     setState((prev) => ({ ...prev, isChecking: true, error: undefined }));
     const result = await probeLocalAccess();
-    console.log("[PrintAgent] Permission probe result:", result);
     if (result.outcome === "ok") {
       await runCheck();
     } else {
+      logSetupStep(opId, "failed", { permissionOutcome: result.outcome });
       setState((prev) => ({
         ...prev,
         status: result.outcome === "blocked" ? "permissionBlocked" : "unavailable",
@@ -142,18 +172,23 @@ export function PrintAgentDialog({ isOpen, onClose, onReady }: PrintAgentDialogP
 
 
   const handleTest = useCallback(async () => {
+    if (state.isPrinting) return;
+    const opId = operationIdRef.current || createSetupOperationId();
+    logSetupStep(opId, "print", { type: "test_print" });
     setState((prev) => ({ ...prev, isPrinting: true, error: undefined }));
     try {
       await testPrint();
+      logSetupStep(opId, "complete", { type: "test_print" });
       setState((prev) => ({ ...prev, isPrinting: false }));
     } catch (err: any) {
+      logSetupStep(opId, "failed", { testPrintError: err?.message });
       setState((prev) => ({
         ...prev,
         isPrinting: false,
         error: err?.message || "Test print failed",
       }));
     }
-  }, []);
+  }, [state.isPrinting]);
 
   if (!isOpen) return null;
 
