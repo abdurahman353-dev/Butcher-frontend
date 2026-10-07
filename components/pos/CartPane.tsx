@@ -246,9 +246,8 @@ export function CartPane({
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
                   Waiter: <span className="font-semibold text-zinc-700">{activeBill.waiter_name || "Staff"}{activeBill.waiter_pin ? ` (#${activeBill.waiter_pin})` : ""}</span>
-                  {" \u2022 "}{activeBill.guest_count} guest{activeBill.guest_count !== 1 ? "s" : ""}
                   {activeBill.customer_name && (
-                    <span className="font-bold text-emerald-800 ml-1">{" \u2022 "}Guest: {activeBill.customer_name}</span>
+                    <span className="font-bold text-emerald-800 ml-1">{" \u2022 "}{activeBill.customer_name}</span>
                   )}
                 </div>
               </div>
@@ -302,9 +301,9 @@ export function CartPane({
                       type="button"
                       onClick={() => onEditCustomer(selectedCustomer)}
                       title="Edit customer details"
-                      className="px-1.5 py-0.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[10px] flex items-center gap-1 shadow-2xs ml-0.5 active:scale-95 transition-transform"
+                      className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white text-[10px] font-black flex items-center gap-1 shadow-xs ml-0.5 transition-all"
                     >
-                      <Pencil className="w-2.5 h-2.5" />
+                      <Pencil className="w-3 h-3" />
                       <span>Edit</span>
                     </button>
                   )}

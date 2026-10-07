@@ -138,10 +138,10 @@ export default function PosPage() {
 
   const { isShiftOpen, isLoading: isShiftLoading } = useShift();
 
-  // Load tables
-  const fetchRestaurantTables = useCallback(async () => {
+  // Load tables — silent=true skips the loading spinner for background refreshes
+  const fetchRestaurantTables = useCallback(async (silent = false) => {
     try {
-      setIsTablesLoading(true);
+      if (!silent) setIsTablesLoading(true);
       const data = await restaurantService.getTables();
       setRestaurantTables(data);
       // If we have an active table, update its reference
@@ -158,7 +158,7 @@ export default function PosPage() {
     } catch (e) {
       console.error("Failed to load tables:", e);
     } finally {
-      setIsTablesLoading(false);
+      if (!silent) setIsTablesLoading(false);
     }
   }, [activeTable, activeBill]);
 
@@ -321,29 +321,19 @@ export default function PosPage() {
     fetchRestaurantTables();
   };
 
-  // Restaurant: Open Bill for Ordering (with table lock)
-  const handleOpenBillForOrdering = async (table: RestaurantTable, bill: RestaurantBill) => {
-    // Attempt to lock table — blocks if another user already has it
-    try {
-      await restaurantService.lockTable(table.id);
-    } catch (err: any) {
-      if (err?.response?.status === 409) {
-        const lockedBy = err.response.data?.locked_by_name || "another user";
-        await alert({
-          title: "Table In Use",
-          message: `Table ${table.table_number} is currently being managed by ${lockedBy}. Please ask them to exit the table first before you can access it.`,
-          type: "warning",
-        });
-        return; // Block entry
-      }
-      // Non-conflict errors: warn but allow through (network hiccup etc.)
-      console.warn("Lock table warning:", err);
-    }
-
+  // Restaurant: Open Bill for Ordering (instant & clean)
+  const handleOpenBillForOrdering = (table: RestaurantTable, bill: RestaurantBill) => {
+    // 1. Instantly switch UI to products ordering view
     setActiveTable(table);
     setActiveBill(bill);
+    setHasUnsavedOrder(false);
+    setIsTableModalOpen(false);
+    setActiveTab("products");
 
-    // Map existing bill items to CartItem format
+    // 2. Completely clean cart first to prevent ANY leftover products
+    clearCart();
+
+    // 3. Populate cart ONLY with this specific bill's saved items
     if (bill.items && bill.items.length > 0) {
       const cartItems: CartItem[] = bill.items.map((it, idx) => {
         const matchingProduct = products.find((p) => p.id === it.product_id);
@@ -366,8 +356,6 @@ export default function PosPage() {
         };
       });
       restoreItems(cartItems);
-    } else {
-      clearCart();
     }
 
     if (bill.customer_name) {
@@ -383,11 +371,15 @@ export default function PosPage() {
       setSelectedCustomer(null);
     }
 
-    setHasUnsavedOrder(false);
-    setActiveTab("products");
+    // Lock table in background (non-blocking)
+    restaurantService.lockTable(table.id).catch((err) => {
+      if (err?.response?.status === 409) {
+        console.warn("Table lock warning:", err);
+      }
+    });
   };
 
-  // Restaurant: Create a new bill on a table
+  // Restaurant: Create a new bill on a table (instant, unique, and clean cart)
   const handleCreateNewBill = async (
     table: RestaurantTable,
     payload: {
@@ -399,11 +391,41 @@ export default function PosPage() {
       notes?: string;
     }
   ) => {
+    // Instantly wipe cart and customer before opening new bill
+    clearCart();
+    setSelectedCustomer(null);
+    setHasUnsavedOrder(false);
+
     try {
       const newBill = await restaurantService.createBill(table.id, payload);
-      await fetchRestaurantTables();
+      // Immediately add new bill to tables state so it appears in modal and floor tables
+      setRestaurantTables((prev) =>
+        prev.map((t) =>
+          t.id === table.id
+            ? {
+                ...t,
+                active_bills: [newBill, ...(t.active_bills || []).filter((b) => b.id !== newBill.id)],
+                active_bills_count: (t.active_bills_count || 0) + 1,
+                status: t.status === "grey" ? "red" : t.status,
+              }
+            : t
+        )
+      );
+      setSelectedTableForModal((prev) =>
+        prev && prev.id === table.id
+          ? {
+              ...prev,
+              active_bills: [newBill, ...(prev.active_bills || []).filter((b) => b.id !== newBill.id)],
+              active_bills_count: (prev.active_bills_count || 0) + 1,
+              status: prev.status === "grey" ? "red" : prev.status,
+            }
+          : prev
+      );
+      // Open new bill with clean empty cart
       handleOpenBillForOrdering(table, newBill);
       setIsTableModalOpen(false);
+      // Silently refresh tables list in background — no spinner
+      fetchRestaurantTables(true);
     } catch (e: any) {
       console.error("Create bill error:", e);
       alert({
@@ -412,6 +434,45 @@ export default function PosPage() {
         type: "danger",
       });
     }
+  };
+
+  // Restaurant: Update active bill when customer or bill details change
+  const handleBillUpdated = (updatedBill: RestaurantBill) => {
+    setRestaurantTables((prev) =>
+      prev.map((t) =>
+        t.id === updatedBill.table_id
+          ? {
+              ...t,
+              active_bills: (t.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b)),
+            }
+          : t
+      )
+    );
+    setSelectedTableForModal((prev) =>
+      prev && prev.id === updatedBill.table_id
+        ? {
+            ...prev,
+            active_bills: (prev.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b)),
+          }
+        : prev
+    );
+    if (activeBill && activeBill.id === updatedBill.id) {
+      setActiveBill(updatedBill);
+      if (updatedBill.customer_name) {
+        setSelectedCustomer({
+          id: updatedBill.customer_id || 0,
+          name: updatedBill.customer_name,
+          phone: updatedBill.customer_phone || "",
+          address: updatedBill.customer_address || updatedBill.customer?.address || "",
+          orders_count: 1,
+          total_spent: 0,
+          created_at: new Date().toISOString(),
+        });
+      } else {
+        setSelectedCustomer(null);
+      }
+    }
+    setPrintingCustomerBill((prev) => (prev && prev.id === updatedBill.id ? updatedBill : prev));
   };
 
   // Restaurant: Save Order & Print KOT Kitchen Receipt
@@ -483,7 +544,8 @@ export default function PosPage() {
       setIsSlipReprint(false);
       setReprintProductId(undefined);
       setPrintingKitchenBill(billForKitchenSlip);
-      fetchRestaurantTables();
+      // Silently refresh tables in background — no spinner
+      fetchRestaurantTables(true);
     } catch (e: any) {
       console.error("Save order error:", e);
       alert({
@@ -496,7 +558,7 @@ export default function PosPage() {
     }
   };
 
-  // Restaurant: Print Pre-Settlement Customer Bill (Yellow status)
+  // Restaurant: Print Pre-Settlement Customer Bill (Yellow status) — opens modal instantly, syncs API in background
   const handlePrintCustomerBill = async (bill?: RestaurantBill) => {
     const targetBill = bill || activeBill;
     if (!targetBill) return;
@@ -510,16 +572,21 @@ export default function PosPage() {
       return;
     }
 
+    // Optimistically open the print modal immediately — don't wait for API
+    setPrintingCustomerBill(targetBill);
+
     try {
       const res = await restaurantService.printBill(targetBill.id);
+      // Update bill in modal and active state with confirmed server data
       if (activeBill && activeBill.id === targetBill.id) {
         setActiveBill(res.data);
       }
-      // Pop up and auto-print Guest Bill
       setPrintingCustomerBill(res.data);
-      fetchRestaurantTables();
+      // Silently refresh tables in background
+      fetchRestaurantTables(true);
     } catch (e: any) {
       console.error("Print bill error:", e);
+      setPrintingCustomerBill(null);
       alert({
         title: "Print Bill Error",
         message: e?.response?.data?.message || e?.message || "Failed to mark bill as printed.",
@@ -550,7 +617,8 @@ export default function PosPage() {
         setActiveTab("tables");
       }
       setIsTableModalOpen(false);
-      fetchRestaurantTables();
+      // Silently refresh — no spinner
+      fetchRestaurantTables(true);
     } catch (e: any) {
       console.error("Cancel bill error:", e);
       alert({
@@ -561,39 +629,43 @@ export default function PosPage() {
     }
   };
 
-  // Restaurant: Exit the active table session and return to Floor Tables
-  const handleCloseActiveBillSession = useCallback(async () => {
-    if (activeBill && (!activeBill.items || activeBill.items.length === 0 || activeBill.total === 0)) {
-      try {
-        await restaurantService.cancelBill(activeBill.id, "Empty bill exited without saving");
-      } catch (e) {
-        console.error("Clean up empty bill error:", e);
-      }
-    }
+  // Restaurant: Exit the active table session and return to Floor Tables (ultra-fast)
+  const handleCloseActiveBillSession = useCallback(() => {
+    const tableToUnlock = activeTable;
+
+    // 1. Instantly exit to tables tab with zero delay
     setActiveBill(null);
     setActiveTable(null);
     clearCart();
+    setSelectedCustomer(null);
     setHasUnsavedOrder(false);
     setIsMobileCartOpen(false);
     setActiveTab("tables");
-    fetchRestaurantTables();
-  }, [activeBill, clearCart, fetchRestaurantTables]);
+
+    // 2. Background unlock + silent table refresh (non-blocking, no spinner)
+    if (tableToUnlock) {
+      restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
+    }
+    fetchRestaurantTables(true);
+  }, [activeTable, clearCart, fetchRestaurantTables]);
 
   const handlePromptExitActiveTable = async () => {
     if (!activeBill) {
       setActiveTab("tables");
       return;
     }
-    const confirmed = await confirm({
-      title: "Exit Table Session?",
-      message: `You are currently ordering on Table ${activeBill.table_number} (${activeBill.bill_number}). You must exit this table before returning to the Floor Tables view. Exit now?`,
-      confirmText: "Yes, Exit Table",
-      cancelText: "No, Stay on Order",
-      type: "warning",
-    });
-    if (confirmed) {
-      handleCloseActiveBillSession();
+    // Only prompt if there are unsaved items
+    if (hasUnsavedOrder) {
+      const confirmed = await confirm({
+        title: "Unsaved Changes",
+        message: "You have unsaved items on this order. Discard and return to tables?",
+        confirmText: "Discard & Exit",
+        cancelText: "Stay on Order",
+        type: "warning",
+      });
+      if (!confirmed) return;
     }
+    handleCloseActiveBillSession();
   };
 
   // Restaurant: Open the Table Bills modal for the currently active table to add a new bill or switch bills
@@ -730,18 +802,19 @@ export default function PosPage() {
         notes: payload.notes,
       });
 
+      // Non-blocking cleanup — don't delay the success screen
       clearCart();
       setSelectedCustomer(null);
-      // Unlock the table on settlement so other users can access it
       const tableToUnlock = activeTable;
       setActiveBill(null);
       setActiveTable(null);
       setHasUnsavedOrder(false);
       setActiveTab("tables");
       if (tableToUnlock) {
-        try { await restaurantService.unlockTable(tableToUnlock.id); } catch (e) { console.error("Unlock on settle error:", e); }
+        restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
       }
-      fetchRestaurantTables();
+      // Silently refresh in background — no spinner
+      fetchRestaurantTables(true);
       fetchUnpaidSales();
       productsService
         .getProducts({ per_page: 200, status: "active" })
@@ -1249,6 +1322,8 @@ export default function PosPage() {
           setReprintProductId(productId);
           setPrintingKitchenBill(b);
         }}
+        customers={customers}
+        onBillUpdated={handleBillUpdated}
       />
 
       {/* Add New Table Modal */}

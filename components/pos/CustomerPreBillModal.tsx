@@ -83,7 +83,7 @@ export function CustomerPreBillModal({
 
     const timer = setTimeout(() => {
       run();
-    }, 150);
+    }, 30);
     return () => clearTimeout(timer);
   }, [isOpen, bill, autoPrint, alert, settings]);
 
@@ -206,9 +206,12 @@ export function CustomerPreBillModal({
                   )}
                 </div>
                 <div className="space-y-0.5">
-                  <div>Customer: {bill.customer_name || "Walk-in Customer"}</div>
+                  <div className="font-bold">Customer: <strong className="font-black text-black">{bill.customer_name || "Walk-in Customer"}</strong></div>
                   {bill.customer_phone && (
-                    <div>Phone: {bill.customer_phone}</div>
+                    <div>Phone: <strong className="text-black">{bill.customer_phone}</strong></div>
+                  )}
+                  {(bill.customer_address || bill.customer?.address) && (
+                    <div>Address: <strong className="text-black">{bill.customer_address || bill.customer?.address}</strong></div>
                   )}
                 </div>
               </div>
@@ -314,6 +317,10 @@ function buildPreBillEscPos(bill: RestaurantBill, settings?: any): any[] {
   commands.push(`Bill: ${bill.bill_number}\n`);
   if (bill.customer_name) {
     commands.push(`Customer: ${bill.customer_name}${bill.customer_phone ? ` (${bill.customer_phone})` : ""}\n`);
+    const addr = bill.customer_address || bill.customer?.address;
+    if (addr) {
+      commands.push(`Address: ${addr}\n`);
+    }
   }
   if (bill.waiter_name) {
     commands.push(`Server: ${bill.waiter_name}\n`);

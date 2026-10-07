@@ -209,6 +209,8 @@ export interface RestaurantBill {
   customer_id?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  customer_address?: string | null;
+  customer?: Customer | null;
   guest_count: number;
   status: "open" | "printed" | "settled" | "cancelled";
   items: RestaurantBillItem[];

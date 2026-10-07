@@ -87,6 +87,12 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
                 const val = e.target.value.replace(/[^0-9.]/g, "");
                 setReceivedStr(val);
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isSufficient && !isProcessing) {
+                  e.preventDefault();
+                  onConfirm(receivedNum, change);
+                }
+              }}
               placeholder="0.00"
               className="w-full bg-transparent text-xl font-bold text-slate-900 tabular-nums outline-none placeholder:text-slate-300"
             />

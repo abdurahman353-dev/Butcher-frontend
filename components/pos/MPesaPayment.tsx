@@ -95,6 +95,12 @@ export function MPesaPayment({ total, onConfirm, isProcessing = false }: MPesaPa
                 const val = e.target.value.replace(/[^0-9.]/g, "");
                 setReceivedStr(val);
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isSufficient && !isProcessing) {
+                  e.preventDefault();
+                  handleComplete();
+                }
+              }}
               placeholder="0.00"
               className="w-full bg-transparent text-xl font-bold text-zinc-900 tabular-nums outline-none placeholder:text-zinc-300"
             />

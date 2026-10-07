@@ -99,7 +99,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
 
     const timer = setTimeout(() => {
       runAutoPrint();
-    }, 150);
+    }, 30);
     return () => clearTimeout(timer);
   }, [isOpen, sale, autoPrint, settings, alert, isRestaurant]);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { RestaurantTable, RestaurantBill } from "@/types";
+import { RestaurantTable, RestaurantBill, Customer } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { restaurantService } from "@/services/restaurant.service";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +27,10 @@ import {
   AlertCircle,
   Delete,
   Loader2,
+  Phone,
+  MapPin,
+  Check,
+  Edit,
 } from "lucide-react";
 
 interface TableBillsModalProps {
@@ -40,12 +44,16 @@ interface TableBillsModalProps {
     guest_count?: number;
     customer_name?: string;
     customer_phone?: string;
+    customer_address?: string;
+    customer_id?: number;
     notes?: string;
   }) => Promise<void>;
   onPrintCustomerBill: (bill: RestaurantBill) => Promise<void>;
   onSettleBill: (bill: RestaurantBill) => void;
   onCancelBill: (bill: RestaurantBill) => Promise<void>;
   onPrintKitchenSlip: (bill: RestaurantBill, productId?: number) => void;
+  customers?: Customer[];
+  onBillUpdated?: (updatedBill: RestaurantBill) => void;
 }
 
 export function TableBillsModal({
@@ -58,6 +66,8 @@ export function TableBillsModal({
   onSettleBill,
   onCancelBill,
   onPrintKitchenSlip,
+  customers = [],
+  onBillUpdated,
 }: TableBillsModalProps) {
   const { user } = useAuth();
   const isWaiter = user?.role === "waiter";
@@ -80,13 +90,100 @@ export function TableBillsModal({
   const [guestCount, setGuestCount] = useState(2);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
   const [billNotes, setBillNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedBills, setExpandedBills] = useState<Record<number, boolean>>({});
 
-  const activeBills = (table?.active_bills || []).filter(
-    (b) => (b.items && b.items.length > 0) || b.total > 0 || b.status === "printed"
+  // ── Customer Change / Edit State for Existing Bills ──
+  const [editingCustomerBill, setEditingCustomerBill] = useState<RestaurantBill | null>(null);
+  const [editCustName, setEditCustName] = useState("");
+  const [editCustPhone, setEditCustPhone] = useState("");
+  const [editCustAddress, setEditCustAddress] = useState("");
+  const [editSelectedCustId, setEditSelectedCustId] = useState<number | null>(null);
+  const [custSearchQuery, setCustSearchQuery] = useState("");
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false);
+  const [customerUpdateMessage, setCustomerUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleStartEditCustomer = (bill: RestaurantBill) => {
+    setEditingCustomerBill(bill);
+    setEditCustName(bill.customer_name || "");
+    setEditCustPhone(bill.customer_phone || "");
+    setEditCustAddress(bill.customer_address || bill.customer?.address || "");
+    setEditSelectedCustId(bill.customer_id || null);
+    setCustSearchQuery("");
+    setCustomerUpdateMessage(null);
+  };
+
+  const handleSelectExistingCustomer = (c: Customer) => {
+    setEditSelectedCustId(c.id);
+    setEditCustName(c.name);
+    setEditCustPhone(c.phone || "");
+    setEditCustAddress(c.address || "");
+    setCustSearchQuery("");
+  };
+
+  const handleClearCustomer = () => {
+    setEditSelectedCustId(null);
+    setEditCustName("");
+    setEditCustPhone("");
+    setEditCustAddress("");
+    setCustSearchQuery("");
+  };
+
+  const handleSaveCustomerChange = async () => {
+    if (!editingCustomerBill) return;
+    setIsSavingCustomer(true);
+    setCustomerUpdateMessage(null);
+    try {
+      const res = await restaurantService.updateBillCustomer(editingCustomerBill.id, {
+        customer_id: editSelectedCustId,
+        customer_name: editCustName.trim() || undefined,
+        customer_phone: editCustPhone.trim() || undefined,
+        customer_address: editCustAddress.trim() || undefined,
+      });
+
+      const updated = res.data;
+
+      // 1. Immediately update internal billsList so the screen re-renders right now
+      setBillsList((prev) =>
+        prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
+      );
+
+      // 2. Notify parent (pos/page.tsx) so tables and activeBill update
+      if (onBillUpdated) {
+        onBillUpdated(updated);
+      }
+
+      // 3. Mutate table.active_bills as well
+      if (table && table.active_bills) {
+        table.active_bills = table.active_bills.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
+      }
+
+      setCustomerUpdateMessage({ type: "success", text: "Customer details updated successfully!" });
+      setTimeout(() => {
+        setEditingCustomerBill(null);
+        setCustomerUpdateMessage(null);
+      }, 350);
+    } catch (err: any) {
+      setCustomerUpdateMessage({
+        type: "error",
+        text: err?.response?.data?.message || err?.message || "Failed to update customer.",
+      });
+    } finally {
+      setIsSavingCustomer(false);
+    }
+  };
+
+  const [billsList, setBillsList] = useState<RestaurantBill[]>(table?.active_bills || []);
+
+  useEffect(() => {
+    setBillsList(table?.active_bills || []);
+  }, [table?.active_bills, table]);
+
+  const activeBills = billsList.filter(
+    (b) => b.status === "open" || b.status === "printed"
   );
 
   const filteredBills = activeBills.filter((bill) => {
@@ -727,66 +824,98 @@ export function TableBillsModal({
                           </span>
                         </div>
 
-                        {/* Customer & Guest info */}
-                        <div className="text-xs text-zinc-600 mt-1">
-                          {bill.customer_name ? (
-                            <span>Customer: <strong className="text-zinc-800">{bill.customer_name}</strong></span>
-                          ) : (
-                            <span className="text-zinc-500">Walk-in Table Guest</span>
+                        {/* Customer, Phone, Address - darker text */}
+                        <div className="flex items-center gap-2 flex-wrap text-xs mt-1.5 font-bold">
+                          <span className="text-zinc-800 font-extrabold">Customer:</span>
+                          <strong className="text-zinc-950 font-black">
+                            {bill.customer_name || "Walk-in Table Guest"}
+                          </strong>
+                          {bill.customer_phone && (
+                            <span className="text-zinc-900 font-extrabold flex items-center gap-1">
+                              <span className="text-zinc-400">•</span>
+                              <span>📞 {bill.customer_phone}</span>
+                            </span>
                           )}
-                          <span className="mx-1.5">•</span>
-                          <span>{bill.guest_count} {bill.guest_count === 1 ? "Guest" : "Guests"}</span>
+                          {(bill.customer_address || bill.customer?.address) && (
+                            <span className="text-zinc-900 font-extrabold flex items-center gap-1">
+                              <span className="text-zinc-400">•</span>
+                              <span>📍 {bill.customer_address || bill.customer?.address}</span>
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       {/* Bill Total Amount */}
                       <div className="text-right">
-                        <div className="text-[10px] uppercase font-bold text-zinc-400">Total Bill</div>
-                        <div className="text-lg font-black text-zinc-900 tracking-tight">
+                        <div className="text-[10px] uppercase font-extrabold text-zinc-600">Total Bill</div>
+                        <div className="text-lg font-black text-zinc-950 tracking-tight">
                           {formatCurrency(bill.total)}
                         </div>
                       </div>
                     </div>
 
-                    {/* Meta bar — always shows who posted the bill */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 bg-zinc-100/70 rounded-xl text-[11px] text-zinc-600">
+                    {/* Meta bar — always shows who posted the bill - rich dark high-contrast */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 bg-zinc-100 border border-zinc-200/90 rounded-xl text-[11px]">
                       {/* Posted By — always visible in col 1 */}
                       <div>
-                        <span className="text-zinc-400 block text-[10px]">Posted By</span>
+                        <span className="text-zinc-700 block text-[10px] font-extrabold uppercase tracking-wider mb-0.5">Posted By</span>
                         {isBillByWaiter(bill) ? (
                           // Bill was opened by a waiter
-                          <strong className="text-zinc-800 truncate block flex items-center gap-1">
+                          <strong className="text-zinc-950 font-black truncate block flex items-center gap-1 text-xs">
                             {bill.waiter_name || "Waiter"}
-                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 uppercase tracking-wider ml-1">Waiter</span>
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-200 text-violet-900 uppercase tracking-wider ml-1">Waiter</span>
                           </strong>
                         ) : (
                           // Bill was opened directly by cashier/admin
-                          <strong className="text-zinc-800 truncate block flex items-center gap-1">
+                          <strong className="text-zinc-950 font-black truncate block flex items-center gap-1 text-xs">
                             {bill.cashier_name || "Cashier"}
-                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase tracking-wider ml-1">Cashier</span>
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-blue-200 text-blue-900 uppercase tracking-wider ml-1">Cashier</span>
                           </strong>
                         )}
                       </div>
 
                       {/* Col 2 — Customer */}
                       <div>
-                        <span className="text-zinc-400 block text-[10px]">Customer</span>
-                        <strong className="text-zinc-800 truncate block">
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-zinc-700 block text-[10px] font-extrabold uppercase tracking-wider">Customer</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEditCustomer(bill);
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black flex items-center gap-0.5 shadow-xs cursor-pointer"
+                            title="Edit or select new customer"
+                          >
+                            <Edit className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </div>
+                        <strong className="text-zinc-950 font-black truncate block text-xs">
                           {bill.customer_name || "Walk-in Guest"}
-                          {bill.customer_phone && <span className="text-zinc-500 font-normal"> · {bill.customer_phone}</span>}
                         </strong>
+                        {bill.customer_phone && (
+                          <span className="text-zinc-900 font-extrabold text-[11px] block truncate">
+                            📞 {bill.customer_phone}
+                          </span>
+                        )}
+                        {(bill.customer_address || bill.customer?.address) && (
+                          <span className="text-zinc-900 font-extrabold text-[10px] block truncate mt-0.5">
+                            📍 {bill.customer_address || bill.customer?.address}
+                          </span>
+                        )}
                       </div>
 
                       {/* Col 3 — Time Posted */}
                       <div>
-                        <span className="text-zinc-400 block text-[10px]">Time Posted</span>
-                        <strong className="text-zinc-800 block">{formatDateTime(bill.created_at)}</strong>
+                        <span className="text-zinc-700 block text-[10px] font-extrabold uppercase tracking-wider mb-0.5">Time Posted</span>
+                        <strong className="text-zinc-950 font-black block text-xs">{formatDateTime(bill.created_at)}</strong>
                       </div>
 
                       {/* Col 4 — Items */}
                       <div>
-                        <span className="text-zinc-400 block text-[10px]">Items</span>
-                        <strong className="text-zinc-800 block">{itemsCount} {itemsCount === 1 ? "item" : "items"}</strong>
+                        <span className="text-zinc-700 block text-[10px] font-extrabold uppercase tracking-wider mb-0.5">Items</span>
+                        <strong className="text-zinc-950 font-black block text-xs">{itemsCount} {itemsCount === 1 ? "item" : "items"}</strong>
                       </div>
                     </div>
 
@@ -1127,6 +1256,212 @@ export function TableBillsModal({
                   <Delete className="w-5 h-5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Change / Edit Customer Modal ── */}
+      {editingCustomerBill && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-md flex flex-col overflow-hidden max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-zinc-200 bg-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-zinc-900 text-white flex items-center justify-center font-bold">
+                  <User className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-zinc-900">Change Customer Info</h3>
+                  <p className="text-[11px] font-bold text-zinc-500">
+                    Bill #{editingCustomerBill.bill_number} • Table {editingCustomerBill.table_number}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCustomerBill(null);
+                  setCustomerUpdateMessage(null);
+                }}
+                className="p-1.5 text-zinc-400 hover:text-zinc-700 rounded-lg hover:bg-zinc-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Feedback Alert */}
+              {customerUpdateMessage && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                    customerUpdateMessage.type === "success"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      : "bg-rose-50 text-rose-800 border border-rose-200"
+                  }`}
+                >
+                  {customerUpdateMessage.type === "success" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span>{customerUpdateMessage.text}</span>
+                </div>
+              )}
+
+              {/* Quick Select from Saved Customers */}
+              {customers.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-zinc-700 flex items-center justify-between">
+                    <span>Quick Select Existing Customer</span>
+                    {editSelectedCustId && (
+                      <span className="text-[10px] text-emerald-700 font-bold">
+                        Linked ID: #{editSelectedCustId}
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      type="text"
+                      value={custSearchQuery}
+                      onChange={(e) => setCustSearchQuery(e.target.value)}
+                      placeholder="Search by name, phone or address..."
+                      className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-zinc-900 outline-none"
+                    />
+                  </div>
+
+                  {/* Dropdown list if searching */}
+                  {custSearchQuery.trim() && (
+                    <div className="max-h-40 overflow-y-auto divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white shadow-md">
+                      {customers
+                        .filter(
+                          (c) =>
+                            c.name.toLowerCase().includes(custSearchQuery.toLowerCase()) ||
+                            (c.phone && c.phone.includes(custSearchQuery)) ||
+                            (c.address && c.address.toLowerCase().includes(custSearchQuery.toLowerCase()))
+                        )
+                        .slice(0, 5)
+                        .map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleSelectExistingCustomer(c)}
+                            className="w-full px-3 py-2 text-left hover:bg-emerald-50/70 flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-black text-zinc-900 truncate">{c.name}</p>
+                              <p className="text-[10px] font-bold text-zinc-500 truncate">
+                                {c.phone || "No phone"} {c.address ? `• 📍 ${c.address}` : ""}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-black text-emerald-700 px-2 py-0.5 rounded bg-emerald-100 shrink-0">
+                              Select
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Form Inputs for Name, Phone, Address */}
+              <div className="space-y-3 pt-1 border-t border-zinc-100">
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-zinc-700 block mb-1">
+                    Customer Name
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      type="text"
+                      value={editCustName}
+                      onChange={(e) => {
+                        setEditCustName(e.target.value);
+                        setEditSelectedCustId(null);
+                      }}
+                      placeholder="e.g. Hamudh"
+                      className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-zinc-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-zinc-700 block mb-1">
+                    Mobile / Phone Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      type="text"
+                      value={editCustPhone}
+                      onChange={(e) => setEditCustPhone(e.target.value)}
+                      placeholder="e.g. 0766666666"
+                      className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-zinc-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-black uppercase tracking-wider text-zinc-700 block mb-1">
+                    Customer Address / Delivery Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      type="text"
+                      value={editCustAddress}
+                      onChange={(e) => setEditCustAddress(e.target.value)}
+                      placeholder="e.g. Section 58, Nakuru"
+                      className="w-full pl-9 pr-3 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-bold text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-zinc-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={handleClearCustomer}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                  >
+                    Clear to Walk-in Guest (No Customer)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-zinc-200 bg-zinc-50 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingCustomerBill(null);
+                  setCustomerUpdateMessage(null);
+                }}
+                disabled={isSavingCustomer}
+                className="px-4 py-2 rounded-xl border border-zinc-300 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCustomerChange}
+                disabled={isSavingCustomer}
+                className="px-5 py-2 rounded-xl bg-zinc-900 hover:bg-black active:scale-95 text-white text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isSavingCustomer ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Save Customer Info</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

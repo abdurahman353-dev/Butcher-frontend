@@ -30,12 +30,29 @@ export const restaurantService = {
       guest_count?: number;
       customer_name?: string;
       customer_phone?: string;
+      customer_address?: string;
       customer_id?: number;
       notes?: string;
     }
   ): Promise<RestaurantBill> {
     const res = await apiClient.post<{ data: RestaurantBill }>(`/restaurant/tables/${tableId}/bills`, payload);
     return res.data.data;
+  },
+
+  async updateBillCustomer(
+    billId: number,
+    payload: {
+      customer_id?: number | null;
+      customer_name?: string | null;
+      customer_phone?: string | null;
+      customer_address?: string | null;
+    }
+  ): Promise<{ message: string; data: RestaurantBill }> {
+    const res = await apiClient.put<{ message: string; data: RestaurantBill }>(
+      `/restaurant/bills/${billId}/customer`,
+      payload
+    );
+    return res.data;
   },
 
   async verifyWaiterPin(pin: string): Promise<{ verified: boolean; user?: { id: number; name: string; role: string }; message?: string }> {

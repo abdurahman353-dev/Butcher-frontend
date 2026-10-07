@@ -108,7 +108,7 @@ export function KitchenOrderSlipModal({
 
     const timer = setTimeout(() => {
       run();
-    }, 150);
+    }, 30);
     return () => clearTimeout(timer);
   }, [isOpen, bill, autoPrint, alert, isReprint, isWaiter]);
 
