@@ -71,6 +71,14 @@ export function TableBillsModal({
   const [showNumpad, setShowNumpad] = useState(false);
   const [showOptionalPin, setShowOptionalPin] = useState(false);
 
+  // Per-bill PIN prompt state (for waiter bill access)
+  const [billPinState, setBillPinState] = useState<Record<number, {
+    pin: string;
+    verifying: boolean;
+    feedback: { type: "success" | "error"; text: string } | null;
+    verified: boolean;
+  }>>({});
+
   const [guestCount, setGuestCount] = useState(2);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -190,6 +198,42 @@ export function TableBillsModal({
     setVerifiedStaff(null);
     setPinFeedback(null);
     setShowNumpad(false);
+  };
+
+  // ── Per-bill PIN verification helpers ──────────────────────────
+  const getBillPin = (billId: number) => billPinState[billId] ?? { pin: "", verifying: false, feedback: null, verified: false };
+
+  const handleBillPinInput = async (billId: number, raw: string) => {
+    const clean = raw.replace(/\D/g, "").slice(0, 4);
+    setBillPinState((prev) => ({ ...prev, [billId]: { ...getBillPin(billId), pin: clean, feedback: null, verified: false } }));
+    if (clean.length < 4) return;
+    // Auto-verify on 4 digits
+    setBillPinState((prev) => ({ ...prev, [billId]: { ...getBillPin(billId), pin: clean, verifying: true, feedback: null, verified: false } }));
+    try {
+      const res = await restaurantService.verifyWaiterPin(clean);
+      if (res.verified && res.user && res.user.id === user?.id) {
+        setBillPinState((prev) => ({ ...prev, [billId]: { pin: clean, verifying: false, feedback: { type: "success", text: `✓ Verified: ${res.user!.name}` }, verified: true } }));
+      } else if (res.verified && res.user && res.user.id !== user?.id) {
+        setBillPinState((prev) => ({ ...prev, [billId]: { pin: clean, verifying: false, feedback: { type: "error", text: "That PIN belongs to a different staff member." }, verified: false } }));
+      } else {
+        setBillPinState((prev) => ({ ...prev, [billId]: { pin: clean, verifying: false, feedback: { type: "error", text: "Incorrect PIN. Please try again." }, verified: false } }));
+      }
+    } catch {
+      setBillPinState((prev) => ({ ...prev, [billId]: { pin: clean, verifying: false, feedback: { type: "error", text: "Could not verify PIN." }, verified: false } }));
+    }
+  };
+
+  const clearBillPin = (billId: number) => {
+    setBillPinState((prev) => ({ ...prev, [billId]: { pin: "", verifying: false, feedback: null, verified: false } }));
+  };
+
+  // Determine if the current user can open a given bill
+  const canOpenBill = (bill: RestaurantBill): "free" | "needs-pin" | "blocked" => {
+    if (!isWaiter) return "free"; // Cashier/admin: always free
+    // Waiter: can only open their own bill
+    if (bill.waiter_id && bill.waiter_id === user?.id) return "needs-pin";
+    // Waiter trying to open another person's bill
+    return "blocked";
   };
 
   return (
@@ -761,18 +805,92 @@ export function TableBillsModal({
                           <span>{isPrinted ? "Re-print Bill" : "Print Bill"}</span>
                         </button>
 
-                        {/* Open Bill to post products */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onOpenBillForOrdering(table, bill);
-                            onClose();
-                          }}
-                          className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all"
-                        >
-                          <span>Open Bill</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Open Bill — access-controlled */}
+                        {(() => {
+                          const access = canOpenBill(bill);
+                          const bps = getBillPin(bill.id);
+
+                          if (access === "blocked") {
+                            // Waiter cannot open another staff member's bill
+                            return (
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-400 rounded-xl text-xs font-bold border border-zinc-200">
+                                <Lock className="w-3.5 h-3.5" />
+                                <span>Not Your Bill</span>
+                              </div>
+                            );
+                          }
+
+                          if (access === "needs-pin") {
+                            // Waiter must enter their own PIN
+                            if (bps.verified) {
+                              // PIN verified — show Open Bill button
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => { clearBillPin(bill.id); onOpenBillForOrdering(table, bill); onClose(); }}
+                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span>Open Bill</span>
+                                </button>
+                              );
+                            }
+                            // Show compact inline PIN entry
+                            return (
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative">
+                                  <KeyRound className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400" />
+                                  <input
+                                    type="password"
+                                    inputMode="numeric"
+                                    maxLength={4}
+                                    placeholder="PIN"
+                                    value={bps.pin}
+                                    onChange={(e) => handleBillPinInput(bill.id, e.target.value)}
+                                    className={`w-24 h-8 pl-7 pr-2 text-center font-mono text-sm tracking-widest font-black rounded-xl border-2 focus:outline-none transition-all ${
+                                      bps.feedback?.type === "error"
+                                        ? "border-rose-400 bg-rose-50 text-rose-700"
+                                        : bps.feedback?.type === "success"
+                                        ? "border-emerald-500 bg-emerald-50"
+                                        : "border-zinc-300 bg-white focus:border-emerald-500"
+                                    }`}
+                                  />
+                                  {bps.verifying && <Loader2 className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-emerald-600" />}
+                                </div>
+                                {bps.feedback && (
+                                  <span className={`text-[10px] font-bold ${
+                                    bps.feedback.type === "error" ? "text-rose-600" : "text-emerald-600"
+                                  }`}>
+                                    {bps.feedback.type === "error" ? "✗" : "✓"}
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => clearBillPin(bill.id)}
+                                  className="p-1 rounded-lg text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
+                                  title="Clear PIN"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                                <div className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
+                                  <Lock className="w-3 h-3" /> Enter Your PIN
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          // access === "free" — cashier/admin
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => { onOpenBillForOrdering(table, bill); onClose(); }}
+                              className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all"
+                            >
+                              <span>Open Bill</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          );
+                        })()}
 
                         {/* Settle / Checkout button — admin & cashier only, available for ALL bills */}
                         {!isWaiter && itemsCount > 0 && (
