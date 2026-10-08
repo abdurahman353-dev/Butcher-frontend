@@ -6,8 +6,8 @@ import { ShopSettingsProvider } from "@/contexts/ShopSettingsContext";
 import { DynamicTitle } from "@/components/shared/DynamicTitle";
 
 export const metadata: Metadata = {
-  title: "Butchery POS — Point of Sale System",
-  description: "Fast, weight-based butcher point of sale system with real-time inventory, M-Pesa & Cash payments.",
+  title: "Butchery & Restaurant POS — Point of Sale System",
+  description: "Fast, weight-based butcher and restaurant point of sale system with tables, kitchen orders, real-time inventory, M-Pesa & Cash payments.",
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",

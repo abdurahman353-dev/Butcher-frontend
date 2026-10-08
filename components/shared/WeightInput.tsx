@@ -5,6 +5,8 @@ import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { calculateSubtotal, roundTo } from "@/lib/math";
 import { Scale, Delete, Check } from "lucide-react";
 
+import { useAuth } from "@/hooks/useAuth";
+
 interface WeightInputProps {
   productName: string;
   pricePerKg: number;
@@ -24,6 +26,9 @@ export function WeightInput({
   onConfirm,
   onCancel,
 }: WeightInputProps) {
+  const { user } = useAuth();
+  const isRestaurant = (user?.company?.business_type ?? "") === "restaurant";
+
   const COUNTABLE_UNITS = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS"];
   const unitUp = (unit || "KG").toUpperCase();
   const isCountable = COUNTABLE_UNITS.includes(unitUp);
@@ -43,12 +48,25 @@ export function WeightInput({
     };
     return labels[unitUp] ?? `${unitUp}s`;
   })();
-  // Pick a contextual emoji for the header
+
+  // Pick a contextual emoji for the header (dishes, restaurant meals, drinks vs butchery cuts)
   const headerEmoji = (() => {
+    const lower = (productName || "").toLowerCase();
+    if (lower.includes("shawarma") || lower.includes("wrap")) return "🌯";
+    if (lower.includes("burger")) return "🍔";
+    if (lower.includes("pizza")) return "🍕";
+    if (lower.includes("fries") || lower.includes("chips")) return "🍟";
+    if (lower.includes("chicken") || lower.includes("wings")) return "🍗";
+    if (lower.includes("fish") || lower.includes("tilapia")) return "🐟";
+    if (lower.includes("rice") || lower.includes("pilau") || lower.includes("biryani")) return "🍚";
+    if (lower.includes("tea") || lower.includes("coffee") || lower.includes("chai")) return "☕";
+    if (lower.includes("juice") || lower.includes("soda") || lower.includes("water") || lower.includes("drink")) return "🥤";
+
     if (["PLATE", "PORTION"].includes(unitUp)) return "🍽️";
     if (["CUP", "GLASS"].includes(unitUp)) return "☕";
-    if (unitUp === "BOTTLE") return "🍺";
+    if (unitUp === "BOTTLE") return "🥤";
     if (unitUp === "BOWL") return "🍜";
+    if (isRestaurant) return "🍽️";
     return "🥩";
   })();
 

@@ -109,7 +109,7 @@ export function AddTableModal({ isOpen, onClose, onAddTable }: AddTableModalProp
               <option value="Terrace">Terrace</option>
               <option value="Garden">Garden</option>
               <option value="VIP Lounge">VIP Lounge</option>
-              <option value="Bar Section">Bar Section</option>
+              <option value="Outdoor Section">Outdoor Section</option>
             </select>
           </div>
 

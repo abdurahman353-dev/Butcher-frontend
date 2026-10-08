@@ -32,11 +32,11 @@ export default function LoginPage() {
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
   // SSR-safe: initialize with neutral value, update from localStorage after mount
-  const [cachedShopName, setCachedShopName] = useState("Butchery POS");
+  const [cachedShopName, setCachedShopName] = useState("Butchery & Restaurant POS");
 
-  const shopDisplayName = (settings.shop_name && settings.shop_name !== "Butchery POS")
+  const shopDisplayName = (settings.shop_name && settings.shop_name !== "Butchery POS" && settings.shop_name !== "Butchery & Restaurant POS")
     ? settings.shop_name
-    : (cachedShopName || "Butchery POS");
+    : (cachedShopName || "Butchery & Restaurant POS");
 
   useEffect(() => {
     try {
@@ -117,7 +117,7 @@ export default function LoginPage() {
               </span>
             </div>
             <p className="text-[10px] sm:text-[11px] font-bold tracking-wider text-red-600 uppercase mt-1">
-              Butchery &amp; Deli POS
+              Butchery &amp; Restaurant POS
             </p>
           </div>
         </div>
@@ -320,7 +320,7 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-zinc-400">Butchery POS System</span>
+              <span className="text-zinc-400">Butchery &amp; Restaurant POS System</span>
               <button
                 type="button"
                 onClick={() => setShowForgotNotice((v) => !v)}
@@ -354,7 +354,7 @@ export default function LoginPage() {
 
         {/* Subtle Bottom Credit */}
         <p className="mt-5 text-[11px] text-white/80 font-medium tracking-wide drop-shadow-sm">
-          Fresh Meats • Farm Poultry • Artisan Sausages • Eggs
+          Fresh Meats • Farm Poultry • Kitchen &amp; Grill • Table Dining
         </p>
 
       </div>

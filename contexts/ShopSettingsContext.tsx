@@ -16,7 +16,7 @@ const FULL_SETTINGS_CACHE_KEY = "butcher_shop_settings_cache";
 
 /** SSR-safe base defaults (no window access) */
 const DEFAULT_SETTINGS: ShopSettings = {
-  shop_name: "Butchery POS",
+  shop_name: "Butchery & Restaurant POS",
   phone: "",
   email: "",
   address: "",

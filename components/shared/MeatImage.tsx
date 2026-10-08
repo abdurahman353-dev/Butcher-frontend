@@ -122,8 +122,8 @@ function getDepartmentTheme(category: string, name: string): DepartmentTheme {
     lowerName.includes("brandy")
   ) {
     return {
-      tag: "COCKTAIL & BAR",
-      code: "BAR",
+      tag: "JUICES & BEVERAGES",
+      code: "DRINK",
       bgGradient: "bg-gradient-to-b from-violet-300/70 via-fuchsia-200/60 to-pink-100/50 border-b border-violet-300",
       stampGradient: "bg-gradient-to-tr from-violet-600 to-fuchsia-600",
       stampText: "text-white",

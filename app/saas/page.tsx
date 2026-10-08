@@ -600,7 +600,7 @@ export default function SaasPortalPage() {
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter((c) => {
-        const typeStr = c.business_type === "restaurant" ? "restaurant hotel dining food bar" : "butchery meat cuts butcher";
+        const typeStr = c.business_type === "restaurant" ? "restaurant hotel dining food beverage" : "butchery meat cuts butcher";
         return (
           c.name.toLowerCase().includes(q) ||
           c.slug?.toLowerCase().includes(q) ||
@@ -1703,7 +1703,7 @@ export default function SaasPortalPage() {
                       </div>
                       <p className="text-xs font-black">Restaurant & Hotel F&B</p>
                       <p className="text-[10px] text-zinc-500 font-medium leading-tight">
-                        Tables, dining, takeaway, kitchen tickets, bar & meals POS
+                        Tables, dining, takeaway, kitchen tickets, grill &amp; meals POS
                       </p>
                     </button>
 

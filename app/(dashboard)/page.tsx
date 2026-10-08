@@ -318,7 +318,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <p className="text-xs text-zinc-500 mb-4">
-              {isRestaurant ? "Menu & bar items requiring immediate order or stock-in." : "Meat cuts requiring immediate supplier order or stock-in."}
+              {isRestaurant ? "Menu & kitchen items requiring immediate order or stock-in." : "Meat cuts requiring immediate supplier order or stock-in."}
             </p>
 
             <div className="space-y-2.5">

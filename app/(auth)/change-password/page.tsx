@@ -33,7 +33,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const shopDisplayName = settings.shop_name || "Butchery POS";
+  const shopDisplayName = settings.shop_name || "Butchery & Restaurant POS";
 
   useEffect(() => {
     if (!user) {

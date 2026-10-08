@@ -234,7 +234,7 @@ export default function InventoryPage() {
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
             {isRestaurant
-              ? "Real-time stock levels, supplier replenishments, bar inventory, audit adjustments, and wastage."
+              ? "Real-time stock levels, supplier replenishments, kitchen inventory, audit adjustments, and wastage."
               : "Real-time meat weight levels, supplier stock-in replenishments, audit adjustments, and wastage."}
           </p>
         </div>
@@ -351,7 +351,7 @@ export default function InventoryPage() {
               : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
           }`}
         >
-          🥩 Current Stock Levels ({products.length})
+          {isRestaurant ? "🍽️" : "🥩"} Current Stock Levels ({products.length})
         </button>
 
         <button

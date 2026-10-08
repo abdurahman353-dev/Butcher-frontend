@@ -339,7 +339,7 @@ export default function ReportsPage() {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${shopSettings.shop_name} Report</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">${isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isRestaurant ? "Restaurant & Bar F&B" : "Premium Meat Shop")}</div></div>
+  <div><div style="font-size:22px;font-weight:900">${isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isRestaurant ? "Restaurant & Dining F&B" : "Premium Meat Shop")}</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">EXECUTIVE PERFORMANCE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Generated: ${dateStr} at ${timeStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Range: ${rangeLabel}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
@@ -1191,7 +1191,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
         <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-zinc-900">
-              {isRestaurant ? "Top Selling Menu & Bar Items & Profit Margins" : "Top Selling Meat Cuts & Profit Margins"}
+              {isRestaurant ? "Top Selling Dishes & Menu Items & Profit Margins" : "Top Selling Meat Cuts & Profit Margins"}
             </h2>
             <p className="text-xs text-zinc-500">
               Ranked by revenue contribution, volume sold, and profit margin

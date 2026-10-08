@@ -163,7 +163,7 @@ export default function SettingsPage() {
             <label className="block font-semibold uppercase text-zinc-700 mb-1">Receipt Top Tagline</label>
             <textarea
               rows={2}
-              placeholder={isRestaurant ? "e.g. Fine Dining & Bar • Table Service & Takeaway" : "e.g. Fresh Gourmet Meats • Halal Certified"}
+              placeholder={isRestaurant ? "e.g. Fine Dining & Grill • Table Service & Takeaway" : "e.g. Fresh Gourmet Meats • Halal Certified"}
               value={settings.receipt_header ?? ""}
               onChange={(e) => updateField("receipt_header", e.target.value)}
               className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs resize-y"
