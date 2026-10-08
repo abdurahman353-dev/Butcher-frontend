@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Shift } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import { Printer, X, Clock, Banknote, Smartphone, CreditCard, Pencil, Check, AlertTriangle, Loader2 } from "lucide-react";
@@ -74,8 +74,11 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
     }
   };
 
+  const inFlightRef = useRef(false);
+
   const handlePrint = async () => {
-    if (!shift) return;
+    if (!shift || inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsPrinting(true);
     try {
       const token = getToken();
@@ -87,7 +90,10 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
         }
       }
       const escpos = buildShiftEscPos(shift, settings);
-      const res = await printEscPos(escpos, { title: `Shift #${shift.id} Z-Report` });
+      const res = await printEscPos(escpos, {
+        title: `Shift #${shift.id} Z-Report`,
+        clientRef: `shift-${shift.id}-${Date.now()}`,
+      });
       if (res.status === "FAILED") {
         await alert({
           title: "Print Failed",
@@ -124,6 +130,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
       setIsPrintAgentOpen(true);
     } finally {
       setIsPrinting(false);
+      inFlightRef.current = false;
     }
   };
 

@@ -33,85 +33,38 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   const [isPrinting, setIsPrinting] = useState(false);
   const [agentState, setAgentState] = useState<Partial<PrintAgentState>>({});
   const autoPrintAttemptedRef = useRef(false);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
+      inFlightRef.current = false;
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen || !sale || !autoPrint || autoPrintAttemptedRef.current) return;
-    autoPrintAttemptedRef.current = true;
-
-    const runAutoPrint = async () => {
-      const opId = createSetupOperationId();
-      logSetupStep(opId, "print", { sale: sale.sale_number, autoPrint: true });
-      try {
-        const token = getToken();
-        if (!token) {
-          const detected = await detectAgentState(opId);
-          if (!detected.health || (!detected.printer && !detected.error)) {
-            setIsPrintAgentOpen(true);
-            return;
-          }
-        }
-        const html = renderReceiptHtml(sale, settings, isRestaurant);
-        const res = await printHtmlSlip(html, {
-          title: `Receipt #${sale.sale_number}`,
-          widthMm: 80,
-        });
-        if (res.status === "FAILED") {
-          logSetupStep(opId, "failed", { resError: res.error });
-          await alert({
-            title: "Print Failed",
-            message: res.error || "The receipt could not be printed.",
-            type: "danger",
-          });
-          setIsPrintAgentOpen(true);
-          return;
-        }
-        if (res.status === "PENDING" && res.reason) {
-          logSetupStep(opId, "queued", { reason: res.reason });
-          await alert({
-            title: "Receipt Queued",
-            message:
-              "The receipt is queued in the Print Agent and will print automatically once the printer is connected.",
-            type: "info",
-          });
-          return;
-        }
-        logSetupStep(opId, "complete");
-      } catch (err: any) {
-        logSetupStep(opId, "failed", { error: err?.message });
-        if (ensureTokenClearedOn401(err)) {
-          setIsPrintAgentOpen(true);
-          return;
-        }
-        await alert({
-          title: "Print Agent Unavailable",
-          message: err?.message || "Cannot reach the local Print Agent.",
-          type: "warning",
-        });
-        setIsPrintAgentOpen(true);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      runAutoPrint();
-    }, 30);
-    return () => clearTimeout(timer);
-  }, [isOpen, sale, autoPrint, settings, alert, isRestaurant]);
-
-  const handlePrint = async () => {
-    if (!sale) return;
+  const handlePrint = async (arg?: boolean | React.MouseEvent) => {
+    if (!sale || inFlightRef.current) return;
+    const isReprint = typeof arg === "boolean" ? arg : false;
+    inFlightRef.current = true;
     setIsPrinting(true);
     try {
-      const html = renderReceiptHtml(sale, settings, isRestaurant);
-      const res = await printHtmlSlip(html, {
+      const token = getToken();
+      if (!token) {
+        const detected = await detectAgentState();
+        if (!detected.health || (!detected.printer && !detected.error)) {
+          setIsPrintAgentOpen(true);
+          return;
+        }
+      }
+
+      const clientRef = isReprint ? `sale-${sale.id}-reprint-${Date.now()}` : `sale-${sale.id}`;
+      const commands = buildEscPosReceipt(sale, settings, { openCashDrawer: true, cutPaper: true });
+      const res = await printEscPos(commands, {
         title: `Receipt #${sale.sale_number}`,
-        widthMm: 80,
+        drawerKick: true,
+        clientRef,
       });
+
       if (res.status === "FAILED") {
         await alert({
           title: "Print Failed",
@@ -149,6 +102,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
       setIsPrintAgentOpen(true);
     } finally {
       setIsPrinting(false);
+      inFlightRef.current = false;
     }
   };
 

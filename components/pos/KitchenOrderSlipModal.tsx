@@ -57,9 +57,12 @@ export function KitchenOrderSlipModal({
   // State to filter for a single item reprint when there are multiple items
   const [selectedProductId, setSelectedProductId] = useState<number | "all">("all");
 
+  const inFlightRef = useRef(false);
+
   useEffect(() => {
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
+      inFlightRef.current = false;
       setSelectedCategoryTab("all");
     }
   }, [isOpen]);
@@ -151,8 +154,13 @@ export function KitchenOrderSlipModal({
           groupsToPrint.length
         );
 
+        const clientRef = isReprint
+          ? `kot-${bill.bill_number}-${group.categoryName}-reprint-${Date.now()}`
+          : `kot-${bill.bill_number}-${group.categoryName}`;
+
         const res = await printEscPos(escpos, {
           title: `KOT #${bill.bill_number} - ${group.categoryName}`,
+          clientRef,
         });
 
         if (res.status === "FAILED") {
@@ -190,21 +198,6 @@ export function KitchenOrderSlipModal({
     }
   };
 
-  // Auto-print effect
-  useEffect(() => {
-    if (isReprint && isWaiter) return;
-    if (!isOpen || !bill || !autoPrint || autoPrintAttemptedRef.current) return;
-    if (categoryGroups.length === 0) return;
-
-    autoPrintAttemptedRef.current = true;
-
-    const timer = setTimeout(() => {
-      executePrintGroups(categoryGroups, true);
-    }, 40);
-
-    return () => clearTimeout(timer);
-  }, [isOpen, bill, autoPrint, isReprint, isWaiter, categoryGroups]);
-
   if (!isOpen || !bill) return null;
 
   // Block waiters from reprinting kitchen slips
@@ -233,11 +226,14 @@ export function KitchenOrderSlipModal({
   }
 
   const handlePrint = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsPrinting(true);
     try {
       await executePrintGroups(displayedGroups, false);
     } finally {
       setIsPrinting(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -280,8 +276,8 @@ export function KitchenOrderSlipModal({
                 {isPrinting
                   ? "Printing..."
                   : displayedGroups.length === 1
-                  ? "Print Slip"
-                  : `Print ${displayedGroups.length} Slips`}
+                    ? "Print Slip"
+                    : `Print ${displayedGroups.length} Slips`}
               </span>
             </button>
             <button
@@ -318,11 +314,10 @@ export function KitchenOrderSlipModal({
               <button
                 type="button"
                 onClick={() => setSelectedCategoryTab("all")}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                  selectedCategoryTab === "all"
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${selectedCategoryTab === "all"
                     ? "bg-zinc-900 text-white shadow-xs"
                     : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-100"
-                }`}
+                  }`}
               >
                 All Stations ({categoryGroups.length})
               </button>
@@ -334,17 +329,15 @@ export function KitchenOrderSlipModal({
                     key={group.categoryName}
                     type="button"
                     onClick={() => setSelectedCategoryTab(group.categoryName)}
-                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
-                      isSelected
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${isSelected
                         ? "bg-emerald-700 text-white shadow-xs"
                         : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-100"
-                    }`}
+                      }`}
                   >
                     <span>{group.categoryName}</span>
                     <span
-                      className={`text-[10px] px-1 rounded ${
-                        isSelected ? "bg-emerald-900/60 text-white" : "bg-zinc-100 text-zinc-600"
-                      }`}
+                      className={`text-[10px] px-1 rounded ${isSelected ? "bg-emerald-900/60 text-white" : "bg-zinc-100 text-zinc-600"
+                        }`}
                     >
                       {count}
                     </span>
@@ -370,11 +363,10 @@ export function KitchenOrderSlipModal({
               <button
                 type="button"
                 onClick={() => setSelectedProductId("all")}
-                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
-                  selectedProductId === "all"
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${selectedProductId === "all"
                     ? "bg-zinc-900 text-white"
                     : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
-                }`}
+                  }`}
               >
                 All Items ({allItems.length})
               </button>
@@ -383,11 +375,10 @@ export function KitchenOrderSlipModal({
                   key={`${item.product_id}_${idx}`}
                   type="button"
                   onClick={() => setSelectedProductId(item.product_id)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
-                    selectedProductId === item.product_id
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${selectedProductId === item.product_id
                       ? "bg-emerald-600 text-white"
                       : "bg-white text-zinc-700 border border-zinc-300 hover:bg-zinc-200"
-                  }`}
+                    }`}
                 >
                   <span>
                     {item.weight}x {item.product_name}

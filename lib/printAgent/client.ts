@@ -139,11 +139,11 @@ function isLoopbackUrl(url: string): boolean {
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeoutMs = 8000;
+  const timeout = setTimeout(() => {
+    controller.abort(new DOMException("Print agent did not respond", "TimeoutError"));
+  }, timeoutMs);
   try {
-    // `targetAddressSpace` is read directly from the (now-augmented) RequestInit.
-    // For loopback URLs (127.0.0.1 / localhost) we default to "loopback" so Chrome's
-    // Local / Private Network Access security check matches the resource's actual IP space.
     const tas: RequestInit["targetAddressSpace"] =
       init?.targetAddressSpace ?? (isLoopbackUrl(url) ? "loopback" : undefined);
 
@@ -179,8 +179,12 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     } catch {
       return text as unknown as T;
     }
-  } catch (err) {
-    clearTimeout(timeout);
+  } catch (err: any) {
+    if (err?.name === "TimeoutError" || String(err?.message || "").includes("did not respond")) {
+      const timeoutErr = new Error("Print Agent did not respond in 8 seconds. Please check if agent is running.");
+      (timeoutErr as HttpError).status = 504;
+      throw timeoutErr;
+    }
     throw err;
   } finally {
     clearTimeout(timeout);
@@ -191,21 +195,6 @@ export async function checkHealth(): Promise<AgentHealth> {
   return fetchJson<AgentHealth>(AGENT_HEALTH_PATH);
 }
 
-/**
- * Probes the local agent health endpoint and classifies the result.
- *
- * Returns:
- *  - `ok`      — agent responded with HTTP 200
- *  - `blocked` — fetch threw a network error despite the agent being known to
- *                be running (indicates Chrome PNA / CORS blocking)
- *  - `offline` — the agent is not running on this machine
- *
- * The heuristic: if the AbortError / TypeError message mentions "Failed to
- * fetch" or "NetworkError" and the previous direct-browser test of the same
- * URL succeeded, it's almost certainly a PNA block rather than an offline agent.
- * We can't distinguish these 100% from JS so we leave the callers to remember
- * context (e.g. install flag) and decide which label to show.
- */
 export type LocalAccessResult =
   | { outcome: "ok"; health: AgentHealth }
   | { outcome: "blocked"; error: string }
@@ -216,7 +205,9 @@ export async function probeLocalAccess(): Promise<LocalAccessResult> {
   console.log("[PrintAgent] URL:", AGENT_HEALTH_PATH);
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => {
+      controller.abort(new DOMException("Print agent did not respond", "TimeoutError"));
+    }, 5000);
     let res: Response;
     try {
       res = await fetch(AGENT_HEALTH_PATH, {
@@ -239,15 +230,10 @@ export async function probeLocalAccess(): Promise<LocalAccessResult> {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[PrintAgent] Health check failed:", err);
-    // AbortError = timeout.  TypeError "Failed to fetch" / "NetworkError" is
-    // what Chrome throws when PNA or CORS blocks the preflight.
     const isNetworkError =
       (err instanceof TypeError) ||
-      (err instanceof DOMException && err.name === "AbortError");
+      (err instanceof DOMException && (err.name === "AbortError" || err.name === "TimeoutError"));
     if (isNetworkError) {
-      // We can't know for sure if the agent is offline vs PNA-blocked from JS.
-      // Return "blocked" — callers check the install flag to decide which
-      // message to show.
       return { outcome: "blocked", error: msg };
     }
     return { outcome: "offline", error: msg };
@@ -307,7 +293,7 @@ function b64EncodeBytes(data: Uint8Array | ArrayBuffer | number[]): string {
 
 export async function printEscPos(
   commands: any[],
-  options: { drawerKick?: boolean; title?: string } = {}
+  options: { drawerKick?: boolean; title?: string; clientRef?: string } = {}
 ): Promise<AgentJobResult> {
   const encoder = new TextEncoder();
   let total = 0;
@@ -339,6 +325,7 @@ export async function printEscPos(
   const body = {
     job_type: "escpos" as const,
     title: options.title || "POS Receipt",
+    client_ref: options.clientRef,
     data_b64,
     drawer_kick: Boolean(options.drawerKick),
   };
@@ -351,13 +338,15 @@ export async function printEscPos(
 
 export async function printHtmlSlip(
   html: string,
-  options: { title?: string; widthMm?: number } = {}
+  options: { title?: string; widthMm?: number; heightMm?: number; clientRef?: string } = {}
 ): Promise<AgentJobResult> {
   const body = {
     job_type: "html" as const,
     title: options.title || "POS Slip",
+    client_ref: options.clientRef,
     html,
     width_mm: options.widthMm ?? 80,
+    height_mm: options.heightMm,
   };
   return fetchJson<AgentJobResult>(AGENT_PRINT_PATH, {
     method: "POST",

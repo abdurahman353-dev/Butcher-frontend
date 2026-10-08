@@ -6,8 +6,8 @@
 
 import { Sale, SaleItem, ShopSettings } from "@/types";
 
-// Helper to pad strings for fixed-width columns (default 42 chars for standard 80mm/58mm font A)
-const LINE_WIDTH = 42;
+// Single named constant for thermal receipt line width (42 or 48 columns)
+export const LINE_WIDTH = 42;
 
 function padLine(left: string, right: string, width = LINE_WIDTH): string {
   const total = left.length + right.length;
@@ -223,4 +223,25 @@ export function buildKitchenSlipEscPos(
   commands.push("\x1D\x56\x41\x03"); // Cut
 
   return commands;
+}
+
+/**
+ * Safely converts an array of ESC/POS command strings / byte buffers into a base64 string.
+ * Ensures characters are masked to <= 255 before btoa encoding.
+ */
+export function encodeEscPosCommandsToBase64(commands: any[]): string {
+  let binary = "";
+  for (const cmd of commands) {
+    if (typeof cmd === "string") {
+      for (let i = 0; i < cmd.length; i++) {
+        const code = cmd.charCodeAt(i);
+        binary += String.fromCharCode(code & 0xff);
+      }
+    } else if (cmd instanceof Uint8Array || Array.isArray(cmd)) {
+      for (let i = 0; i < cmd.length; i++) {
+        binary += String.fromCharCode(cmd[i] & 0xff);
+      }
+    }
+  }
+  return typeof window !== "undefined" ? window.btoa(binary) : Buffer.from(binary, "binary").toString("base64");
 }

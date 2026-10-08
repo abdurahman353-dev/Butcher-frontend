@@ -31,70 +31,26 @@ export function CustomerPreBillModal({
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const autoPrintAttemptedRef = useRef(false);
 
+  const inFlightRef = useRef(false);
+
   useEffect(() => {
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
+      inFlightRef.current = false;
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen || !bill || !autoPrint || autoPrintAttemptedRef.current) return;
-    autoPrintAttemptedRef.current = true;
-
-    const run = async () => {
-      const opId = createSetupOperationId();
-      logSetupStep(opId, "print", { bill: bill.bill_number, autoPrint: true });
-      try {
-        const token = getToken();
-        if (!token) {
-          const detected = await detectAgentState(opId);
-          if (!detected.health || (!detected.printer && !detected.error)) {
-            setIsPrintAgentOpen(true);
-            return;
-          }
-        }
-        const escpos = buildPreBillEscPos(bill, settings);
-        const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}` });
-        if (res.status === "FAILED") {
-          logSetupStep(opId, "failed", { resError: res.error });
-          await alert({
-            title: "Print Failed",
-            message: res.error || "The pre-bill could not be printed.",
-            type: "danger",
-          });
-          setIsPrintAgentOpen(true);
-          return;
-        }
-        logSetupStep(opId, "complete");
-      } catch (err: any) {
-        logSetupStep(opId, "failed", { error: err?.message });
-        if (ensureTokenClearedOn401(err)) {
-          setIsPrintAgentOpen(true);
-          return;
-        }
-        await alert({
-          title: "Print Agent Unavailable",
-          message: err?.message || "Cannot reach the local Print Agent.",
-          type: "warning",
-        });
-        setIsPrintAgentOpen(true);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      run();
-    }, 30);
-    return () => clearTimeout(timer);
-  }, [isOpen, bill, autoPrint, alert, settings]);
-
   if (!isOpen || !bill) return null;
 
-  const handlePrint = async () => {
-    if (!bill) return;
+  const handlePrint = async (arg?: boolean | React.MouseEvent) => {
+    if (!bill || inFlightRef.current) return;
+    const isReprint = typeof arg === "boolean" ? arg : false;
+    inFlightRef.current = true;
     setIsPrinting(true);
     try {
+      const clientRef = isReprint ? `prebill-${bill.bill_number}-reprint-${Date.now()}` : `prebill-${bill.bill_number}`;
       const escpos = buildPreBillEscPos(bill, settings);
-      const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}` });
+      const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}`, clientRef });
       if (res.status === "FAILED") {
         await alert({
           title: "Print Failed",
@@ -131,6 +87,7 @@ export function CustomerPreBillModal({
       setIsPrintAgentOpen(true);
     } finally {
       setIsPrinting(false);
+      inFlightRef.current = false;
     }
   };
 
