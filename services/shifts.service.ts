@@ -27,11 +27,26 @@ export const shiftsService = {
     return res.data;
   },
 
-  async closeShift(countedCash: number, notes?: string): Promise<Shift> {
-    const res = await apiClient.post<Shift>("/shifts/close", {
-      counted_cash: countedCash,
-      notes,
-    });
+  async closeShift(
+    payload:
+      | number
+      | {
+          counted_cash: number;
+          cash_expenses?: number;
+          mpesa_expenses?: number;
+          counted_mpesa?: number;
+          mpesa_transactions_count?: number;
+          expense_notes?: string;
+          notes?: string;
+        },
+    notes?: string
+  ): Promise<Shift> {
+    const body =
+      typeof payload === "number"
+        ? { counted_cash: payload, notes }
+        : payload;
+
+    const res = await apiClient.post<Shift>("/shifts/close", body);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("butcher:data-change"));
     }

@@ -106,8 +106,21 @@ export function useShift() {
     return newShift;
   };
 
-  const closeShift = async (countedCash: number, notes?: string) => {
-    const closed = await shiftsService.closeShift(countedCash, notes);
+  const closeShift = async (
+    payload:
+      | number
+      | {
+          counted_cash: number;
+          cash_expenses?: number;
+          mpesa_expenses?: number;
+          counted_mpesa?: number;
+          mpesa_transactions_count?: number;
+          expense_notes?: string;
+          notes?: string;
+        },
+    notes?: string
+  ) => {
+    const closed = await shiftsService.closeShift(payload, notes);
     updateShiftState(null);
     return closed;
   };

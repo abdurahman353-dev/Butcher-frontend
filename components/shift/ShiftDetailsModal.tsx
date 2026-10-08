@@ -23,21 +23,33 @@ interface ShiftDetailsModalProps {
 export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: ShiftDetailsModalProps) {
   const { settings } = useShopSettings();
   const { isAdmin } = useAuth();
+  const { alert } = useSystemDialog();
 
   const [editing, setEditing] = useState(false);
-  const [countedInput, setCountedInput] = useState("");
+  const [countedCashInput, setCountedCashInput] = useState("");
+  const [cashExpensesInput, setCashExpensesInput] = useState("");
+  const [countedMpesaInput, setCountedMpesaInput] = useState("");
+  const [mpesaExpensesInput, setMpesaExpensesInput] = useState("");
+  const [mpesaTxCountInput, setMpesaTxCountInput] = useState("");
+  const [expenseNotesInput, setExpenseNotesInput] = useState("");
   const [notesInput, setNotesInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
+  const inFlightRef = useRef(false);
 
   if (!isOpen || !shift) return null;
 
   const isClosed = shift.status === "closed";
 
   const openEdit = () => {
-    setCountedInput(String(shift.counted_cash ?? ""));
+    setCountedCashInput(shift.counted_cash !== null && shift.counted_cash !== undefined ? String(shift.counted_cash) : "");
+    setCashExpensesInput(shift.cash_expenses !== null && shift.cash_expenses !== undefined ? String(shift.cash_expenses) : "");
+    setCountedMpesaInput(shift.counted_mpesa !== null && shift.counted_mpesa !== undefined ? String(shift.counted_mpesa) : "");
+    setMpesaExpensesInput(shift.mpesa_expenses !== null && shift.mpesa_expenses !== undefined ? String(shift.mpesa_expenses) : "");
+    setMpesaTxCountInput(shift.mpesa_transactions_count !== null && shift.mpesa_transactions_count !== undefined ? String(shift.mpesa_transactions_count) : "");
+    setExpenseNotesInput(shift.expense_notes || "");
     setNotesInput("");
     setSaveError(null);
     setEditing(true);
@@ -49,32 +61,36 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
   };
 
   const saveAdjustment = async () => {
-    const val = parseFloat(countedInput);
-    if (isNaN(val) || val < 0) {
-      setSaveError("Enter a valid amount (0 or more).");
+    const valCash = parseFloat(countedCashInput);
+    if (isNaN(valCash) || valCash < 0) {
+      setSaveError("Please enter a valid Counted Physical Cash amount (0 or more).");
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await api.patch(`/shifts/${shift.id}/adjust`, {
-        counted_cash: val,
+      const payload: Record<string, any> = {
+        counted_cash: valCash,
+        cash_expenses: cashExpensesInput.trim() !== "" ? parseFloat(cashExpensesInput) || 0 : 0,
+        counted_mpesa: countedMpesaInput.trim() !== "" ? parseFloat(countedMpesaInput) || 0 : null,
+        mpesa_expenses: mpesaExpensesInput.trim() !== "" ? parseFloat(mpesaExpensesInput) || 0 : 0,
+        mpesa_transactions_count: mpesaTxCountInput.trim() !== "" ? parseInt(mpesaTxCountInput, 10) || 0 : null,
+        expense_notes: expenseNotesInput.trim() || null,
         notes: notesInput.trim() || undefined,
-      });
+      };
+      const res = await api.patch(`/shifts/${shift.id}/adjust`, payload);
       const updated: Shift = res.data?.data ?? res.data;
       setEditing(false);
       onShiftUpdated?.(updated);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Failed to save. Try again.";
+          ?.message ?? "Failed to save shift adjustment. Try again.";
       setSaveError(msg);
     } finally {
       setSaving(false);
     }
   };
-
-  const inFlightRef = useRef(false);
 
   const handlePrint = async () => {
     if (!shift || inFlightRef.current) return;
@@ -148,6 +164,28 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
   };
 
   const discrepancy = shift.difference ?? 0;
+  const cashSales = Number(shift.cash_sales) || 0;
+  const mpesaSales = Number(shift.mpesa_sales) || 0;
+  const openingCash = Number(shift.opening_cash) || 0;
+  const cashExpenses = Number(shift.cash_expenses) || 0;
+  const mpesaExpenses = Number(shift.mpesa_expenses) || 0;
+  const totalExpenses = cashExpenses + mpesaExpenses;
+
+  const grossExpectedCash = openingCash + cashSales;
+  const netExpectedPhysicalCash = grossExpectedCash - cashExpenses;
+  const netExpectedMpesa = mpesaSales - mpesaExpenses;
+
+  // Live calculations for admin editing console
+  const liveCountedCash = parseFloat(countedCashInput) || 0;
+  const liveCashExpenses = cashExpensesInput.trim() !== "" ? parseFloat(cashExpensesInput) || 0 : 0;
+  const liveCashVariance = (liveCountedCash + liveCashExpenses) - grossExpectedCash;
+
+  const liveCountedMpesa = parseFloat(countedMpesaInput) || 0;
+  const liveMpesaExpenses = mpesaExpensesInput.trim() !== "" ? parseFloat(mpesaExpensesInput) || 0 : 0;
+  const liveMpesaEntered = countedMpesaInput.trim() !== "";
+  const liveMpesaVariance = (liveCountedMpesa + liveMpesaExpenses) - mpesaSales;
+
+  const liveNetVariance = liveCashVariance + (liveMpesaEntered ? liveMpesaVariance : 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 select-none">
@@ -293,36 +331,219 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
             </div>
           </div>
 
-          {/* Drawer Reconciliation (For Closed or Current) */}
+          {/* ── Shift Expenses & Till Payouts Section (Prominent) ── */}
           <div className="space-y-2 pb-3 border-b-2 border-black text-black">
-            <div className="text-xs font-black uppercase text-black">DRAWER CASH RECONCILIATION</div>
-            <div className="flex justify-between text-xs">
-              <span className="font-bold text-black">Expected Cash (Float + Cash):</span>
-              <span className="font-black text-black tabular-nums">
-                {formatCurrency(shift.expected_cash)}
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-black uppercase text-black">SHIFT EXPENSES &amp; PAYOUTS</span>
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border border-black ${totalExpenses > 0 ? "bg-black text-white" : "bg-zinc-100 text-black"}`}>
+                {totalExpenses > 0 ? "PAYOUTS RECORDED" : "NO EXPENSES"}
               </span>
             </div>
-            {isClosed ? (
-              <>
-                <div className="flex justify-between text-xs">
-                  <span className="font-bold text-black">Counted Physical Cash:</span>
-                  <span className="font-black text-black tabular-nums">
-                    {formatCurrency(shift.counted_cash ?? 0)}
-                  </span>
-                </div>
-                <div className="p-2 border-2 border-black rounded text-xs font-black flex justify-between items-center text-black">
-                  <span>
-                    DRAWER VARIANCE:{" "}
-                    {discrepancy === 0 ? "BALANCED" : discrepancy > 0 ? "OVERAGE (+)" : "SHORTAGE (-)"}
-                  </span>
-                  <span className="text-sm tabular-nums">
-                    {discrepancy >= 0 ? `+${formatCurrency(discrepancy)}` : formatCurrency(discrepancy)}
-                  </span>
-                </div>
-              </>
+            
+            <div className="flex justify-between text-xs items-center">
+              <span className="font-bold text-black">- Cash Expenses (From Drawer):</span>
+              <span className="font-black text-black tabular-nums">
+                {formatCurrency(cashExpenses)}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-xs items-center">
+              <span className="font-bold text-black">- M-Pesa Expenses (From Till):</span>
+              <span className="font-black text-black tabular-nums">
+                {formatCurrency(mpesaExpenses)}
+              </span>
+            </div>
+
+            <div className="pt-1.5 border-t border-dashed border-black/50 flex justify-between text-xs items-center">
+              <span className="font-black text-black uppercase">TOTAL SHIFT EXPENSES:</span>
+              <span className="font-black text-sm text-black tabular-nums">
+                {formatCurrency(totalExpenses)}
+              </span>
+            </div>
+
+            {shift.expense_notes ? (
+              <div className="mt-1.5 pt-1.5 border-t border-dashed border-black/30 text-xs">
+                <span className="font-black uppercase text-[10px] text-black block mb-0.5">
+                  EXPENSE DETAILS / VOUCHER REASONS:
+                </span>
+                <p className="p-2 border-2 border-black rounded bg-zinc-50 font-mono text-[11px] font-bold text-black leading-snug whitespace-pre-wrap">
+                  {shift.expense_notes}
+                </p>
+              </div>
             ) : (
-              <div className="p-2 border-2 border-black rounded text-xs font-bold text-black">
-                ● Shift is currently active. Physical cash count pending drawer close.
+              <div className="text-[10px] text-zinc-500 font-bold italic pt-0.5">
+                ● No expense voucher reasons specified.
+              </div>
+            )}
+          </div>
+
+          {/* Dual Reconciliation: Cash Drawer & M-Pesa Till */}
+          <div className="space-y-3 pb-3 border-b-2 border-black text-black">
+            {/* 1. Cash Drawer Breakdown */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-black uppercase text-black flex justify-between">
+                <span>1. CASH DRAWER AUDIT</span>
+                <span>(NOTES &amp; COINS)</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="font-bold text-black">Opening Cash Float:</span>
+                <span className="font-black text-black tabular-nums">
+                  {formatCurrency(openingCash)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="font-bold text-black">+ Cash Sales Collected:</span>
+                <span className="font-black text-black tabular-nums">
+                  +{formatCurrency(cashSales)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="font-bold text-black">Gross Cash in Register:</span>
+                <span className="font-black text-black tabular-nums">
+                  {formatCurrency(grossExpectedCash)}
+                </span>
+              </div>
+              {cashExpenses > 0 && (
+                <div className="flex justify-between text-xs text-black">
+                  <span className="font-bold text-black">- Less Cash Expenses Paid:</span>
+                  <span className="font-black text-black tabular-nums">
+                    -{formatCurrency(cashExpenses)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs pt-1 border-t border-dashed border-black/30">
+                <span className="font-black text-black">Net Expected Physical Cash:</span>
+                <span className="font-black text-black tabular-nums">
+                  {formatCurrency(netExpectedPhysicalCash)}
+                </span>
+              </div>
+              {isClosed ? (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="font-bold text-black">Counted Physical Cash:</span>
+                    <span className="font-black text-black tabular-nums">
+                      {formatCurrency(shift.counted_cash ?? 0)}
+                    </span>
+                  </div>
+                  <div
+                    className={`p-2 border-2 rounded text-[11px] font-black flex justify-between items-center ${
+                      discrepancy === 0
+                        ? "bg-emerald-50 border-emerald-600 text-emerald-900"
+                        : discrepancy > 0
+                        ? "bg-blue-50 border-blue-600 text-blue-900"
+                        : "bg-rose-50 border-rose-600 text-rose-900"
+                    } print:border-black print:text-black print:bg-white`}
+                  >
+                    <span>
+                      CASH VARIANCE:{" "}
+                      {discrepancy === 0
+                        ? "BALANCED (0.00)"
+                        : discrepancy > 0
+                        ? "EXCESS / SURPLUS (+)"
+                        : "SHORTAGE / DEFICIT (-)"}
+                    </span>
+                    <span className="tabular-nums">
+                      {discrepancy >= 0 ? `+${formatCurrency(discrepancy)}` : formatCurrency(discrepancy)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-[10px] text-zinc-600 font-bold italic">
+                  ● Physical count pending drawer close.
+                </div>
+              )}
+            </div>
+
+            {/* 2. M-Pesa Phone Audit */}
+            <div className="space-y-1.5 pt-2 border-t border-dashed border-black/40">
+              <div className="text-xs font-black uppercase text-black flex justify-between">
+                <span>2. M-PESA TILL AUDIT</span>
+                <span>(PHONE / SMS)</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="font-bold text-black">Expected M-Pesa (POS Sales):</span>
+                <span className="font-black text-black tabular-nums">
+                  {formatCurrency(mpesaSales)}
+                </span>
+              </div>
+              {mpesaExpenses > 0 && (
+                <div className="flex justify-between text-xs text-black">
+                  <span className="font-bold text-black">- Less M-Pesa Expenses Paid:</span>
+                  <span className="font-black text-black tabular-nums">
+                    -{formatCurrency(mpesaExpenses)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs pt-1 border-t border-dashed border-black/30">
+                <span className="font-black text-black">Net Expected on Phone:</span>
+                <span className="font-black text-black tabular-nums">
+                  {formatCurrency(netExpectedMpesa)}
+                </span>
+              </div>
+              {isClosed && shift.counted_mpesa !== null && shift.counted_mpesa !== undefined ? (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="font-bold text-black">Counted on Phone:</span>
+                    <span className="font-black text-black tabular-nums">
+                      {formatCurrency(shift.counted_mpesa)}
+                      {shift.mpesa_transactions_count ? ` (${shift.mpesa_transactions_count} SMS txs)` : ""}
+                    </span>
+                  </div>
+                  <div
+                    className={`p-2 border-2 rounded text-[11px] font-black flex justify-between items-center ${
+                      (shift.mpesa_difference ?? 0) === 0
+                        ? "bg-emerald-50 border-emerald-600 text-emerald-900"
+                        : (shift.mpesa_difference ?? 0) > 0
+                        ? "bg-blue-50 border-blue-600 text-blue-900"
+                        : "bg-rose-50 border-rose-600 text-rose-900"
+                    } print:border-black print:text-black print:bg-white`}
+                  >
+                    <span>
+                      M-PESA VARIANCE:{" "}
+                      {(shift.mpesa_difference ?? 0) === 0
+                        ? "BALANCED (0.00)"
+                        : (shift.mpesa_difference ?? 0) > 0
+                        ? "EXCESS / SURPLUS (+)"
+                        : "SHORTAGE / DEFICIT (-)"}
+                    </span>
+                    <span className="tabular-nums">
+                      {(shift.mpesa_difference ?? 0) >= 0
+                        ? `+${formatCurrency(shift.mpesa_difference ?? 0)}`
+                        : formatCurrency(shift.mpesa_difference ?? 0)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-[10px] text-zinc-600 font-bold italic">
+                  ● M-Pesa phone audit: {isClosed ? "Not counted on phone" : "Pending shift close"}
+                </div>
+              )}
+            </div>
+
+            {/* Overall Combined Variance on Slip if closed */}
+            {isClosed && (
+              <div
+                className={`p-2 border-2 rounded text-[11px] font-black flex justify-between items-center ${
+                  (discrepancy + (shift.mpesa_difference ?? 0)) === 0
+                    ? "bg-emerald-50 border-emerald-600 text-emerald-900"
+                    : (discrepancy + (shift.mpesa_difference ?? 0)) > 0
+                    ? "bg-blue-50 border-blue-600 text-blue-900"
+                    : "bg-rose-50 border-rose-600 text-rose-900"
+                } print:border-black print:text-black print:bg-white`}
+              >
+                <span>
+                  OVERALL SHIFT VARIANCE:{" "}
+                  {(discrepancy + (shift.mpesa_difference ?? 0)) === 0
+                    ? "BALANCED (0.00)"
+                    : (discrepancy + (shift.mpesa_difference ?? 0)) > 0
+                    ? "NET EXCESS / SURPLUS (+)"
+                    : "NET SHORTAGE / DEFICIT (-)"}
+                </span>
+                <span className="tabular-nums">
+                  {(discrepancy + (shift.mpesa_difference ?? 0)) >= 0
+                    ? `+${formatCurrency(discrepancy + (shift.mpesa_difference ?? 0))}`
+                    : formatCurrency(discrepancy + (shift.mpesa_difference ?? 0))}
+                </span>
               </div>
             )}
           </div>
@@ -352,61 +573,226 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
           </div>
         </div>
 
-        {/* ── Admin: Adjust Counted Cash Panel ── */}
+        {/* ── Admin: Comprehensive Shift Reconciliation Editor ── */}
         {isAdmin && isClosed && (
-          <div className="shrink-0 print:hidden border-t border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+          <div className="shrink-0 print:hidden border-t-2 border-amber-300 bg-amber-50/70 p-4 space-y-3 max-h-[45vh] overflow-y-auto">
             {!editing ? (
               <button
                 type="button"
                 onClick={openEdit}
-                className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-500 text-zinc-950 border border-amber-500 transition-all shadow-xs active:scale-98 cursor-pointer"
               >
-                <Pencil className="w-3.5 h-3.5" />
-                Admin: Correct Counted Cash Amount
+                <Pencil className="w-4 h-4 text-zinc-950" />
+                <span>Admin: Edit &amp; Adjust Full Shift Reconciliation</span>
               </button>
             ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Correcting counted cash will recalculate the drawer variance.
-                </p>
+              <div className="space-y-3 bg-white p-3.5 rounded-2xl border-2 border-amber-400 shadow-sm">
+                <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-black text-xs uppercase tracking-wide">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <span>Admin Shift Adjustment Console</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                    Shift #{shift.id}
+                  </span>
+                </div>
+
+                {/* Section 1: Physical Cash Drawer */}
+                <div className="p-2.5 bg-zinc-50 rounded-xl border border-zinc-200 space-y-2">
+                  <span className="text-[10px] font-black uppercase text-zinc-700 block">
+                    1. Cash Drawer Audit (Counted &amp; Expenses)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-800 block mb-0.5 uppercase">
+                        Counted Cash in Drawer (KSh) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={countedCashInput}
+                        onChange={(e) => setCountedCashInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-1.5 border-2 border-zinc-300 focus:border-zinc-900 rounded-lg text-xs font-black bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-zinc-800 block mb-0.5 uppercase">
+                        Cash Expenses Paid (KSh)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={cashExpensesInput}
+                        onChange={(e) => setCashExpensesInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-1.5 border-2 border-zinc-300 focus:border-zinc-900 rounded-lg text-xs font-black bg-white focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-bold flex justify-between items-center pt-1 border-t border-zinc-200">
+                    <span className="text-zinc-600">Reconciled Cash Variance:</span>
+                    <span
+                      className={`font-black tabular-nums ${
+                        liveCashVariance === 0
+                          ? "text-emerald-700"
+                          : liveCashVariance > 0
+                          ? "text-blue-700"
+                          : "text-rose-700"
+                      }`}
+                    >
+                      {liveCashVariance >= 0
+                        ? `+${formatCurrency(liveCashVariance)}`
+                        : formatCurrency(liveCashVariance)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Section 2: M-Pesa Till Audit */}
+                <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2">
+                  <span className="text-[10px] font-black uppercase text-emerald-900 block">
+                    2. M-Pesa Phone Audit (Counted, Expenses &amp; SMS)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-black text-emerald-950 block mb-0.5 uppercase">
+                        Counted M-Pesa on Phone (KSh)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={countedMpesaInput}
+                        onChange={(e) => setCountedMpesaInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-1.5 border-2 border-emerald-300 focus:border-emerald-700 rounded-lg text-xs font-black bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-emerald-950 block mb-0.5 uppercase">
+                        M-Pesa Expenses Paid (KSh)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={mpesaExpensesInput}
+                        onChange={(e) => setMpesaExpensesInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-1.5 border-2 border-emerald-300 focus:border-emerald-700 rounded-lg text-xs font-black bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-emerald-950 block mb-0.5 uppercase">
+                        M-Pesa SMS / Tx Count
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={mpesaTxCountInput}
+                        onChange={(e) => setMpesaTxCountInput(e.target.value)}
+                        placeholder="e.g. 10"
+                        className="w-full px-2.5 py-1.5 border-2 border-emerald-300 focus:border-emerald-700 rounded-lg text-xs font-black bg-white focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                  {liveMpesaEntered && (
+                    <div className="text-[11px] font-bold flex justify-between items-center pt-1 border-t border-emerald-200">
+                      <span className="text-emerald-800">Reconciled M-Pesa Variance:</span>
+                      <span
+                        className={`font-black tabular-nums ${
+                          liveMpesaVariance === 0
+                            ? "text-emerald-700"
+                            : liveMpesaVariance > 0
+                            ? "text-blue-700"
+                            : "text-rose-700"
+                        }`}
+                      >
+                        {liveMpesaVariance >= 0
+                          ? `+${formatCurrency(liveMpesaVariance)}`
+                          : formatCurrency(liveMpesaVariance)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 3: Expense Details / Voucher Reasons */}
                 <div>
-                  <label className="text-[10px] font-black text-amber-800 block mb-1 uppercase">Corrected Counted Cash</label>
+                  <label className="text-[10px] font-black text-zinc-900 block mb-0.5 uppercase">
+                    Expense Details / Voucher Reasons
+                  </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={countedInput}
-                    onChange={(e) => setCountedInput(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    type="text"
+                    value={expenseNotesInput}
+                    onChange={(e) => setExpenseNotesInput(e.target.value)}
+                    placeholder="e.g. Transport Fare KSh 200, Ice cubes KSh 100, Cleaning supplies..."
+                    className="w-full px-3 py-1.5 border-2 border-zinc-300 rounded-lg text-xs font-bold bg-white focus:outline-hidden focus:border-zinc-900"
                   />
                 </div>
+
+                {/* Section 4: Admin Audit Comment */}
                 <div>
-                  <label className="text-[10px] font-black text-amber-800 block mb-1 uppercase">Reason / Note (optional)</label>
+                  <label className="text-[10px] font-black text-zinc-900 block mb-0.5 uppercase">
+                    Admin Correction Reason / Audit Notes (Optional)
+                  </label>
                   <input
                     type="text"
                     value={notesInput}
                     onChange={(e) => setNotesInput(e.target.value)}
-                    placeholder="e.g. Cashier miscounted notes"
-                    className="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="e.g. Verified with store manager, recount performed..."
+                    className="w-full px-3 py-1.5 border-2 border-zinc-300 rounded-lg text-xs font-bold bg-white focus:outline-hidden focus:border-zinc-900"
                   />
                 </div>
-                {saveError && <p className="text-[11px] text-red-600 font-bold">{saveError}</p>}
-                <div className="flex gap-2">
+
+                {/* Live Net Variance Banner */}
+                <div className="p-2.5 bg-zinc-100 border border-zinc-300 rounded-xl flex items-center justify-between text-xs font-black">
+                  <span className="uppercase text-zinc-800 text-[10px]">
+                    Projected Net Variance (Cash + M-Pesa):
+                  </span>
+                  <span
+                    className={`text-sm tabular-nums ${
+                      liveNetVariance === 0
+                        ? "text-emerald-700"
+                        : liveNetVariance > 0
+                        ? "text-blue-700"
+                        : "text-rose-700"
+                    }`}
+                  >
+                    {liveNetVariance >= 0
+                      ? `+${formatCurrency(liveNetVariance)}`
+                      : formatCurrency(liveNetVariance)}
+                  </span>
+                </div>
+
+                {saveError && <p className="text-[11px] text-red-600 font-black">{saveError}</p>}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
                     onClick={cancelEdit}
                     disabled={saving}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-white border border-zinc-300 text-zinc-600 hover:bg-zinc-50 transition-colors"
-                  >Cancel</button>
+                    className="flex-1 py-2 rounded-xl text-xs font-black bg-white border-2 border-zinc-300 text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
                   <button
                     type="button"
                     onClick={saveAdjustment}
                     disabled={saving}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60"
+                    className="flex-1 py-2 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center gap-1.5 transition-colors shadow-xs disabled:opacity-60"
                   >
-                    {saving ? <span>Saving…</span> : (<><Check className="w-3.5 h-3.5" />Save Correction</>)}
+                    {saving ? (
+                      <span>Saving Adjustments…</span>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Save All Adjustments</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -419,7 +805,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-zinc-200 hover:bg-zinc-100 text-zinc-700 text-xs font-bold rounded-xl shadow-2xs transition-colors text-center"
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-white border-2 border-zinc-300 hover:bg-zinc-100 text-zinc-800 text-xs font-black rounded-xl shadow-2xs transition-colors text-center"
           >
             Close
           </button>
@@ -427,7 +813,7 @@ export function ShiftDetailsModal({ shift, isOpen, onClose, onShiftUpdated }: Sh
             type="button"
             onClick={handlePrint}
             disabled={isPrinting}
-            className="flex-1 sm:flex-none px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
             {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
             <span>{isPrinting ? "Printing..." : "Print Z-Report"}</span>
@@ -449,21 +835,64 @@ function buildShiftEscPos(shift: Shift, settings?: any): any[] {
   commands.push(`${storeName}\n`);
   commands.push("\x1B\x45\x00", "Z-REPORT\n", "SHIFT SUMMARY\n");
   commands.push("=".repeat(42) + "\n", "\x1B\x61\x00");
-  commands.push(`Shift: ${shift.id}\n`);
+  commands.push(`Shift: #${shift.id}\n`);
   commands.push(`Opened: ${new Date(shift.opened_at).toLocaleString()}\n`);
   commands.push(`Closed: ${shift.closed_at ? new Date(shift.closed_at).toLocaleString() : new Date().toLocaleString()}\n`);
   commands.push(`Cashier: ${shift.cashier_name || ""}\n`);
   commands.push(divider);
-  commands.push(`Gross Sales: KSh ${Number(shift.total_sales || 0).toFixed(2)}\n`);
-  commands.push(`Cash Sales: KSh ${Number(shift.cash_sales || 0).toFixed(2)}\n`);
-  commands.push(`M-Pesa: KSh ${Number(shift.mpesa_sales || 0).toFixed(2)}\n`);
-  commands.push(`Card: KSh ${Number(shift.card_sales || 0).toFixed(2)}\n`);
+  commands.push(`Opening Float:   KSh ${Number(shift.opening_cash || 0).toFixed(2)}\n`);
+  commands.push(`Gross Sales:     KSh ${Number(shift.total_sales || 0).toFixed(2)}\n`);
+  commands.push(`  Cash Sales:    KSh ${Number(shift.cash_sales || 0).toFixed(2)}\n`);
+  commands.push(`  M-Pesa:        KSh ${Number(shift.mpesa_sales || 0).toFixed(2)}\n`);
+  commands.push(`  Card:          KSh ${Number(shift.card_sales || 0).toFixed(2)}\n`);
   commands.push(divider);
-  commands.push(`Expected Cash: KSh ${Number(shift.expected_cash || 0).toFixed(2)}\n`);
-  if (shift.counted_cash !== null && shift.counted_cash !== undefined) {
-    commands.push(`Counted Cash: KSh ${Number(shift.counted_cash).toFixed(2)}\n`);
-    commands.push(`Difference: KSh ${Number(shift.difference || 0).toFixed(2)}\n`);
+  
+  // Expenses & Payouts in thermal slip
+  const cashExp = Number(shift.cash_expenses || 0);
+  const mpesaExp = Number(shift.mpesa_expenses || 0);
+  const totalExp = cashExp + mpesaExp;
+  commands.push("EXPENSES & PAYOUTS:\n");
+  commands.push(`  Cash Expenses: KSh ${cashExp.toFixed(2)}\n`);
+  commands.push(`  M-Pesa Exp:    KSh ${mpesaExp.toFixed(2)}\n`);
+  commands.push(`  Total Expenses:KSh ${totalExp.toFixed(2)}\n`);
+  if (shift.expense_notes) {
+    commands.push(`  Vouchers:      ${shift.expense_notes}\n`);
   }
+  commands.push(divider);
+
+  // Cash Drawer Audit
+  commands.push("CASH DRAWER AUDIT:\n");
+  const grossCash = (Number(shift.opening_cash) || 0) + (Number(shift.cash_sales) || 0);
+  commands.push(`  Gross Cash:    KSh ${grossCash.toFixed(2)}\n`);
+  if (cashExp > 0) {
+    commands.push(`  Less Cash Exp: -KSh ${cashExp.toFixed(2)}\n`);
+  }
+  commands.push(`  Expected Cash: KSh ${(grossCash - cashExp).toFixed(2)}\n`);
+  if (shift.counted_cash !== null && shift.counted_cash !== undefined) {
+    commands.push(`  Counted Cash:  KSh ${Number(shift.counted_cash).toFixed(2)}\n`);
+    commands.push(`  Cash Variance: KSh ${Number(shift.difference || 0).toFixed(2)}\n`);
+  }
+
+  // M-Pesa Till Audit
+  if (shift.counted_mpesa !== null && shift.counted_mpesa !== undefined) {
+    commands.push(divider);
+    commands.push("M-PESA TILL AUDIT:\n");
+    commands.push(`  POS M-Pesa:    KSh ${Number(shift.mpesa_sales || 0).toFixed(2)}\n`);
+    if (mpesaExp > 0) {
+      commands.push(`  Less M-Pesa Exp:-KSh ${mpesaExp.toFixed(2)}\n`);
+    }
+    commands.push(`  Counted Phone: KSh ${Number(shift.counted_mpesa).toFixed(2)}\n`);
+    if (shift.mpesa_transactions_count) {
+      commands.push(`  Tx SMS Count:  ${shift.mpesa_transactions_count}\n`);
+    }
+    commands.push(`  M-Pesa Diff:   KSh ${Number(shift.mpesa_difference || 0).toFixed(2)}\n`);
+  }
+
+  if (shift.notes) {
+    commands.push(divider);
+    commands.push(`Comments: ${shift.notes}\n`);
+  }
+
   commands.push("=".repeat(42) + "\n", "\n\n\n\x1D\x56\x41\x03");
   return commands;
 }

@@ -48,7 +48,7 @@ export default function ShiftPage() {
   // Tab State: "active" for current till, "history" for all shifts
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
 
-  // Live clock — ticks every second so active shift durations are real-time
+  // Live clock â€” ticks every second so active shift durations are real-time
   const [nowTick, setNowTick] = useState<number>(Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNowTick(Date.now()), 1000);
@@ -60,8 +60,13 @@ export default function ShiftPage() {
   const [openNotes, setOpenNotes] = useState("");
   const [isOpening, setIsOpening] = useState(false);
 
-  // Close Shift Form State
+  // Close Shift Form State (Cash & M-Pesa Reconciliation + Expenses)
   const [countedCash, setCountedCash] = useState<string>("");
+  const [cashExpenses, setCashExpenses] = useState<string>("");
+  const [countedMpesa, setCountedMpesa] = useState<string>("");
+  const [mpesaExpenses, setMpesaExpenses] = useState<string>("");
+  const [mpesaTxCount, setMpesaTxCount] = useState<string>("");
+  const [expenseNotes, setExpenseNotes] = useState<string>("");
   const [closeNotes, setCloseNotes] = useState("");
   const [isClosing, setIsClosing] = useState(false);
   const [closedSummary, setClosedSummary] = useState<Shift | null>(null);
@@ -94,9 +99,33 @@ export default function ShiftPage() {
   const [pendingPayLaterOrders, setPendingPayLaterOrders] = useState<Sale[]>([]);
   const [showPendingWarning, setShowPendingWarning] = useState(false);
 
+  // Reconciliation Calculations
   const numCounted = parseFloat(countedCash) || 0;
-  const expectedCash = shift ? shift.opening_cash + shift.cash_sales : 0;
-  const discrepancy = countedCash !== "" ? roundTo(numCounted - expectedCash, 2) : 0;
+  const numCashExp = parseFloat(cashExpenses) || 0;
+  const numMpesaExp = parseFloat(mpesaExpenses) || 0;
+  const numCountedMpesa = parseFloat(countedMpesa) || 0;
+
+  // Cash: Gross Expected = Float + Cash Sales
+  const grossExpectedCash = shift ? shift.opening_cash + shift.cash_sales : 0;
+  // Expected physical cash remaining in drawer = Float + Cash Sales - Cash Expenses
+  const expectedPhysicalCash = Math.max(0, grossExpectedCash - numCashExp);
+  // Cash Discrepancy: (Counted Physical Cash + Cash Expenses) - Gross Expected
+  const cashDiscrepancy = countedCash !== "" ? roundTo((numCounted + numCashExp) - grossExpectedCash, 2) : 0;
+
+  // M-Pesa: Gross Expected = M-Pesa Sales recorded on POS
+  const grossExpectedMpesa = shift ? shift.mpesa_sales : 0;
+  // Expected M-Pesa on phone = M-Pesa Sales - M-Pesa Expenses
+  const expectedPhysicalMpesa = Math.max(0, grossExpectedMpesa - numMpesaExp);
+  const hasMpesaCounted = countedMpesa !== "";
+  // M-Pesa Discrepancy: (Counted M-Pesa + M-Pesa Expenses) - Gross Expected M-Pesa
+  const mpesaDiscrepancy = hasMpesaCounted ? roundTo((numCountedMpesa + numMpesaExp) - grossExpectedMpesa, 2) : 0;
+
+  // Total Shift Combined Net Discrepancy
+  const netShiftVariance = roundTo(cashDiscrepancy + (hasMpesaCounted ? mpesaDiscrepancy : 0), 2);
+
+  // Compatibility aliases
+  const expectedCash = expectedPhysicalCash;
+  const discrepancy = cashDiscrepancy;
 
   // Fetch real shift records from backend API
   const loadHistory = useCallback(async () => {
@@ -119,7 +148,7 @@ export default function ShiftPage() {
     }
   }, [statusFilter, cashierFilter, dateFrom, dateTo, discrepancyFilter, search]);
 
-  // Reload history only when filters change — no butcher:data-change listener
+  // Reload history only when filters change â€” no butcher:data-change listener
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
@@ -177,7 +206,7 @@ export default function ShiftPage() {
       return;
     }
 
-    // ── STEP 1: Check for unpaid Pay Later orders before allowing close ──
+    // â”€â”€ STEP 1: Check for unpaid Pay Later orders before allowing close â”€â”€
     try {
       const res = await apiClient.get<{ data: Sale[] }>("/sales", {
         params: { payment_status: "pending", per_page: 100 },
@@ -194,10 +223,10 @@ export default function ShiftPage() {
       if (unpaid.length > 0) {
         setPendingPayLaterOrders(unpaid);
         setShowPendingWarning(true);
-        return; // Block shift close — show warning modal instead
+        return; // Block shift close â€” show warning modal instead
       }
     } catch {
-      // Network error — warn and block
+      // Network error â€” warn and block
       await alert({
         title: "Cannot Verify Pending Orders",
         message:
@@ -207,43 +236,81 @@ export default function ShiftPage() {
       return;
     }
 
-    // ── STEP 2: Proceed with normal confirm dialog ──
+    // â”€â”€ STEP 2: Proceed with normal confirm dialog â”€â”€
     await doCloseShift();
   };
 
   // Separated so it can be called both from handleCloseShift (no pending) and
   // from the "Close Anyway" action in the pending warning modal.
   const doCloseShift = async () => {
-    const diffText =
-      discrepancy === 0
-        ? "Drawer is perfectly balanced."
-        : discrepancy > 0
-          ? `Drawer has an overage of +${formatCurrency(discrepancy)}.`
-          : `Drawer has a shortage of -${formatCurrency(Math.abs(discrepancy))}.`;
+    const cashDiffText =
+      cashDiscrepancy === 0
+        ? "Cash: Perfectly balanced."
+        : cashDiscrepancy > 0
+          ? `Cash: Overage of +${formatCurrency(cashDiscrepancy)}.`
+          : `Cash: SHORTAGE of -${formatCurrency(Math.abs(cashDiscrepancy))}.`;
+
+    const mpesaDiffText = hasMpesaCounted
+      ? mpesaDiscrepancy === 0
+        ? "M-Pesa: Perfectly balanced."
+        : mpesaDiscrepancy > 0
+          ? `M-Pesa: Overage of +${formatCurrency(mpesaDiscrepancy)}.`
+          : `M-Pesa: SHORTAGE of -${formatCurrency(Math.abs(mpesaDiscrepancy))}.`
+      : "M-Pesa: Not counted on phone.";
+
+    const messageLines = [
+      "Are you sure you want to close and reconcile this shift?",
+      "",
+      `â€¢ Expected Cash in Drawer: ${formatCurrency(expectedPhysicalCash)}`,
+      `â€¢ Counted Cash: ${formatCurrency(numCounted)}`,
+      numCashExp > 0 ? `â€¢ Cash Expense Vouchers: ${formatCurrency(numCashExp)}` : null,
+      `â€¢ ${cashDiffText}`,
+      "",
+      `â€¢ Expected M-Pesa: ${formatCurrency(expectedPhysicalMpesa)}`,
+      hasMpesaCounted ? `â€¢ Counted on Phone: ${formatCurrency(numCountedMpesa)}` : null,
+      numMpesaExp > 0 ? `â€¢ M-Pesa Expense Vouchers: ${formatCurrency(numMpesaExp)}` : null,
+      `â€¢ ${mpesaDiffText}`,
+      "",
+      `Net Combined Shift Variance: ${netShiftVariance >= 0 ? `+${formatCurrency(netShiftVariance)}` : formatCurrency(netShiftVariance)}`,
+      "",
+      "This will lock the register till session.",
+    ].filter(Boolean).join("\n");
+
+    const isAllBalanced = cashDiscrepancy === 0 && (!hasMpesaCounted || mpesaDiscrepancy === 0);
 
     const confirmed = await confirm({
-      title: "Confirm Shift Closure",
-      message: `Are you sure you want to close and reconcile this shift?\n\nExpected Cash: ${formatCurrency(
-        expectedCash
-      )}\nCounted Cash: ${formatCurrency(numCounted)}\n${diffText}\n\nThis will lock the register till session.`,
+      title: "Confirm Shift Closure & Till Balancing",
+      message: messageLines,
       confirmText: "Yes, Reconcile & Close",
       cancelText: "Cancel",
-      type: discrepancy === 0 ? "warning" : "danger",
+      type: isAllBalanced ? "warning" : "danger",
     });
 
     if (!confirmed) return;
 
     setIsClosing(true);
     try {
-      const closed = await closeShift(numCounted, closeNotes);
+      const closed = await closeShift({
+        counted_cash: numCounted,
+        cash_expenses: numCashExp,
+        mpesa_expenses: numMpesaExp,
+        counted_mpesa: hasMpesaCounted ? numCountedMpesa : undefined,
+        mpesa_transactions_count: mpesaTxCount !== "" ? parseInt(mpesaTxCount) : undefined,
+        expense_notes: expenseNotes.trim() || undefined,
+        notes: closeNotes.trim() || undefined,
+      });
       setClosedSummary(closed);
       setShowPendingWarning(false);
       await loadHistory();
       await alert({
         title: "Shift Closed & Reconciled",
-        message: `Shift #${closed.id} has been closed successfully. Total sales: ${formatCurrency(
+        message: `Shift #${closed.id} closed successfully.\nTotal sales: ${formatCurrency(
           closed.total_sales
-        )}.`,
+        )}.\nCash variance: ${formatCurrency(closed.difference ?? 0)}${
+          closed.mpesa_difference !== null
+            ? ` | M-Pesa variance: ${formatCurrency(closed.mpesa_difference)}`
+            : ""
+        }`,
         type: "success",
       });
     } catch (e: any) {
@@ -266,7 +333,7 @@ export default function ShiftPage() {
     const start = new Date(openedAt).getTime();
     // Use live nowTick for open shifts so the counter ticks every second
     const end = closedAt ? new Date(closedAt).getTime() : nowTick;
-    if (isNaN(start) || isNaN(end) || end < start) return "—";
+    if (isNaN(start) || isNaN(end) || end < start) return "â€”";
 
     const diffSeconds = Math.floor((end - start) / 1000);
     const hours = Math.floor(diffSeconds / 3600);
@@ -476,7 +543,7 @@ export default function ShiftPage() {
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto select-none">
 
-      {/* ── PAY LATER PENDING WARNING MODAL ── */}
+      {/* â”€â”€ PAY LATER PENDING WARNING MODAL â”€â”€ */}
       {showPendingWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-zinc-200 overflow-hidden">
@@ -488,7 +555,7 @@ export default function ShiftPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-black text-zinc-900">
-                    ⚠️ Cannot Close Shift — Unpaid Orders
+                    âš ï¸ Cannot Close Shift â€” Unpaid Orders
                   </h2>
                   <p className="text-xs text-zinc-600 mt-0.5">
                     You have <span className="font-bold text-amber-700">{pendingPayLaterOrders.length} Pay Later {pendingPayLaterOrders.length === 1 ? "order" : "orders"}</span> that have not been paid.
@@ -530,7 +597,7 @@ export default function ShiftPage() {
                       <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
                         <Receipt className="w-3 h-3 shrink-0" />
                         <span className="font-mono">{sale.sale_number}</span>
-                        <span>·</span>
+                        <span>Â·</span>
                         <span>{formatDateTime(sale.created_at)}</span>
                       </div>
                     </div>
@@ -575,7 +642,7 @@ export default function ShiftPage() {
                 </button>
               </div>
               <p className="text-[10px] text-center text-zinc-400">
-                ⚠️ Closing anyway means these amounts remain as outstanding receivables.
+                âš ï¸ Closing anyway means these amounts remain as outstanding receivables.
               </p>
             </div>
           </div>
@@ -645,9 +712,9 @@ export default function ShiftPage() {
         </div>
       </div>
 
-      {/* ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {/* TAB 1: ACTIVE SHIFT & REGISTER TILL                          */}
-      {/* ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === "active" && (
         <div className="space-y-5 sm:space-y-6 max-w-4xl mx-auto">
           {/* Closed Summary Banner if recently closed */}
@@ -718,24 +785,24 @@ export default function ShiftPage() {
           ) : isShiftOpen && shift ? (
             <div className="space-y-5 sm:space-y-6">
               {/* Active Shift Dashboard Card */}
-              <div className="p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-5 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-zinc-100 gap-3">
+              <div className="p-4 sm:p-6 bg-white border-2 border-zinc-300 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b-2 border-zinc-200 gap-3">
                   <div>
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-700 text-[10px] font-bold uppercase tracking-wider">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" />
                       ACTIVE SHIFT #{shift.id}
                     </span>
-                    <h2 className="text-lg sm:text-xl font-bold text-zinc-900 mt-1.5">
+                    <h2 className="text-lg sm:text-xl font-black text-zinc-950 mt-1.5">
                       Cashier: {shift.cashier_name}
                     </h2>
-                    <p className="text-xs text-zinc-500">
-                      Opened at {formatDateTime(shift.opened_at)} • Duration: {getDuration(shift.opened_at)}
+                    <p className="text-xs font-bold text-zinc-600">
+                      Opened at {formatDateTime(shift.opened_at)} â€¢ Duration: {getDuration(shift.opened_at)}
                     </p>
                   </div>
 
-                  <div className="bg-zinc-50 sm:bg-transparent p-3 sm:p-0 rounded-xl sm:text-right border sm:border-none border-zinc-100 flex sm:block items-center justify-between">
-                    <span className="text-xs text-zinc-500 block">Opening Cash Float</span>
-                    <p className="text-base sm:text-lg font-bold text-zinc-900 tabular-nums">
+                  <div className="sm:text-right">
+                    <span className="text-xs font-bold text-zinc-600 uppercase tracking-wide block">Opening Cash Float</span>
+                    <p className="text-xl font-black text-zinc-950 tabular-nums">
                       {formatCurrency(shift.opening_cash)}
                     </p>
                   </div>
@@ -744,133 +811,403 @@ export default function ShiftPage() {
                 {/* Live Drawer Breakdown */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Cash Sales */}
-                  <div className="p-3.5 sm:p-4 bg-zinc-50 border border-zinc-100 rounded-xl space-y-1">
-                    <div className="flex items-center justify-between text-zinc-500 text-xs">
-                      <span className="font-semibold">Cash Sales</span>
+                  <div className="p-4 bg-white border-2 border-zinc-200 rounded-xl space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase text-zinc-700 tracking-wide">Cash Sales</span>
                       <Banknote className="w-4 h-4 text-green-600" />
                     </div>
-                    <div className="text-xl font-bold text-green-700 tabular-nums">
+                    <div className="text-2xl font-black text-green-700 tabular-nums">
                       {formatCurrency(shift.cash_sales)}
                     </div>
-                    <p className="text-[10px] text-zinc-400">Physical notes & coins in drawer</p>
+                    <p className="text-[10px] font-bold text-zinc-500">Physical notes &amp; coins in drawer</p>
                   </div>
 
                   {/* M-Pesa Sales */}
-                  <div className="p-3.5 sm:p-4 bg-zinc-50 border border-zinc-100 rounded-xl space-y-1">
-                    <div className="flex items-center justify-between text-zinc-500 text-xs">
-                      <span className="font-semibold">M-Pesa Sales</span>
+                  <div className="p-4 bg-white border-2 border-zinc-200 rounded-xl space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase text-zinc-700 tracking-wide">M-Pesa Sales</span>
                       <Smartphone className="w-4 h-4 text-green-600" />
                     </div>
-                    <div className="text-xl font-bold text-green-700 tabular-nums">
+                    <div className="text-2xl font-black text-green-700 tabular-nums">
                       {formatCurrency(shift.mpesa_sales)}
                     </div>
-                    <p className="text-[10px] text-zinc-400">Direct till paybill</p>
+                    <p className="text-[10px] font-bold text-zinc-500">Direct till paybill</p>
                   </div>
 
                   {/* Card Sales */}
-                  <div className="p-3.5 sm:p-4 bg-zinc-50 border border-zinc-100 rounded-xl space-y-1">
-                    <div className="flex items-center justify-between text-zinc-500 text-xs">
-                      <span className="font-semibold">Card Sales</span>
+                  <div className="p-4 bg-white border-2 border-zinc-200 rounded-xl space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase text-zinc-700 tracking-wide">Card Sales</span>
                       <CreditCard className="w-4 h-4 text-blue-600" />
                     </div>
-                    <div className="text-xl font-bold text-blue-700 tabular-nums">
+                    <div className="text-2xl font-black text-blue-700 tabular-nums">
                       {formatCurrency(shift.card_sales)}
                     </div>
-                    <p className="text-[10px] text-zinc-400">POS Card Machine</p>
+                    <p className="text-[10px] font-bold text-zinc-500">POS Card Machine</p>
                   </div>
                 </div>
 
                 {/* Total Sales Summary Banner */}
-                <div className="p-4 bg-green-50/70 border border-green-200 rounded-xl flex items-center justify-between">
+                <div className="p-4 bg-white border-2 border-green-300 rounded-xl flex items-center justify-between">
                   <div>
-                    <span className="text-[11px] sm:text-xs uppercase font-bold text-green-800 tracking-wider">
+                    <span className="text-xs uppercase font-black text-green-800 tracking-wider block">
                       Total Shift Revenue
                     </span>
-                    <p className="text-[10px] sm:text-xs text-zinc-500">Combined cash, M-Pesa, and card transactions</p>
+                    <p className="text-xs font-bold text-zinc-600">Combined cash, M-Pesa, and card transactions</p>
                   </div>
-                  <div className="text-2xl sm:text-3xl font-black text-zinc-900 tabular-nums">
+                  <div className="text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">
                     {formatCurrency(shift.total_sales)}
                   </div>
                 </div>
               </div>
 
-              {/* Close Shift & Drawer Reconciliation Card */}
-              <div className="p-4 sm:p-6 bg-white border border-zinc-200 rounded-2xl sm:rounded-3xl space-y-4 shadow-xs">
-                <div className="flex items-center gap-2 text-zinc-900 font-bold text-base pb-3 border-b border-zinc-100">
-                  <Lock className="w-5 h-5 text-amber-600 shrink-0" />
-                  <span>Close Shift & Count Cash</span>
+              {/* Close Shift & Dual Reconciliation Card (Cash Drawer & M-Pesa Till) */}
+              <div className="p-4 sm:p-6 bg-white border-2 border-zinc-300 rounded-2xl sm:rounded-3xl space-y-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b-2 border-zinc-200 gap-2">
+                  <div className="flex items-center gap-2 text-zinc-950 font-black text-lg">
+                    <Lock className="w-5 h-5 text-amber-600 shrink-0" />
+                    <span>Close Shift &amp; Till Reconciliation</span>
+                  </div>
+                  <span className="text-xs font-bold text-zinc-700 bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-200">
+                    Dual Audit: Cash Drawer + M-Pesa Phone
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
-                  <div className="p-4 bg-zinc-50 border border-zinc-100 rounded-xl space-y-1">
-                    <span className="text-[11px] font-semibold uppercase text-zinc-500 block">
-                      Expected Cash in Drawer
-                    </span>
-                    <div className="text-2xl font-bold text-zinc-900 tabular-nums">
-                      {formatCurrency(expectedCash)}
+                {/* â”€â”€ SECTION 1: CASH DRAWER RECONCILIATION â”€â”€ */}
+                <div className="p-4 sm:p-5 bg-zinc-50/80 border-2 border-zinc-300 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-200">
+                    <div className="flex items-center gap-2">
+                      <Banknote className="w-5 h-5 text-emerald-700" />
+                      <h3 className="text-sm font-black text-zinc-950 uppercase tracking-wide">
+                        1. Physical Cash Drawer Balancing
+                      </h3>
                     </div>
-                    <p className="text-[11px] text-zinc-500">
-                      Float ({formatCurrency(shift.opening_cash)}) + Cash Sales ({formatCurrency(shift.cash_sales)})
-                    </p>
+                    <span className="text-[11px] font-bold text-zinc-700">Notes &amp; Coins</span>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-xs font-semibold uppercase text-zinc-700">
-                      Counted Physical Cash in Drawer (KSh) <span className="text-rose-500">*</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Expected Cash in Drawer */}
+                    <div className="p-4 bg-white border-2 border-zinc-300 rounded-xl space-y-1.5 shadow-2xs">
+                      <span className="text-xs font-black uppercase text-zinc-950 tracking-wider block">
+                        EXPECTED CASH IN DRAWER
+                      </span>
+                      <div className="text-2xl sm:text-3xl font-black text-zinc-950 tabular-nums">
+                        {formatCurrency(expectedPhysicalCash)}
+                      </div>
+                      <p className="text-xs font-bold text-zinc-800 leading-snug">
+                        Float ({formatCurrency(shift.opening_cash)}) + Cash Sales ({formatCurrency(shift.cash_sales)})
+                        {numCashExp > 0 && (
+                          <span className="text-rose-700 block font-extrabold mt-0.5">
+                            - Cash Expenses ({formatCurrency(numCashExp)})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Counted Physical Cash Input */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black uppercase text-zinc-950 tracking-wider">
+                        COUNTED PHYSICAL CASH IN DRAWER (KSH) <span className="text-rose-600 font-black">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={countedCash}
+                        onChange={(e) => setCountedCash(e.target.value)}
+                        placeholder="e.g. 40500"
+                        className="w-full bg-white border-2 border-zinc-400 focus:border-zinc-950 rounded-xl px-4 py-3 text-xl font-black text-zinc-950 placeholder:text-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-zinc-950/20 shadow-xs"
+                      />
+                      <p className="text-[11px] font-bold text-zinc-600">
+                        Total actual cash physically counted in the register
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Cash Expense Payout Input */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-black uppercase text-zinc-900">
+                        Cash Expenses / Payouts from Till (KSh)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={cashExpenses}
+                        onChange={(e) => setCashExpenses(e.target.value)}
+                        placeholder="e.g. 500 (Optional)"
+                        className="w-full bg-white border-2 border-zinc-300 focus:border-zinc-900 rounded-xl px-3.5 py-2.5 text-base font-bold text-zinc-950 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs"
+                      />
+                      <p className="text-[10px] font-semibold text-zinc-600">
+                        Petty cash, transport, supplier payments taken from cash drawer
+                      </p>
+                    </div>
+
+                    {/* Live Cash Drawer Status Badge */}
+                    <div className="flex flex-col justify-end">
+                      {countedCash !== "" ? (
+                        <div
+                          className={`p-3 rounded-xl border-2 flex items-center justify-between text-xs font-black ${
+                            cashDiscrepancy === 0
+                              ? "bg-emerald-50 border-emerald-400 text-emerald-950"
+                              : cashDiscrepancy > 0
+                              ? "bg-blue-50 border-blue-400 text-blue-950"
+                              : "bg-rose-50 border-rose-400 text-rose-950"
+                          }`}
+                        >
+                          <div>
+                            <span className="block font-black uppercase text-[10px] tracking-wide">
+                              Cash Drawer Balance
+                            </span>
+                            <span className="text-xs">
+                              {cashDiscrepancy === 0
+                                ? "Perfect Match (Balanced)"
+                                : cashDiscrepancy > 0
+                                ? "Cash Surplus (Over)"
+                                : "Cash Shortage (Short)"}
+                            </span>
+                          </div>
+                          <span className="text-lg font-black tabular-nums">
+                            {cashDiscrepancy >= 0
+                              ? `+${formatCurrency(cashDiscrepancy)}`
+                              : formatCurrency(cashDiscrepancy)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-xl border border-dashed border-zinc-300 text-zinc-500 text-xs font-semibold text-center">
+                          Enter counted cash above to see live drawer balance
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* â”€â”€ SECTION 2: M-PESA TILL PHONE RECONCILIATION â”€â”€ */}
+                <div className="p-4 sm:p-5 bg-emerald-50/50 border-2 border-emerald-300 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-5 h-5 text-emerald-700" />
+                      <h3 className="text-sm font-black text-emerald-950 uppercase tracking-wide">
+                        2. M-Pesa Phone &amp; Till Audit
+                      </h3>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-800">Phone SMS &amp; Statement</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Expected M-Pesa Sales */}
+                    <div className="p-4 bg-white border-2 border-emerald-300 rounded-xl space-y-1.5 shadow-2xs">
+                      <span className="text-xs font-black uppercase text-emerald-950 tracking-wider block">
+                        EXPECTED M-PESA FROM POS SALES
+                      </span>
+                      <div className="text-2xl sm:text-3xl font-black text-emerald-950 tabular-nums">
+                        {formatCurrency(expectedPhysicalMpesa)}
+                      </div>
+                      <p className="text-xs font-bold text-zinc-800 leading-snug">
+                        Total Recorded POS M-Pesa Sales: {formatCurrency(shift.mpesa_sales)}
+                        {numMpesaExp > 0 && (
+                          <span className="text-rose-700 block font-extrabold mt-0.5">
+                            - M-Pesa Expenses ({formatCurrency(numMpesaExp)})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Counted M-Pesa on Phone Input */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black uppercase text-zinc-950 tracking-wider">
+                        ACTUAL M-PESA RECEIVED ON PHONE (KSH)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={countedMpesa}
+                        onChange={(e) => setCountedMpesa(e.target.value)}
+                        placeholder="e.g. 15400"
+                        className="w-full bg-white border-2 border-emerald-400 focus:border-emerald-800 rounded-xl px-4 py-3 text-xl font-black text-zinc-950 placeholder:text-zinc-500 focus:outline-hidden focus:ring-2 focus:ring-emerald-600/20 shadow-xs"
+                      />
+                      <p className="text-[11px] font-bold text-zinc-600">
+                        Sum of M-Pesa customer payments received on the till phone
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* M-Pesa Expenses & Transaction Count */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-black uppercase text-zinc-900">
+                        M-Pesa Expenses / Payouts (KSh)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={mpesaExpenses}
+                        onChange={(e) => setMpesaExpenses(e.target.value)}
+                        placeholder="e.g. 1000 (Optional)"
+                        className="w-full bg-white border-2 border-zinc-300 focus:border-zinc-900 rounded-xl px-3 py-2 text-sm font-bold text-zinc-950 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs"
+                      />
+                      <p className="text-[10px] font-semibold text-zinc-600">
+                        Supplier payments sent directly from M-Pesa till
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-xs font-black uppercase text-zinc-900">
+                        M-Pesa SMS Count on Phone
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        value={mpesaTxCount}
+                        onChange={(e) => setMpesaTxCount(e.target.value)}
+                        placeholder="e.g. 12 transactions"
+                        className="w-full bg-white border-2 border-zinc-300 focus:border-zinc-900 rounded-xl px-3 py-2 text-sm font-bold text-zinc-950 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs"
+                      />
+                      <p className="text-[10px] font-semibold text-zinc-600">
+                        Total M-Pesa messages received on phone
+                      </p>
+                    </div>
+
+                    {/* Live M-Pesa Status Badge */}
+                    <div className="flex flex-col justify-end">
+                      {hasMpesaCounted ? (
+                        <div
+                          className={`p-2.5 rounded-xl border-2 flex items-center justify-between text-xs font-black ${
+                            mpesaDiscrepancy === 0
+                              ? "bg-emerald-100 border-emerald-500 text-emerald-950"
+                              : mpesaDiscrepancy > 0
+                              ? "bg-blue-50 border-blue-400 text-blue-950"
+                              : "bg-rose-50 border-rose-400 text-rose-950"
+                          }`}
+                        >
+                          <div>
+                            <span className="block font-black uppercase text-[10px]">
+                              M-Pesa Balance
+                            </span>
+                            <span className="text-[11px]">
+                              {mpesaDiscrepancy === 0
+                                ? "M-Pesa Match"
+                                : mpesaDiscrepancy > 0
+                                ? "M-Pesa Surplus"
+                                : "M-Pesa Shortage"}
+                            </span>
+                          </div>
+                          <span className="text-base font-black tabular-nums">
+                            {mpesaDiscrepancy >= 0
+                              ? `+${formatCurrency(mpesaDiscrepancy)}`
+                              : formatCurrency(mpesaDiscrepancy)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-xl border border-dashed border-emerald-300 text-emerald-700 text-xs font-semibold text-center">
+                          Enter phone M-Pesa to audit
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* â”€â”€ SECTION 3: EXPENSE NOTES & CLOSING AUDIT â”€â”€ */}
+                <div className="space-y-3 pt-2 border-t border-zinc-200">
+                  {(numCashExp > 0 || numMpesaExp > 0) && (
+                    <div>
+                      <label className="block text-xs font-black uppercase text-zinc-950 mb-1">
+                        Expense Details / Voucher Reasons <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={expenseNotes}
+                        onChange={(e) => setExpenseNotes(e.target.value)}
+                        placeholder="e.g. Meat delivery transport KSh 300, Ice cubes KSh 200, Packaging KSh 500..."
+                        className="w-full bg-white border-2 border-zinc-300 focus:border-zinc-950 rounded-xl px-3.5 py-2.5 text-xs font-bold text-zinc-950 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-black uppercase text-zinc-950 mb-1">
+                      Closing Notes / Audit Comments (Optional)
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      value={countedCash}
-                      onChange={(e) => setCountedCash(e.target.value)}
-                      placeholder="e.g. 40500"
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-lg font-bold text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                      type="text"
+                      value={closeNotes}
+                      onChange={(e) => setCloseNotes(e.target.value)}
+                      placeholder="e.g. Verified with store manager, float handed over to evening cashier..."
+                      className="w-full bg-white border-2 border-zinc-300 focus:border-zinc-950 rounded-xl px-3.5 py-2 text-xs font-bold text-zinc-950 placeholder:text-zinc-400 focus:outline-hidden shadow-2xs"
                     />
                   </div>
-                </div>
 
-                {/* Live Variance Calculation */}
-                {countedCash !== "" && (
-                  <div
-                    className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${discrepancy === 0
-                        ? "bg-green-50 border-green-200 text-green-800"
-                        : discrepancy > 0
-                          ? "bg-blue-50 border-blue-200 text-blue-800"
-                          : "bg-rose-50 border-rose-200 text-rose-800"
-                      }`}
+                  {/* Combined Overall Shift Summary Banner */}
+                  {countedCash !== "" && (
+                    <div className="p-3.5 bg-white border-2 border-zinc-300 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs uppercase font-extrabold text-zinc-950 tracking-wider block">
+                          Overall Shift Net Variance (Cash + M-Pesa)
+                        </span>
+                        <div className="text-xs text-zinc-700 space-x-3 mt-0.5">
+                          <span>
+                            Cash:{" "}
+                            <strong
+                              className={
+                                cashDiscrepancy === 0
+                                  ? "text-emerald-700"
+                                  : cashDiscrepancy > 0
+                                  ? "text-blue-700"
+                                  : "text-rose-700"
+                              }
+                            >
+                              {cashDiscrepancy >= 0
+                                ? `+${formatCurrency(cashDiscrepancy)}`
+                                : formatCurrency(cashDiscrepancy)}
+                            </strong>
+                          </span>
+                          {hasMpesaCounted && (
+                            <span>
+                              M-Pesa:{" "}
+                              <strong
+                                className={
+                                  mpesaDiscrepancy === 0
+                                    ? "text-emerald-700"
+                                    : mpesaDiscrepancy > 0
+                                    ? "text-blue-700"
+                                    : "text-rose-700"
+                                }
+                              >
+                                {mpesaDiscrepancy >= 0
+                                  ? `+${formatCurrency(mpesaDiscrepancy)}`
+                                  : formatCurrency(mpesaDiscrepancy)}
+                              </strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span
+                          className={`text-xl font-black tabular-nums ${
+                            netShiftVariance === 0
+                              ? "text-emerald-700"
+                              : netShiftVariance > 0
+                              ? "text-blue-700"
+                              : "text-rose-700"
+                          }`}
+                        >
+                          {netShiftVariance >= 0
+                            ? `+${formatCurrency(netShiftVariance)}`
+                            : formatCurrency(netShiftVariance)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={isClosing || countedCash === ""}
+                    onClick={handleCloseShift}
+                    className="w-full py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 cursor-pointer mt-2"
                   >
-                    <span>
-                      Drawer Balance:{" "}
-                      {discrepancy === 0 ? "Perfect Match (Balanced)" : discrepancy > 0 ? "Over / Surplus" : "Shortage"}
-                    </span>
-                    <span className="text-base font-bold tabular-nums">
-                      {discrepancy >= 0 ? `+${formatCurrency(discrepancy)}` : formatCurrency(discrepancy)}
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-600 mb-1">
-                    Closing Notes / Audit Comments (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={closeNotes}
-                    onChange={(e) => setCloseNotes(e.target.value)}
-                    placeholder="e.g. Verified with store manager, float handed over..."
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
-                  />
+                    <Lock className="w-4 h-4" />
+                    <span>{isClosing ? "Closing & Reconciling Shift..." : "Close Shift & Generate Audit Summary"}</span>
+                  </button>
                 </div>
-
-                <button
-                  type="button"
-                  disabled={isClosing || countedCash === ""}
-                  onClick={handleCloseShift}
-                  className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 cursor-pointer"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span>{isClosing ? "Closing Shift..." : "Close Shift & Generate Summary"}</span>
-                </button>
               </div>
             </div>
           ) : (
@@ -944,63 +1281,63 @@ export default function ShiftPage() {
         </div>
       )}
 
-      {/* ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {/* TAB 2: SHIFT HISTORY & TILL AUDIT                            */}
-      {/* ──────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === "history" && (
         <div className="space-y-4 sm:space-y-6">
           {/* Summary Metric Cards: Computed strictly from real filtered data */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {/* 1. Total Shifts */}
-            <div className="p-3 sm:p-4 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs text-zinc-500">
-                <span className="font-semibold">Filtered Shifts</span>
-                <History className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            <div className="p-3.5 sm:p-4 bg-white border-2 border-zinc-300 rounded-xl sm:rounded-2xl shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] sm:text-xs">
+                <span className="font-black uppercase tracking-wider text-zinc-600">Filtered Shifts</span>
+                <History className="w-4 h-4 text-zinc-500 shrink-0" />
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-zinc-900 tabular-nums">
+              <div className="text-2xl font-black text-zinc-950 tabular-nums">
                 {stats.total}
               </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-500 truncate">
+              <p className="text-[11px] font-bold text-zinc-600 truncate">
                 {stats.activeCount} open • {stats.closedCount} closed
               </p>
             </div>
 
             {/* 2. Total Revenue */}
-            <div className="p-3 sm:p-4 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs text-zinc-500">
-                <span className="font-semibold">Shift Sales</span>
-                <TrendingUp className="w-3.5 h-3.5 text-green-600 shrink-0" />
+            <div className="p-3.5 sm:p-4 bg-white border-2 border-zinc-300 rounded-xl sm:rounded-2xl shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] sm:text-xs">
+                <span className="font-black uppercase tracking-wider text-zinc-600">Shift Sales</span>
+                <TrendingUp className="w-4 h-4 text-green-600 shrink-0" />
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-green-700 tabular-nums truncate">
+              <div className="text-2xl font-black text-green-700 tabular-nums truncate">
                 {formatCurrency(stats.totalSales)}
               </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-500 truncate">
+              <p className="text-[11px] font-bold text-zinc-600 truncate">
                 Total for matching shifts
               </p>
             </div>
 
             {/* 3. Cash & M-Pesa Combined Total */}
-            <div className="p-3 sm:p-4 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs text-zinc-500">
-                <span className="font-semibold">Cash &amp; M-Pesa</span>
+            <div className="p-3.5 sm:p-4 bg-white border-2 border-zinc-300 rounded-xl sm:rounded-2xl shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] sm:text-xs">
+                <span className="font-black uppercase tracking-wider text-zinc-600">Cash &amp; M-Pesa</span>
                 <Banknote className="w-4 h-4 text-green-600 shrink-0" />
               </div>
-              <div className="text-xl sm:text-2xl font-bold text-zinc-900 tabular-nums truncate">
+              <div className="text-2xl font-black text-zinc-950 tabular-nums truncate">
                 {formatCurrency(stats.totalCashAndMpesa)}
               </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-500 truncate">
+              <p className="text-[11px] font-bold text-zinc-600 truncate">
                 Cash: {formatCurrency(stats.totalCashSales)} • M-Pesa: {formatCurrency(stats.totalMpesaSales)}
               </p>
             </div>
 
             {/* 4. Net Variance */}
-            <div className="p-3 sm:p-4 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-[11px] sm:text-xs text-zinc-500">
-                <span className="font-semibold">Net Variance</span>
-                <Scale className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+            <div className="p-3.5 sm:p-4 bg-white border-2 border-zinc-300 rounded-xl sm:rounded-2xl shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] sm:text-xs">
+                <span className="font-black uppercase tracking-wider text-zinc-600">Net Variance</span>
+                <Scale className="w-4 h-4 text-zinc-500 shrink-0" />
               </div>
               <div
-                className={`text-xl sm:text-2xl font-bold tabular-nums truncate ${stats.netVariance === 0
+                className={`text-xl sm:text-2xl font-black tabular-nums truncate ${stats.netVariance === 0
                     ? "text-green-700"
                     : stats.netVariance > 0
                       ? "text-blue-700"
@@ -1009,7 +1346,7 @@ export default function ShiftPage() {
               >
                 {stats.netVariance >= 0 ? `+${formatCurrency(stats.netVariance)}` : formatCurrency(stats.netVariance)}
               </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-500 truncate">
+              <p className="text-[11px] font-bold text-zinc-600 truncate">
                 {stats.netVariance === 0
                   ? "Drawers balanced"
                   : stats.netVariance > 0
@@ -1019,14 +1356,14 @@ export default function ShiftPage() {
             </div>
           </div>
 
-          {/* ── HIGH-CAPACITY FILTER & SEARCH CONSOLE ── */}
-          <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
+          {/* â”€â”€ HIGH-CAPACITY FILTER & SEARCH CONSOLE â”€â”€ */}
+          <div className="bg-white border-2 border-zinc-300 rounded-2xl shadow-xs overflow-hidden">
             {/* Main Search & Quick Action Toolbar */}
             <div className="p-3 sm:p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1">
                 {/* Search */}
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-zinc-600 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={search}
@@ -1035,13 +1372,13 @@ export default function ShiftPage() {
                       setHistoryPage(1);
                     }}
                     placeholder="Search shift #, cashier, notes..."
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-9 pr-8 py-2 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                    className="w-full bg-white border-2 border-zinc-300 rounded-xl pl-9 pr-8 py-2 text-xs font-bold text-zinc-950 placeholder:text-zinc-500 focus:outline-hidden focus:border-zinc-950 shadow-2xs"
                   />
                   {search && (
                     <button
                       type="button"
                       onClick={() => setSearch("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-900"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -1055,7 +1392,7 @@ export default function ShiftPage() {
                     setStatusFilter(e.target.value as any);
                     setHistoryPage(1);
                   }}
-                  className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-700 font-medium focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs shrink-0"
+                  className="bg-white border-2 border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-950 font-black focus:outline-hidden focus:border-zinc-950 shadow-2xs shrink-0"
                 >
                   <option value="all">All Statuses</option>
                   <option value="open">Active / Open Only</option>
@@ -1066,15 +1403,15 @@ export default function ShiftPage() {
                 <button
                   type="button"
                   onClick={() => setShowAdvancedFilters((prev) => !prev)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border shadow-2xs shrink-0 ${showAdvancedFilters || activeFiltersCount > 0
-                      ? "bg-green-50 text-green-800 border-green-200"
-                      : "bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200"
+                  className={`px-3 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors border-2 shadow-2xs shrink-0 ${showAdvancedFilters || activeFiltersCount > 0
+                      ? "bg-green-50 text-green-900 border-green-500"
+                      : "bg-white hover:bg-zinc-100 text-zinc-900 border-zinc-300"
                     }`}
                 >
-                  <Filter className="w-3.5 h-3.5 text-green-700" />
+                  <Filter className="w-3.5 h-3.5 text-zinc-700" />
                   <span>Filters</span>
                   {activeFiltersCount > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-green-600 text-white text-[10px] font-bold">
+                    <span className="px-1.5 py-0.2 rounded-full bg-green-600 text-white text-[10px] font-black">
                       {activeFiltersCount}
                     </span>
                   )}
@@ -1087,7 +1424,7 @@ export default function ShiftPage() {
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="px-2.5 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-xl flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-2 text-rose-700 hover:text-rose-800 hover:bg-rose-50 text-xs font-black rounded-xl flex items-center gap-1 transition-colors border border-rose-300"
                   >
                     <RotateCcw className="w-3 h-3" />
                     <span>Reset</span>
@@ -1098,10 +1435,10 @@ export default function ShiftPage() {
                   type="button"
                   onClick={handleExportCSV}
                   disabled={filteredAndSortedShifts.length === 0}
-                  className="px-3 py-2 bg-zinc-50 hover:bg-zinc-100 disabled:opacity-40 text-zinc-700 border border-zinc-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                  className="px-3 py-2 bg-white hover:bg-zinc-100 disabled:opacity-40 text-zinc-950 border-2 border-zinc-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs"
                   title="Export filtered shift audits to CSV"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
                   <span>Export CSV</span>
                 </button>
 
@@ -1109,7 +1446,7 @@ export default function ShiftPage() {
                   type="button"
                   onClick={loadHistory}
                   disabled={isHistoryLoading}
-                  className="px-3 py-2 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border border-zinc-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+                  className="px-3 py-2 bg-white hover:bg-zinc-100 text-zinc-950 border-2 border-zinc-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs disabled:opacity-50"
                   title="Reload Shift List from Database"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isHistoryLoading ? "animate-spin" : ""}`} />
@@ -1118,13 +1455,13 @@ export default function ShiftPage() {
               </div>
             </div>
 
-            {/* ── EXPANDABLE ADVANCED FILTERS PANEL ── */}
+            {/* â”€â”€ EXPANDABLE ADVANCED FILTERS PANEL â”€â”€ */}
             {showAdvancedFilters && (
-              <div className="p-3.5 bg-zinc-50/70 border-t border-zinc-200 space-y-3">
+              <div className="p-3.5 bg-zinc-50 border-t-2 border-zinc-200 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {/* 1. Cashier Selector */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+                    <label className="block text-[11px] font-black uppercase text-zinc-950 mb-1">
                       Cashier / Station
                     </label>
                     <select
@@ -1133,7 +1470,7 @@ export default function ShiftPage() {
                         setCashierFilter(e.target.value);
                         setHistoryPage(1);
                       }}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-800 font-medium focus:outline-hidden focus:border-green-600 shadow-2xs"
+                      className="w-full bg-white border-2 border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-950 font-bold focus:outline-hidden focus:border-zinc-950 shadow-2xs"
                     >
                       <option value="all">All Cashiers ({uniqueCashiers.length})</option>
                       {uniqueCashiers.map((c) => (
@@ -1146,7 +1483,7 @@ export default function ShiftPage() {
 
                   {/* 2. Discrepancy Filter */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+                    <label className="block text-[11px] font-black uppercase text-zinc-950 mb-1">
                       Drawer Reconciliation
                     </label>
                     <select
@@ -1155,7 +1492,7 @@ export default function ShiftPage() {
                         setDiscrepancyFilter(e.target.value as any);
                         setHistoryPage(1);
                       }}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-800 font-medium focus:outline-hidden focus:border-green-600 shadow-2xs"
+                      className="w-full bg-white border-2 border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-950 font-bold focus:outline-hidden focus:border-zinc-950 shadow-2xs"
                     >
                       <option value="all">All Reconciliations</option>
                       <option value="balanced">Balanced Only (KSh 0.00)</option>
@@ -1167,7 +1504,7 @@ export default function ShiftPage() {
 
                   {/* 3. Date Range (From & To) */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+                    <label className="block text-[11px] font-black uppercase text-zinc-950 mb-1">
                       Date From
                     </label>
                     <input
@@ -1177,12 +1514,12 @@ export default function ShiftPage() {
                         setDateFrom(e.target.value);
                         setHistoryPage(1);
                       }}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-800 font-medium focus:outline-hidden focus:border-green-600 shadow-2xs"
+                      className="w-full bg-white border-2 border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-950 font-bold focus:outline-hidden focus:border-zinc-950 shadow-2xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-500 mb-1">
+                    <label className="block text-[11px] font-black uppercase text-zinc-950 mb-1">
                       Date To
                     </label>
                     <input
@@ -1192,54 +1529,54 @@ export default function ShiftPage() {
                         setDateTo(e.target.value);
                         setHistoryPage(1);
                       }}
-                      className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-800 font-medium focus:outline-hidden focus:border-green-600 shadow-2xs"
+                      className="w-full bg-white border-2 border-zinc-300 rounded-xl px-3 py-2 text-xs text-zinc-950 font-bold focus:outline-hidden focus:border-zinc-950 shadow-2xs"
                     />
                   </div>
                 </div>
 
                 {/* Quick Date Presets & Sorting Row */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-zinc-200/60 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t-2 border-zinc-200 text-xs">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] uppercase font-bold text-zinc-400 mr-1">Presets:</span>
+                    <span className="text-[11px] uppercase font-black text-zinc-700 mr-1">Presets:</span>
                     <button
                       type="button"
                       onClick={() => setQuickDate("today")}
-                      className="px-2.5 py-1 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg text-xs font-semibold text-zinc-700 shadow-2xs transition-colors"
+                      className="px-2.5 py-1 bg-white border-2 border-zinc-300 hover:bg-zinc-100 rounded-lg text-xs font-bold text-zinc-900 shadow-2xs transition-colors"
                     >
                       Today
                     </button>
                     <button
                       type="button"
                       onClick={() => setQuickDate("this_week")}
-                      className="px-2.5 py-1 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg text-xs font-semibold text-zinc-700 shadow-2xs transition-colors"
+                      className="px-2.5 py-1 bg-white border-2 border-zinc-300 hover:bg-zinc-100 rounded-lg text-xs font-bold text-zinc-900 shadow-2xs transition-colors"
                     >
                       This Week
                     </button>
                     <button
                       type="button"
                       onClick={() => setQuickDate("this_month")}
-                      className="px-2.5 py-1 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg text-xs font-semibold text-zinc-700 shadow-2xs transition-colors"
+                      className="px-2.5 py-1 bg-white border-2 border-zinc-300 hover:bg-zinc-100 rounded-lg text-xs font-bold text-zinc-900 shadow-2xs transition-colors"
                     >
                       This Month
                     </button>
                     <button
                       type="button"
                       onClick={() => setQuickDate("all")}
-                      className="px-2.5 py-1 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-lg text-xs font-semibold text-zinc-700 shadow-2xs transition-colors"
+                      className="px-2.5 py-1 bg-white border-2 border-zinc-300 hover:bg-zinc-100 rounded-lg text-xs font-bold text-zinc-900 shadow-2xs transition-colors"
                     >
                       All Time
                     </button>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold text-zinc-400">Sort By:</span>
+                    <span className="text-[11px] uppercase font-black text-zinc-700">Sort By:</span>
                     <select
                       value={sortBy}
                       onChange={(e) => {
                         setSortBy(e.target.value as any);
                         setHistoryPage(1);
                       }}
-                      className="bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-xs text-zinc-800 font-medium focus:outline-hidden shadow-2xs"
+                      className="bg-white border-2 border-zinc-300 rounded-lg px-2.5 py-1 text-xs text-zinc-950 font-bold focus:outline-hidden shadow-2xs"
                     >
                       <option value="newest">Newest First</option>
                       <option value="oldest">Oldest First</option>
@@ -1252,7 +1589,7 @@ export default function ShiftPage() {
             )}
           </div>
 
-          {/* ── RESPONSIVE MOBILE VIEW: CARDS FOR MOBILE (< md) ── */}
+          {/* â”€â”€ RESPONSIVE MOBILE VIEW: CARDS FOR MOBILE (< md) â”€â”€ */}
           <div className="block md:hidden space-y-3">
             {filteredAndSortedShifts.length === 0 ? (
               <EmptyState
@@ -1273,12 +1610,12 @@ export default function ShiftPage() {
                 return (
                   <div
                     key={s.id}
-                    className="p-4 bg-white border border-zinc-200 rounded-2xl shadow-xs space-y-3"
+                    className="p-4 bg-white border-2 border-zinc-300 rounded-2xl shadow-xs space-y-3"
                   >
                     {/* Top Row: Shift #, Status Badge, Details Button */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs bg-zinc-100 text-zinc-900 px-2 py-1 rounded-lg border border-zinc-200">
+                        <span className="font-mono font-black text-xs bg-zinc-100 text-zinc-950 px-2 py-1 rounded-lg border-2 border-zinc-200">
                           #{s.id}
                         </span>
                         <StatusBadge status={s.status} type="shift" />
@@ -1287,7 +1624,7 @@ export default function ShiftPage() {
                       <button
                         type="button"
                         onClick={() => openShiftDetails(s)}
-                        className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
+                        className="px-3 py-1.5 bg-white hover:bg-zinc-100 text-zinc-950 border-2 border-zinc-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs active:scale-95"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Z-Report</span>
@@ -1295,32 +1632,32 @@ export default function ShiftPage() {
                     </div>
 
                     {/* Cashier & Timestamps */}
-                    <div className="space-y-1 text-xs border-b border-zinc-100 pb-2.5">
+                    <div className="space-y-1 text-xs border-b border-zinc-200 pb-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-zinc-500">Cashier:</span>
-                        <span className="font-bold text-zinc-900 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-zinc-400" />
+                        <span className="text-zinc-600 font-bold">Cashier:</span>
+                        <span className="font-black text-zinc-950 flex items-center gap-1">
+                          <User className="w-3.5 h-3.5 text-zinc-600" />
                           {s.cashier_name || `User #${s.cashier_id}`}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-500">Opened:</span>
-                        <span className="text-zinc-700 font-semibold">{formatDateTime(s.opened_at)}</span>
+                        <span className="text-zinc-600 font-bold">Opened:</span>
+                        <span className="text-zinc-950 font-bold">{formatDateTime(s.opened_at)}</span>
                       </div>
                       {isClosed ? (
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-zinc-500">Closed:</span>
-                          <span className="text-zinc-700 font-semibold">{formatDateTime(s.closed_at)}</span>
+                          <span className="text-zinc-600 font-bold">Closed:</span>
+                          <span className="text-zinc-950 font-bold">{formatDateTime(s.closed_at)}</span>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-zinc-500">Closed:</span>
-                          <span className="text-emerald-600 font-semibold">Still Active</span>
+                          <span className="text-zinc-600 font-bold">Closed:</span>
+                          <span className="text-emerald-700 font-black">Still Active</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-zinc-500">Duration:</span>
-                        <span className={`font-bold tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-800"}`}>
+                        <span className="text-zinc-600 font-bold">Duration:</span>
+                        <span className={`font-black tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-950"}`}>
                           {getDuration(s.opened_at, s.closed_at)}
                           {!isClosed && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block align-middle" />}
                         </span>
@@ -1329,44 +1666,44 @@ export default function ShiftPage() {
 
                     {/* Financial Breakdown Grid */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2.5 bg-zinc-50 rounded-xl space-y-0.5">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Opening Float</span>
-                        <span className="font-bold text-zinc-800 tabular-nums">
+                      <div className="p-2.5 bg-white border-2 border-zinc-200 rounded-xl space-y-0.5">
+                        <span className="text-[10px] uppercase font-black text-zinc-600 block">Opening Float</span>
+                        <span className="font-black text-zinc-950 tabular-nums">
                           {formatCurrency(s.opening_cash)}
                         </span>
                       </div>
 
-                      <div className="p-2.5 bg-zinc-50 rounded-xl space-y-0.5">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Total Sales</span>
-                        <span className="font-bold text-green-700 tabular-nums">
+                      <div className="p-2.5 bg-white border-2 border-zinc-200 rounded-xl space-y-0.5">
+                        <span className="text-[10px] uppercase font-black text-zinc-600 block">Total Sales</span>
+                        <span className="font-black text-green-700 tabular-nums">
                           {formatCurrency(s.total_sales)}
                         </span>
-                        <div className="text-[9px] text-zinc-400 flex gap-1">
+                        <div className="text-[10px] font-bold text-zinc-600 flex gap-1">
                           <span>C: {formatCurrency(s.cash_sales)}</span>
                           <span>•</span>
                           <span>M: {formatCurrency(s.mpesa_sales)}</span>
                         </div>
                       </div>
 
-                      <div className="p-2.5 bg-zinc-50 rounded-xl space-y-0.5">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Drawer Reconciled</span>
-                        <span className="font-bold text-zinc-800 tabular-nums">
+                      <div className="p-2.5 bg-white border-2 border-zinc-200 rounded-xl space-y-0.5">
+                        <span className="text-[10px] uppercase font-black text-zinc-600 block">Drawer Counted</span>
+                        <span className="font-black text-zinc-950 tabular-nums">
                           {isClosed ? formatCurrency(s.counted_cash ?? 0) : "In Progress"}
                         </span>
-                        <div className="text-[9px] text-zinc-400">
+                        <div className="text-[10px] font-bold text-zinc-600">
                           Exp: {formatCurrency(s.expected_cash)}
                         </div>
                       </div>
 
-                      <div className="p-2.5 bg-zinc-50 rounded-xl space-y-0.5">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-400 block">Drawer Variance</span>
+                      <div className="p-2.5 bg-white border-2 border-zinc-200 rounded-xl space-y-0.5">
+                        <span className="text-[10px] uppercase font-black text-zinc-600 block">Drawer Variance</span>
                         {isClosed ? (
                           <span
-                            className={`inline-block font-bold text-xs tabular-nums ${diff === 0
-                                ? "text-green-700"
+                            className={`inline-block font-black text-xs tabular-nums ${diff === 0
+                                ? "text-emerald-700"
                                 : diff > 0
                                   ? "text-blue-700"
-                                  : "text-rose-600"
+                                  : "text-rose-700"
                               }`}
                           >
                             {diff === 0
@@ -1376,14 +1713,14 @@ export default function ShiftPage() {
                                 : formatCurrency(diff)}
                           </span>
                         ) : (
-                          <span className="text-zinc-400 text-xs">Open till</span>
+                          <span className="text-zinc-500 font-bold text-xs">Open till</span>
                         )}
                       </div>
                     </div>
 
                     {/* Audit Notes if any */}
                     {s.notes && (
-                      <div className="text-[11px] text-zinc-600 bg-zinc-50 p-2 rounded-lg border border-zinc-100 italic">
+                      <div className="text-[11px] font-bold text-zinc-800 bg-zinc-50 p-2 rounded-lg border border-zinc-200 italic">
                         "{s.notes}"
                       </div>
                     )}
@@ -1394,23 +1731,23 @@ export default function ShiftPage() {
           </div>
 
           {/* ── RESPONSIVE DESKTOP VIEW: DATA TABLE (>= md) ── */}
-          <div className="hidden md:block bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
+          <div className="hidden md:block bg-white border-2 border-zinc-300 rounded-2xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                    <th className="py-3 pl-4"># Shift</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3">Cashier</th>
-                    <th className="py-3 px-3">Opened / Closed</th>
-                    <th className="py-3 px-3 text-right">Float</th>
-                    <th className="py-3 px-3 text-right">Total Sales</th>
-                    <th className="py-3 px-3 text-right">Expected / Counted</th>
-                    <th className="py-3 px-3 text-right">Variance</th>
-                    <th className="py-3 pr-4 text-center">Z-Report</th>
+                  <tr className="border-b-2 border-zinc-300 bg-zinc-100 text-[11px] font-black uppercase tracking-wider text-zinc-950">
+                    <th className="py-3.5 pl-4"># Shift</th>
+                    <th className="py-3.5 px-3">Status</th>
+                    <th className="py-3.5 px-3">Cashier</th>
+                    <th className="py-3.5 px-3">Opened / Closed</th>
+                    <th className="py-3.5 px-3 text-right">Float</th>
+                    <th className="py-3.5 px-3 text-right">Total Sales</th>
+                    <th className="py-3.5 px-3 text-right">Expected / Counted</th>
+                    <th className="py-3.5 px-3 text-right">Variance</th>
+                    <th className="py-3.5 pr-4 text-center">Z-Report</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-200">
                   {filteredAndSortedShifts.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="p-8">
@@ -1432,43 +1769,43 @@ export default function ShiftPage() {
                       const isClosed = s.status === "closed";
                       const diff = s.difference ?? 0;
                       return (
-                        <tr key={s.id} className="hover:bg-zinc-50/70 transition-colors">
+                        <tr key={s.id} className="hover:bg-zinc-50/80 transition-colors">
                           {/* Shift ID */}
-                          <td className="py-3 pl-4 font-mono font-bold text-zinc-900">
+                          <td className="py-3.5 pl-4 font-mono font-black text-zinc-950">
                             #{s.id}
                           </td>
 
                           {/* Status */}
-                          <td className="py-3 px-3">
+                          <td className="py-3.5 px-3">
                             <StatusBadge status={s.status} type="shift" />
                           </td>
 
                           {/* Cashier */}
-                          <td className="py-3 px-3 font-semibold text-zinc-900">
+                          <td className="py-3.5 px-3 font-bold text-zinc-950">
                             <div className="flex items-center gap-1.5">
-                              <User className="w-3.5 h-3.5 text-zinc-400" />
+                              <User className="w-3.5 h-3.5 text-zinc-600" />
                               <span>{s.cashier_name || `User #${s.cashier_id}`}</span>
                             </div>
                           </td>
 
                           {/* Opened / Closed Timestamps & Duration */}
-                          <td className="py-3 px-3 text-zinc-600">
+                          <td className="py-3.5 px-3 text-zinc-700">
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-1 text-[11px]">
-                                <span className="text-zinc-400 w-12 shrink-0">Opened:</span>
-                                <span className="font-semibold text-zinc-800">{formatDateTime(s.opened_at)}</span>
+                                <span className="text-zinc-500 font-bold w-12 shrink-0">Opened:</span>
+                                <span className="font-bold text-zinc-950">{formatDateTime(s.opened_at)}</span>
                               </div>
                               <div className="flex items-center gap-1 text-[11px]">
-                                <span className="text-zinc-400 w-12 shrink-0">Closed:</span>
+                                <span className="text-zinc-500 font-bold w-12 shrink-0">Closed:</span>
                                 {isClosed ? (
-                                  <span className="font-semibold text-zinc-800">{formatDateTime(s.closed_at)}</span>
+                                  <span className="font-bold text-zinc-950">{formatDateTime(s.closed_at)}</span>
                                 ) : (
-                                  <span className="text-emerald-600 font-semibold">Still Active</span>
+                                  <span className="text-emerald-700 font-black">Still Active</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-1 text-[11px]">
-                                <span className="text-zinc-400 w-12 shrink-0">Duration:</span>
-                                <span className={`font-bold tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-600"}`}>
+                                <span className="text-zinc-500 font-bold w-12 shrink-0">Duration:</span>
+                                <span className={`font-black tabular-nums ${!isClosed ? "text-emerald-700" : "text-zinc-950"}`}>
                                   {getDuration(s.opened_at, s.closed_at)}
                                   {!isClosed && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block align-middle" />}
                                 </span>
@@ -1477,41 +1814,41 @@ export default function ShiftPage() {
                           </td>
 
                           {/* Opening Float */}
-                          <td className="py-3 px-3 text-right font-medium text-zinc-700 tabular-nums">
+                          <td className="py-3.5 px-3 text-right font-black text-zinc-950 tabular-nums">
                             {formatCurrency(s.opening_cash)}
                           </td>
 
                           {/* Total Sales */}
-                          <td className="py-3 px-3 text-right">
-                            <span className="font-bold text-zinc-900 tabular-nums block">
+                          <td className="py-3.5 px-3 text-right">
+                            <span className="font-black text-zinc-950 tabular-nums block text-sm">
                               {formatCurrency(s.total_sales)}
                             </span>
-                            <div className="flex items-center justify-end gap-1 text-[9px] text-zinc-400">
+                            <div className="flex items-center justify-end gap-1 text-[10px] font-bold">
                               <span className="text-green-700">C: {formatCurrency(s.cash_sales)}</span>
-                              <span>•</span>
+                              <span className="text-zinc-400">•</span>
                               <span className="text-emerald-700">M: {formatCurrency(s.mpesa_sales)}</span>
                             </div>
                           </td>
 
                           {/* Expected vs Counted */}
-                          <td className="py-3 px-3 text-right tabular-nums">
-                            <div className="font-semibold text-zinc-800">
+                          <td className="py-3.5 px-3 text-right tabular-nums">
+                            <div className="font-black text-zinc-950">
                               {isClosed ? formatCurrency(s.counted_cash ?? 0) : "Pending count"}
                             </div>
-                            <div className="text-[10px] text-zinc-400">
+                            <div className="text-[10px] font-bold text-zinc-600">
                               Exp: {formatCurrency(s.expected_cash)}
                             </div>
                           </td>
 
                           {/* Variance */}
-                          <td className="py-3 px-3 text-right tabular-nums">
+                          <td className="py-3.5 px-3 text-right tabular-nums">
                             {isClosed ? (
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${diff === 0
-                                    ? "bg-green-50 text-green-700 border border-green-200"
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-black border-2 inline-block ${diff === 0
+                                    ? "bg-emerald-50 text-emerald-900 border-emerald-400"
                                     : diff > 0
-                                      ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                      : "bg-rose-50 text-rose-700 border border-rose-200"
+                                      ? "bg-blue-50 text-blue-900 border-blue-400"
+                                      : "bg-rose-50 text-rose-900 border-rose-400"
                                   }`}
                               >
                                 {diff === 0
@@ -1521,20 +1858,20 @@ export default function ShiftPage() {
                                     : formatCurrency(diff)}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-zinc-400">—</span>
+                              <span className="text-xs font-bold text-zinc-400">—</span>
                             )}
                           </td>
 
                           {/* Action */}
-                          <td className="py-3 pr-4 text-center">
+                          <td className="py-3.5 pr-4 text-center">
                             <button
                               type="button"
                               onClick={() => openShiftDetails(s)}
-                              className="px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-lg text-xs font-semibold flex items-center gap-1 mx-auto transition-colors shadow-2xs cursor-pointer"
+                              className="px-3 py-1.5 bg-white hover:bg-zinc-100 text-zinc-950 border-2 border-zinc-300 rounded-xl text-xs font-black flex items-center gap-1.5 mx-auto transition-colors shadow-2xs cursor-pointer active:scale-95"
                               title="View full shift slip and Z-Report"
                             >
                               <Eye className="w-3.5 h-3.5" />
-                              <span>Details</span>
+                              <span>Z-Report</span>
                             </button>
                           </td>
                         </tr>
@@ -1548,7 +1885,7 @@ export default function ShiftPage() {
 
           {/* Pagination for both mobile and desktop with selectable records per page */}
           {filteredAndSortedShifts.length > 0 && (
-            <div className="p-3 bg-white border border-zinc-200 rounded-xl sm:rounded-2xl shadow-xs">
+            <div className="p-3 bg-white border-2 border-zinc-300 rounded-xl sm:rounded-2xl shadow-xs">
               <Pagination
                 currentPage={historyPage}
                 lastPage={totalPages}
@@ -1587,3 +1924,4 @@ export default function ShiftPage() {
     </div>
   );
 }
+

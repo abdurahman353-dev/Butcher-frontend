@@ -266,7 +266,14 @@ export interface Shift {
   total_sales: number;
   expected_cash: number; // opening_cash + cash_sales
   counted_cash?: number | null;
-  difference?: number | null; // counted - expected
+  difference?: number | null; // (counted_cash + cash_expenses) - expected_cash
+  cash_expenses?: number | null;
+  mpesa_expenses?: number | null;
+  expected_mpesa?: number | null;
+  counted_mpesa?: number | null;
+  mpesa_difference?: number | null; // (counted_mpesa + mpesa_expenses) - expected_mpesa
+  mpesa_transactions_count?: number | null;
+  expense_notes?: string | null;
   status: "open" | "closed";
   notes?: string;
 }
