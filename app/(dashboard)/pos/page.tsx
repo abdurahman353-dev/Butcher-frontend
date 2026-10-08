@@ -495,6 +495,8 @@ export default function PosPage() {
       const formattedItems: RestaurantBillItem[] = items.map((it) => ({
         product_id: it.product_id,
         product_name: it.product_name,
+        category_id: it.category_id,
+        category_name: it.category_name,
         price_per_kg: it.price_per_kg,
         weight: it.weight,
         unit: it.unit,
@@ -527,6 +529,8 @@ export default function PosPage() {
       const itemsForSlip: RestaurantBillItem[] = (newItems.length > 0 ? newItems : items).map((it) => ({
         product_id: it.product_id,
         product_name: it.product_name,
+        category_id: it.category_id,
+        category_name: it.category_name,
         price_per_kg: it.price_per_kg,
         weight: it.weight,
         unit: it.unit,
@@ -1345,6 +1349,7 @@ export default function PosPage() {
         autoPrint={true}
         isReprint={isSlipReprint}
         initialProductId={reprintProductId}
+        products={products}
       />
 
       {/* Customer Pre-Settlement Bill Slip Print */}

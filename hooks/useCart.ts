@@ -58,6 +58,8 @@ export function useCart() {
         id: `${product.id}-${Date.now()}`,
         product_id: product.id,
         product_name: product.name,
+        category_id: product.category_id,
+        category_name: product.category_name,
         unit: product.unit || "KG",
         price_per_kg: product.price_per_kg,
         weight: cappedWeight,

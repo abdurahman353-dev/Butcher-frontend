@@ -100,6 +100,8 @@ export interface CartItem {
   id: string; // unique item id in cart
   product_id: number;
   product_name: string;
+  category_id?: number;
+  category_name?: string;
   sku?: string;
   unit?: string;
   price_per_kg: number;
@@ -188,6 +190,8 @@ export interface HeldOrder {
 export interface RestaurantBillItem {
   product_id: number;
   product_name: string;
+  category_id?: number;
+  category_name?: string;
   price_per_kg: number;
   weight: number;
   unit?: string;

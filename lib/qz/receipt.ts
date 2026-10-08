@@ -171,7 +171,10 @@ export function buildKitchenSlipEscPos(
   bill: any,
   items: any[],
   waiterName?: string,
-  tableName?: string
+  tableName?: string,
+  categoryName?: string,
+  slipIndex?: number,
+  totalSlips?: number
 ): any[] {
   const commands: any[] = [
     "\x1B\x40", // Initialize
@@ -179,14 +182,27 @@ export function buildKitchenSlipEscPos(
     "\x1B\x45\x01\x1B\x21\x30", // Quad size bold
     "** KITCHEN ORDER **\n",
     "\x1B\x21\x00\x1B\x45\x00",
+  ];
+
+  if (categoryName) {
+    commands.push("\x1B\x45\x01\x1B\x21\x20"); // Double height bold
+    commands.push(`STATION: ${categoryName.toUpperCase()}\n`);
+    commands.push("\x1B\x21\x00\x1B\x45\x00");
+  }
+
+  if (totalSlips && totalSlips > 1 && slipIndex) {
+    commands.push(`[ SLIP ${slipIndex} OF ${totalSlips} ]\n`);
+  }
+
+  commands.push(
     divider("="),
     "\x1B\x61\x00", // Left
     padLine(`Table: ${tableName || bill.table_name || "N/A"}`, `Time: ${new Date().toLocaleTimeString()}`) + "\n",
-    padLine(`Bill: #${bill.id || "NEW"}`, `Waiter: ${waiterName || bill.waiter_name || "Staff"}`) + "\n",
+    padLine(`Bill: #${bill.id || bill.bill_number || "NEW"}`, `Waiter: ${waiterName || bill.waiter_name || "Staff"}`) + "\n",
     divider("="),
     padLine("ITEM / DISH", "QTY") + "\n",
-    divider("-"),
-  ];
+    divider("-")
+  );
 
   for (const item of items) {
     const qty = Number(item.weight || item.quantity || 1).toFixed(item.unit === "KG" ? 3 : 0);
@@ -200,6 +216,9 @@ export function buildKitchenSlipEscPos(
   }
 
   commands.push(divider("="));
+  if (categoryName) {
+    commands.push(`Section: ${categoryName}\n`);
+  }
   commands.push("\n\n\n");
   commands.push("\x1D\x56\x41\x03"); // Cut
 
