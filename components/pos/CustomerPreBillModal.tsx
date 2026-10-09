@@ -159,7 +159,7 @@ export function CustomerPreBillModal({
                   <div className="font-black text-black">Table: Table {bill.table_number}</div>
                   <div className="font-black text-black">Bill No: {bill.bill_number}</div>
                   {bill.waiter_name && (
-                    <div>Server: {bill.waiter_name}{bill.waiter_pin ? ` (#${bill.waiter_pin})` : ""}</div>
+                    <div>Server: {bill.waiter_name}</div>
                   )}
                 </div>
                 <div className="space-y-0.5">

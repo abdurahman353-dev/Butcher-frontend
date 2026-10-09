@@ -179,9 +179,11 @@ export function Topbar({
                     <span className={`inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${
                       user?.role === "admin"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : user?.role === "waiter"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200"
                         : "bg-blue-50 text-blue-700 border border-blue-200"
                     }`}>
-                      {user?.role === "admin" ? "Super Admin" : "Cashier"}
+                      {user?.role === "admin" ? "Super Admin" : user?.role === "waiter" ? "Waiter / Server" : "Cashier"}
                     </span>
                   </div>
                 </div>

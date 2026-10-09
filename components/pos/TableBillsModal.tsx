@@ -717,7 +717,7 @@ export function TableBillsModal({
                           Posting as: {user?.name}
                         </p>
                         <p className="text-[10px] text-zinc-500 font-medium">
-                          {user?.role === "admin" ? "Super Admin" : "Cashier"} — No PIN required
+                          {user?.role === "admin" ? "Super Admin" : user?.role === "waiter" ? "Waiter" : "Cashier"} — No PIN required
                         </p>
                       </div>
                     </div>
