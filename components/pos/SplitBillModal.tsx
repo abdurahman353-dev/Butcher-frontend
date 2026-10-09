@@ -182,41 +182,41 @@ export function SplitBillModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border-2 border-zinc-200 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-5 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="relative w-full max-w-4xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl border-2 border-zinc-200 overflow-hidden flex flex-col max-h-[96vh] sm:max-h-[92vh]">
         {/* Modal Header */}
-        <div className="px-6 py-4.5 border-b border-zinc-200 flex items-center justify-between bg-zinc-900 text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Split className="w-5 h-5 stroke-[2.5]" />
+        <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-900 text-white gap-2">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+              <Split className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-lg font-black tracking-tight text-white">
-                  Divide / Split Bill #{bill.bill_number}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-lg font-black tracking-tight text-white truncate">
+                  Divide Bill #{bill.bill_number}
                 </h3>
-                <span className="text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full bg-white text-zinc-900 tracking-wider shadow-2xs">
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-white text-zinc-900 tracking-wider shadow-2xs shrink-0">
                   Table {bill.table_number}
                 </span>
               </div>
-              <p className="text-xs text-zinc-300 font-medium mt-0.5">
-                Separate items between guests dining together into two independent bills
+              <p className="text-[11px] sm:text-xs text-zinc-300 font-medium truncate mt-0.5">
+                Separate items between dining guests into two independent bills
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
             title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmitSplit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 bg-zinc-100/60">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <form onSubmit={handleSubmitSplit} className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5 bg-zinc-100/60">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
             {/* ── Left Column: Original Bill (Source) ── */}
             <div className="bg-white border-2 border-zinc-300 rounded-2xl p-4.5 flex flex-col shadow-sm">
               <div className="flex items-center justify-between pb-3.5 border-b-2 border-zinc-100 mb-3.5">
@@ -279,11 +279,11 @@ export function SplitBillModal({
                       </div>
 
                       {/* Quantity Transfer Controls */}
-                      <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-zinc-200/80">
+                      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-200/80">
                         <span className="text-[11px] font-black uppercase tracking-wider text-zinc-700">
                           Move to Bill 2:
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
                           <button
                             type="button"
                             onClick={() => handleAdjustStep(item.product_id, -1)}
