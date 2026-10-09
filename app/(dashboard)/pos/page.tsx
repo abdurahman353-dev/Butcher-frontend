@@ -1309,26 +1309,29 @@ export default function PosPage() {
       )}
 
       {/* Table Bills Pop-up Modal */}
-      <TableBillsModal
-        table={selectedTableForModal}
-        isOpen={isTableModalOpen}
-        onClose={() => {
-          setIsTableModalOpen(false);
-          setSelectedTableForModal(null);
-        }}
-        onOpenBillForOrdering={handleOpenBillForOrdering}
-        onCreateNewBill={handleCreateNewBill}
-        onPrintCustomerBill={handlePrintCustomerBill}
-        onSettleBill={handleSettleFromTableModal}
-        onCancelBill={handleCancelBill}
-        onPrintKitchenSlip={(b, productId) => {
-          setIsSlipReprint(true);
-          setReprintProductId(productId);
-          setPrintingKitchenBill(b);
-        }}
-        customers={customers}
-        onBillUpdated={handleBillUpdated}
-      />
+      {isTableModalOpen && selectedTableForModal && (
+        <TableBillsModal
+          key={selectedTableForModal.id}
+          table={selectedTableForModal}
+          isOpen={isTableModalOpen}
+          onClose={() => {
+            setIsTableModalOpen(false);
+            setSelectedTableForModal(null);
+          }}
+          onOpenBillForOrdering={handleOpenBillForOrdering}
+          onCreateNewBill={handleCreateNewBill}
+          onPrintCustomerBill={handlePrintCustomerBill}
+          onSettleBill={handleSettleFromTableModal}
+          onCancelBill={handleCancelBill}
+          onPrintKitchenSlip={(b, productId) => {
+            setIsSlipReprint(true);
+            setReprintProductId(productId);
+            setPrintingKitchenBill(b);
+          }}
+          customers={customers}
+          onBillUpdated={handleBillUpdated}
+        />
+      )}
 
       {/* Add New Table Modal */}
       <AddTableModal

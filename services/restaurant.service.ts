@@ -132,4 +132,22 @@ export const restaurantService = {
     );
     return res.data;
   },
+
+  async splitBill(
+    billId: number,
+    payload: {
+      items: { product_id: number; quantity: number }[];
+      target_bill_id?: number | null;
+      customer_name?: string;
+      customer_phone?: string;
+      notes?: string;
+    }
+  ): Promise<{ message: string; source_bill: RestaurantBill; target_bill: RestaurantBill }> {
+    const res = await apiClient.post<{
+      message: string;
+      source_bill: RestaurantBill;
+      target_bill: RestaurantBill;
+    }>(`/restaurant/bills/${billId}/split`, payload);
+    return res.data;
+  },
 };

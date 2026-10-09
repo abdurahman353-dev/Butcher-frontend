@@ -31,7 +31,9 @@ import {
   MapPin,
   Check,
   Edit,
+  Split,
 } from "lucide-react";
+import { SplitBillModal } from "./SplitBillModal";
 
 interface TableBillsModalProps {
   table: RestaurantTable | null;
@@ -177,12 +179,45 @@ export function TableBillsModal({
   };
 
   const [billsList, setBillsList] = useState<RestaurantBill[]>(table?.active_bills || []);
+  const [splittingBill, setSplittingBill] = useState<RestaurantBill | null>(null);
+
+  const handleSplitSuccess = (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
+    // 1. Update internal bills list: update source bill, insert target bill
+    setBillsList((prev) => {
+      const updated = prev.map((b) => (b.id === sourceBill.id ? sourceBill : b));
+      if (!updated.some((b) => b.id === targetBill.id)) {
+        return [targetBill, ...updated];
+      }
+      return updated.map((b) => (b.id === targetBill.id ? targetBill : b));
+    });
+
+    // 2. Notify parent (pos/page.tsx) so tables and activeBill update
+    if (onBillUpdated) {
+      onBillUpdated(sourceBill);
+      onBillUpdated(targetBill);
+    }
+
+    // 3. Mutate table object active bills count & list
+    if (table && table.active_bills) {
+      const updated = table.active_bills.map((b) => (b.id === sourceBill.id ? sourceBill : b));
+      if (!updated.some((b) => b.id === targetBill.id)) {
+        table.active_bills = [targetBill, ...updated];
+        table.active_bills_count = (table.active_bills_count || 0) + 1;
+      } else {
+        table.active_bills = updated.map((b) => (b.id === targetBill.id ? targetBill : b));
+      }
+    }
+  };
 
   useEffect(() => {
     setBillsList(table?.active_bills || []);
   }, [table?.active_bills, table]);
 
-  const activeBills = billsList.filter(
+  const currentBills = billsList.length > 0 || !table?.active_bills?.length
+    ? billsList
+    : (table?.active_bills || []);
+
+  const activeBills = currentBills.filter(
     (b) => b.status === "open" || b.status === "printed"
   );
 
@@ -1024,6 +1059,19 @@ export function TableBillsModal({
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Divide / Split Bill button */}
+                        {itemsCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSplittingBill(bill)}
+                            className="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl transition-all font-black flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer"
+                            title="Divide this bill between multiple guests"
+                          >
+                            <Split className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Divide Bill</span>
+                          </button>
+                        )}
+
                         {/* Print Bill button */}
                         <button
                           type="button"
@@ -1466,6 +1514,14 @@ export function TableBillsModal({
           </div>
         </div>
       )}
+
+      {/* Divide / Split Bill Modal */}
+      <SplitBillModal
+        bill={splittingBill}
+        isOpen={!!splittingBill}
+        onClose={() => setSplittingBill(null)}
+        onSplitSuccess={handleSplitSuccess}
+      />
     </div>
   );
 }
