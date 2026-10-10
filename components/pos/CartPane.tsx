@@ -229,7 +229,7 @@ export function CartPane({
       </div>
 
       {/* Customer Selector & Unpaid Bills Pill */}
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2 w-full min-w-0 overflow-hidden">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2 w-full min-w-0 overflow-visible relative z-20">
         {activeBill && (
           <div className="p-2 sm:p-2.5 bg-white border border-zinc-200 rounded-xl flex items-center justify-between gap-1.5 shadow-xs w-full min-w-0">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -345,9 +345,9 @@ export function CartPane({
                 className="fixed inset-0 z-40"
                 onClick={() => { setShowCustomerSelect(false); setCustomerSearch(""); }}
               />
-              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-2xl animate-in fade-in duration-100">
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border-2 border-zinc-200 rounded-xl overflow-hidden shadow-2xl animate-in fade-in duration-100 flex flex-col max-h-[340px]">
                 {/* Search Bar */}
-                <div className="p-2.5 border-b border-zinc-100 flex items-center gap-2 bg-zinc-50">
+                <div className="p-2.5 border-b border-zinc-100 flex items-center gap-2 bg-zinc-50 shrink-0">
                   <Search className="w-4 h-4 text-zinc-400 shrink-0" />
                   <input
                     type="text"
@@ -361,7 +361,7 @@ export function CartPane({
                     <button
                       type="button"
                       onClick={() => setCustomerSearch("")}
-                      className="text-zinc-400 hover:text-zinc-600 p-0.5"
+                      className="text-zinc-400 hover:text-zinc-600 p-0.5 cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -370,23 +370,23 @@ export function CartPane({
 
                 {/* Quick Add Button */}
                 {onOpenAddCustomer && (
-                  <div className="p-2 border-b border-zinc-100 bg-green-50/50">
+                  <div className="p-2 border-b border-zinc-100 bg-green-50/50 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
                         setShowCustomerSelect(false);
                         onOpenAddCustomer();
                       }}
-                      className="w-full py-2.5 px-3 rounded-xl text-sm font-bold text-green-800 bg-green-100 hover:bg-green-200 border border-green-300 flex items-center justify-center gap-2 transition-colors shadow-sm"
+                      className="w-full py-2 px-3 rounded-xl text-xs sm:text-sm font-bold text-green-800 bg-green-100 hover:bg-green-200 border border-green-300 flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
                     >
                       <Plus className="w-4 h-4 text-green-700" />
-                      <span>+ Add New Customer to Order</span>
+                      <span>Add New Customer to Order</span>
                     </button>
                   </div>
                 )}
 
-                {/* Customers List — fixed height, scrollable */}
-                <div className="overflow-y-auto p-1.5 space-y-0.5" style={{ maxHeight: "200px" }}>
+                {/* Customers List — scrollable */}
+                <div className="overflow-y-auto p-1.5 space-y-0.5 max-h-[220px] flex-1">
                   <button
                     type="button"
                     onClick={() => {

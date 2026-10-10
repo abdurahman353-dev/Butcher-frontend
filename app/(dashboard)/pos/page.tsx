@@ -21,7 +21,7 @@ import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
 import { useHeldOrders } from "@/hooks/useHeldOrders";
 import { useAuth } from "@/hooks/useAuth";
-import { useTableSync } from "@/hooks/useTableSync";
+import { useTableSync, triggerTableSync } from "@/hooks/useTableSync";
 import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPane } from "@/components/pos/CartPane";
 import { TableMapView } from "@/components/pos/TableMapView";
@@ -928,15 +928,55 @@ export default function PosPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
 
+  const handleSelectCustomer = async (cust: Customer | null) => {
+    setSelectedCustomer(cust);
+
+    // If an active bill is open on a restaurant table, sync customer to backend immediately
+    if (activeBill) {
+      try {
+        const payload = {
+          customer_id: cust?.id || null,
+          customer_name: cust?.name || null,
+          customer_phone: cust?.phone || null,
+          customer_address: cust?.address || null,
+        };
+        const res = await restaurantService.updateBillCustomer(activeBill.id, payload);
+        if (res.data) {
+          handleBillUpdated(res.data);
+          triggerTableSync();
+        }
+      } catch (e: any) {
+        console.error("Failed to update bill customer:", e);
+      }
+    }
+  };
+
   const handleOpenEditCustomer = (customer: Customer) => {
     setEditingCustomer(customer);
     setIsEditCustomerOpen(true);
   };
 
-  const handleCustomerUpdated = (updated: Customer) => {
+  const handleCustomerUpdated = async (updated: Customer) => {
     setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
     if (selectedCustomer?.id === updated.id) {
       setSelectedCustomer(updated);
+    }
+
+    if (activeBill && (activeBill.customer_id === updated.id || selectedCustomer?.id === updated.id)) {
+      try {
+        const res = await restaurantService.updateBillCustomer(activeBill.id, {
+          customer_id: updated.id,
+          customer_name: updated.name,
+          customer_phone: updated.phone || null,
+          customer_address: updated.address || null,
+        });
+        if (res.data) {
+          handleBillUpdated(res.data);
+          triggerTableSync();
+        }
+      } catch (e) {
+        console.error("Failed to sync updated customer to bill:", e);
+      }
     }
   };
 
@@ -947,10 +987,27 @@ export default function PosPage() {
     }
   };
 
-  const handleCustomerCreated = (newCustomer: Customer) => {
+  const handleCustomerCreated = async (newCustomer: Customer) => {
     setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.id !== newCustomer.id)]);
     setSelectedCustomer(newCustomer);
     setIsAddCustomerOpen(false);
+
+    if (activeBill) {
+      try {
+        const res = await restaurantService.updateBillCustomer(activeBill.id, {
+          customer_id: newCustomer.id,
+          customer_name: newCustomer.name,
+          customer_phone: newCustomer.phone || null,
+          customer_address: newCustomer.address || null,
+        });
+        if (res.data) {
+          handleBillUpdated(res.data);
+          triggerTableSync();
+        }
+      } catch (e) {
+        console.error("Failed to assign new customer to bill:", e);
+      }
+    }
   };
 
   const handleOpenSettle = (sale?: Sale) => {
@@ -1140,7 +1197,7 @@ export default function PosPage() {
           totalWeight={totalWeight}
           customers={customers}
           selectedCustomer={selectedCustomer}
-          onSelectCustomer={setSelectedCustomer}
+          onSelectCustomer={handleSelectCustomer}
           onOpenAddCustomer={() => setIsAddCustomerOpen(true)}
           onEditCustomer={handleOpenEditCustomer}
           onAdjustWeight={handleAdjustWeight}
@@ -1268,7 +1325,7 @@ export default function PosPage() {
               totalWeight={totalWeight}
               customers={customers}
               selectedCustomer={selectedCustomer}
-              onSelectCustomer={setSelectedCustomer}
+              onSelectCustomer={handleSelectCustomer}
               onOpenAddCustomer={() => {
                 setIsMobileCartOpen(false);
                 setIsAddCustomerOpen(true);
