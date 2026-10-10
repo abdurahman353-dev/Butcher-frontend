@@ -21,6 +21,7 @@ import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
 import { useHeldOrders } from "@/hooks/useHeldOrders";
 import { useAuth } from "@/hooks/useAuth";
+import { useTableSync } from "@/hooks/useTableSync";
 import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPane } from "@/components/pos/CartPane";
 import { TableMapView } from "@/components/pos/TableMapView";
@@ -74,6 +75,51 @@ export default function PosPage() {
   const [activeTable, setActiveTable] = useState<RestaurantTable | null>(null);
   const [activeBill, setActiveBill] = useState<RestaurantBill | null>(null);
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
+
+  // Refs to track active session without stale closures in SSE callback
+  const activeTableRef = useRef<RestaurantTable | null>(null);
+  const activeBillRef  = useRef<RestaurantBill | null>(null);
+  const selectedTableForModalRef = useRef<RestaurantTable | null>(null);
+
+  useEffect(() => { activeTableRef.current = activeTable; }, [activeTable]);
+  useEffect(() => { activeBillRef.current  = activeBill;  }, [activeBill]);
+
+  /**
+   * Live SSE update handler — merges fresh table data from the server without
+   * disrupting an active ordering session.
+   */
+  const handleLiveTablesUpdate = useCallback((freshTables: RestaurantTable[]) => {
+    setRestaurantTables(freshTables);
+
+    // If the user is actively ordering on a bill, refresh their session refs too
+    const curTable = activeTableRef.current;
+    const curBill  = activeBillRef.current;
+    if (curTable) {
+      const freshTable = freshTables.find((t) => t.id === curTable.id);
+      if (freshTable) {
+        setActiveTable(freshTable);
+        if (curBill) {
+          const freshBill = freshTable.active_bills?.find((b) => b.id === curBill.id);
+          if (freshBill) setActiveBill(freshBill);
+        }
+      }
+    }
+
+    // Also update the open table modal if one is showing
+    setSelectedTableForModal((prev) => {
+      if (!prev) return prev;
+      const freshTable = freshTables.find((t) => t.id === prev.id);
+      return freshTable ?? prev;
+    });
+  }, []);
+
+  // Real-time sync via SSE — no polling, instant millisecond updates
+  useTableSync({
+    onUpdate: handleLiveTablesUpdate,
+    enabled: isRestaurant,
+    companyId: user?.company_id ?? null,
+  });
+
 
   // In restaurant mode, cashier starts on Floor Tables and only goes to Menu & Dishes when an active bill is opened
   useEffect(() => {
