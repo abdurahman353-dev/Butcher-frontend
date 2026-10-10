@@ -145,7 +145,7 @@ export function CartPane({
   const totalWeighedKg = weighedItems.reduce((acc, it) => acc + it.weight, 0);
 
   return (
-    <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none">
+    <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none w-full max-w-full min-w-0 overflow-x-hidden">
       {/* Header with Hold Order & Parked Bills */}
       <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
         <div>
@@ -229,9 +229,9 @@ export function CartPane({
       </div>
 
       {/* Customer Selector & Unpaid Bills Pill */}
-      <div className="px-4 py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2 w-full min-w-0 overflow-hidden">
         {activeBill && (
-          <div className="p-3 bg-white border border-zinc-200 rounded-xl flex items-center justify-between shadow-sm">
+          <div className="p-2 sm:p-2.5 bg-white border border-zinc-200 rounded-xl flex items-center justify-between gap-1.5 shadow-xs w-full min-w-0">
             <div className="flex items-center gap-2.5 min-w-0">
               {/* Table number badge \u2014 same green pill as image 1 */}
               <div className="w-9 h-9 rounded-xl bg-zinc-900 text-white font-mono font-black text-base flex items-center justify-center shrink-0">
@@ -286,24 +286,26 @@ export function CartPane({
         )}
 
         {/* Customer row + floating dropdown */}
-        <div className="relative">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm text-zinc-500 shrink-0 font-semibold">Customer:</span>
-            <div className="flex items-center gap-2 min-w-0">
+        <div className="relative min-w-0 w-full">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0 w-full">
+            <span className="text-xs sm:text-sm text-zinc-500 shrink-0 font-semibold">Customer:</span>
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end flex-wrap">
               {selectedCustomer ? (
-                <div className="flex items-center gap-1.5 min-w-0 bg-white border border-green-300 px-2.5 py-1 rounded-xl text-sm">
-                  <span className="font-bold text-green-800 truncate">{selectedCustomer.name}</span>
+                <div className="flex items-center gap-1 min-w-0 max-w-[160px] xs:max-w-[200px] sm:max-w-xs bg-white border border-green-300 px-2 py-0.5 rounded-lg text-xs">
+                  <span className="font-bold text-green-800 truncate" title={selectedCustomer.name}>
+                    {selectedCustomer.name}
+                  </span>
                   {selectedCustomer.phone && (
-                    <span className="text-xs text-zinc-400 font-mono hidden sm:inline">({selectedCustomer.phone})</span>
+                    <span className="text-[10px] text-zinc-400 font-mono hidden md:inline">({selectedCustomer.phone})</span>
                   )}
                   {onEditCustomer && (
                     <button
                       type="button"
                       onClick={() => onEditCustomer(selectedCustomer)}
                       title="Edit customer details"
-                      className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white text-[10px] font-black flex items-center gap-1 shadow-xs ml-0.5 transition-all"
+                      className="px-1.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[9px] font-black shrink-0 flex items-center gap-0.5 transition-all cursor-pointer"
                     >
-                      <Pencil className="w-3 h-3" />
+                      <Pencil className="w-2.5 h-2.5" />
                       <span>Edit</span>
                     </button>
                   )}
@@ -311,19 +313,19 @@ export function CartPane({
                     type="button"
                     onClick={() => onSelectCustomer(null)}
                     title="Remove customer (switch to Walk-in)"
-                    className="text-zinc-400 hover:text-red-600 p-0.5 ml-0.5 transition-colors"
+                    className="text-zinc-400 hover:text-red-600 p-0.5 shrink-0 transition-colors cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3 h-3" />
                   </button>
                 </div>
               ) : null}
               <button
                 type="button"
                 onClick={() => setShowCustomerSelect(!showCustomerSelect)}
-                className="text-sm font-bold text-white bg-green-600 flex items-center gap-1.5 transition-colors px-3 py-1.5 rounded-xl border border-green-700 active:bg-green-700 active:scale-95"
+                className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 flex items-center gap-1 transition-colors px-2.5 py-1 rounded-lg border border-green-700 active:scale-95 shrink-0 cursor-pointer"
               >
                 <span>{selectedCustomer ? "Change" : "Walk-in Customer"}</span>
-                <UserPlus className="w-4 h-4" />
+                <UserPlus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

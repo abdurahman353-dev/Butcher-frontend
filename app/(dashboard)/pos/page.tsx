@@ -1246,20 +1246,20 @@ export default function PosPage() {
 
       {/* Mobile Cart Drawer */}
       {isMobileCartOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-white select-none">
-          <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-            <span className="text-sm font-bold text-slate-900">
+        <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-white select-none w-full max-w-full overflow-hidden">
+          <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0 w-full min-w-0">
+            <span className="text-sm font-bold text-slate-900 truncate flex-1 min-w-0 mr-2">
               {activeBill ? `Table ${activeBill.table_number} Bill` : "Current Order"} ({itemsCount} items)
             </span>
             <button
               type="button"
               onClick={() => setIsMobileCartOpen(false)}
-              className="px-3 py-1 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold"
+              className="px-3 py-1 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold shrink-0 cursor-pointer"
             >
               Close
             </button>
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full min-w-0">
             <CartPane
               items={items}
               subtotal={subtotal}
