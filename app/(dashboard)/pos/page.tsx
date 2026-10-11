@@ -427,6 +427,7 @@ export default function PosPage() {
   };
 
   // Restaurant: Create a new bill on a table (instant, unique, and clean cart)
+  // Restaurant: Create a new bill on a table (draft in-memory until items are saved)
   const handleCreateNewBill = async (
     table: RestaurantTable,
     payload: {
@@ -435,6 +436,8 @@ export default function PosPage() {
       guest_count?: number;
       customer_name?: string;
       customer_phone?: string;
+      customer_address?: string;
+      customer_id?: number;
       notes?: string;
     }
   ) => {
@@ -443,44 +446,46 @@ export default function PosPage() {
     setSelectedCustomer(null);
     setHasUnsavedOrder(false);
 
-    try {
-      const newBill = await restaurantService.createBill(table.id, payload);
-      // Immediately add new bill to tables state so it appears in modal and floor tables
-      setRestaurantTables((prev) =>
-        prev.map((t) =>
-          t.id === table.id
-            ? {
-                ...t,
-                active_bills: [newBill, ...(t.active_bills || []).filter((b) => b.id !== newBill.id)],
-                active_bills_count: (t.active_bills_count || 0) + 1,
-                status: t.status === "grey" ? "red" : t.status,
-              }
-            : t
-        )
-      );
-      setSelectedTableForModal((prev) =>
-        prev && prev.id === table.id
-          ? {
-              ...prev,
-              active_bills: [newBill, ...(prev.active_bills || []).filter((b) => b.id !== newBill.id)],
-              active_bills_count: (prev.active_bills_count || 0) + 1,
-              status: prev.status === "grey" ? "red" : prev.status,
-            }
-          : prev
-      );
-      // Open new bill with clean empty cart
-      handleOpenBillForOrdering(table, newBill);
-      setIsTableModalOpen(false);
-      // Silently refresh tables list in background — no spinner
-      fetchRestaurantTables(true);
-    } catch (e: any) {
-      console.error("Create bill error:", e);
-      alert({
-        title: "Failed to Open Bill",
-        message: e?.response?.data?.message || e?.message || "Could not create bill on this table.",
-        type: "danger",
+    // Draft bill in memory: No DB record created, NO bill number consumed until items are saved!
+    const draftBill: RestaurantBill = {
+      id: 0,
+      table_id: table.id,
+      table_number: table.table_number,
+      bill_number: "New Bill",
+      waiter_name: payload.waiter_name || user?.name || "Server",
+      waiter_pin: payload.waiter_pin || "",
+      cashier_id: user?.id || null,
+      cashier_name: user?.name || "Cashier",
+      guest_count: payload.guest_count || 1,
+      customer_id: payload.customer_id || null,
+      customer_name: payload.customer_name || null,
+      customer_phone: payload.customer_phone || null,
+      customer_address: payload.customer_address || null,
+      status: "open",
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      tax: 0,
+      total: 0,
+      notes: payload.notes || "",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (payload.customer_name) {
+      setSelectedCustomer({
+        id: payload.customer_id || 0,
+        name: payload.customer_name,
+        phone: payload.customer_phone || "",
+        address: payload.customer_address || "",
+        orders_count: 1,
+        total_spent: 0,
+        created_at: new Date().toISOString(),
       });
     }
+
+    handleOpenBillForOrdering(table, draftBill);
+    setIsTableModalOpen(false);
   };
 
   // Restaurant: Update active bill when customer or bill details change
@@ -536,6 +541,24 @@ export default function PosPage() {
 
     try {
       setIsSavingOrder(true);
+
+      let targetBill = activeBill;
+
+      // If draft bill (id === 0), create the official bill in the DB now!
+      if (targetBill.id === 0) {
+        const createdBill = await restaurantService.createBill(targetBill.table_id, {
+          waiter_name: targetBill.waiter_name || undefined,
+          waiter_pin: targetBill.waiter_pin || undefined,
+          guest_count: targetBill.guest_count || 1,
+          customer_id: selectedCustomer?.id || (targetBill.customer_id ?? undefined),
+          customer_name: selectedCustomer?.name || (targetBill.customer_name ?? undefined),
+          customer_phone: selectedCustomer?.phone || (targetBill.customer_phone ?? undefined),
+          customer_address: selectedCustomer?.address || (targetBill.customer_address ?? undefined),
+          notes: targetBill.notes || undefined,
+        });
+        targetBill = createdBill;
+      }
+
       // Identify only the newly added / unsaved items for this KOT print round
       const newItems = items.filter((it) => !it.is_saved);
 
@@ -552,14 +575,15 @@ export default function PosPage() {
         line_total: it.subtotal,
       }));
 
-      const res = await restaurantService.saveOrder(activeBill.id, {
+      const res = await restaurantService.saveOrder(targetBill.id, {
         items: formattedItems,
         customer_id: selectedCustomer?.id || undefined,
-        customer_name: selectedCustomer?.name || activeBill.customer_name || undefined,
-        customer_phone: selectedCustomer?.phone || activeBill.customer_phone || undefined,
-        waiter_name: activeBill.waiter_name,
-        guest_count: activeBill.guest_count,
-        notes: activeBill.notes || undefined,
+        customer_name: selectedCustomer?.name || targetBill.customer_name || undefined,
+        customer_phone: selectedCustomer?.phone || targetBill.customer_phone || undefined,
+        customer_address: selectedCustomer?.address || targetBill.customer_address || undefined,
+        waiter_name: targetBill.waiter_name,
+        guest_count: targetBill.guest_count,
+        notes: targetBill.notes || undefined,
       });
 
       // Mark all items in the cart as saved/read-only now
@@ -597,6 +621,7 @@ export default function PosPage() {
       setPrintingKitchenBill(billForKitchenSlip);
       // Silently refresh tables in background — no spinner
       fetchRestaurantTables(true);
+      triggerTableSync();
     } catch (e: any) {
       console.error("Save order error:", e);
       alert({
@@ -614,10 +639,10 @@ export default function PosPage() {
     const targetBill = bill || activeBill;
     if (!targetBill) return;
 
-    if (!targetBill.items || targetBill.items.length === 0) {
+    if (targetBill.id === 0 || !targetBill.items || targetBill.items.length === 0) {
       alert({
-        title: "Empty Bill",
-        message: "Cannot print an empty bill. Please post products and save the order first.",
+        title: "Empty or Unsaved Bill",
+        message: "Cannot print an empty or unsaved bill. Please post products and save the order first.",
         type: "warning",
       });
       return;
@@ -635,6 +660,7 @@ export default function PosPage() {
       setPrintingCustomerBill(res.data);
       // Silently refresh tables in background
       fetchRestaurantTables(true);
+      triggerTableSync();
     } catch (e: any) {
       console.error("Print bill error:", e);
       setPrintingCustomerBill(null);
@@ -648,6 +674,16 @@ export default function PosPage() {
 
   // Restaurant: Cancel Bill
   const handleCancelBill = async (bill: RestaurantBill) => {
+    if (bill.id === 0) {
+      clearCart();
+      setActiveBill(null);
+      setActiveTable(null);
+      setHasUnsavedOrder(false);
+      setIsTableModalOpen(false);
+      setActiveTab("tables");
+      return;
+    }
+
     const shouldCancel = await confirm({
       title: `Cancel Bill ${bill.bill_number}?`,
       message: `Are you sure you want to cancel this bill on Table ${bill.table_number}? This action cannot be undone.`,
@@ -803,7 +839,15 @@ export default function PosPage() {
       return;
     }
 
-    if (activeBill && hasUnsavedOrder) {
+    if (activeBill && (hasUnsavedOrder || activeBill.id === 0)) {
+      if (items.length === 0) {
+        alert({
+          title: "Cart is Empty",
+          message: "Please add products before checking out.",
+          type: "warning",
+        });
+        return;
+      }
       const proceed = await confirm({
         title: "Unsaved Order",
         message:
@@ -933,20 +977,35 @@ export default function PosPage() {
 
     // If an active bill is open on a restaurant table, sync customer to backend immediately
     if (activeBill) {
-      try {
-        const payload = {
-          customer_id: cust?.id || null,
-          customer_name: cust?.name || null,
-          customer_phone: cust?.phone || null,
-          customer_address: cust?.address || null,
-        };
-        const res = await restaurantService.updateBillCustomer(activeBill.id, payload);
-        if (res.data) {
-          handleBillUpdated(res.data);
-          triggerTableSync();
+      if (activeBill.id > 0) {
+        try {
+          const payload = {
+            customer_id: cust?.id || null,
+            customer_name: cust?.name || null,
+            customer_phone: cust?.phone || null,
+            customer_address: cust?.address || null,
+          };
+          const res = await restaurantService.updateBillCustomer(activeBill.id, payload);
+          if (res.data) {
+            handleBillUpdated(res.data);
+            triggerTableSync();
+          }
+        } catch (e: any) {
+          console.error("Failed to update bill customer:", e);
         }
-      } catch (e: any) {
-        console.error("Failed to update bill customer:", e);
+      } else {
+        // Draft bill: update in-memory bill object directly
+        setActiveBill((prev) =>
+          prev
+            ? {
+                ...prev,
+                customer_id: cust?.id || undefined,
+                customer_name: cust?.name || undefined,
+                customer_phone: cust?.phone || undefined,
+                customer_address: cust?.address || undefined,
+              }
+            : null
+        );
       }
     }
   };
@@ -963,19 +1022,33 @@ export default function PosPage() {
     }
 
     if (activeBill && (activeBill.customer_id === updated.id || selectedCustomer?.id === updated.id)) {
-      try {
-        const res = await restaurantService.updateBillCustomer(activeBill.id, {
-          customer_id: updated.id,
-          customer_name: updated.name,
-          customer_phone: updated.phone || null,
-          customer_address: updated.address || null,
-        });
-        if (res.data) {
-          handleBillUpdated(res.data);
-          triggerTableSync();
+      if (activeBill.id > 0) {
+        try {
+          const res = await restaurantService.updateBillCustomer(activeBill.id, {
+            customer_id: updated.id,
+            customer_name: updated.name,
+            customer_phone: updated.phone || null,
+            customer_address: updated.address || null,
+          });
+          if (res.data) {
+            handleBillUpdated(res.data);
+            triggerTableSync();
+          }
+        } catch (e) {
+          console.error("Failed to sync updated customer to bill:", e);
         }
-      } catch (e) {
-        console.error("Failed to sync updated customer to bill:", e);
+      } else {
+        setActiveBill((prev) =>
+          prev
+            ? {
+                ...prev,
+                customer_id: updated.id,
+                customer_name: updated.name,
+                customer_phone: updated.phone || undefined,
+                customer_address: updated.address || undefined,
+              }
+            : null
+        );
       }
     }
   };
@@ -993,19 +1066,33 @@ export default function PosPage() {
     setIsAddCustomerOpen(false);
 
     if (activeBill) {
-      try {
-        const res = await restaurantService.updateBillCustomer(activeBill.id, {
-          customer_id: newCustomer.id,
-          customer_name: newCustomer.name,
-          customer_phone: newCustomer.phone || null,
-          customer_address: newCustomer.address || null,
-        });
-        if (res.data) {
-          handleBillUpdated(res.data);
-          triggerTableSync();
+      if (activeBill.id > 0) {
+        try {
+          const res = await restaurantService.updateBillCustomer(activeBill.id, {
+            customer_id: newCustomer.id,
+            customer_name: newCustomer.name,
+            customer_phone: newCustomer.phone || null,
+            customer_address: newCustomer.address || null,
+          });
+          if (res.data) {
+            handleBillUpdated(res.data);
+            triggerTableSync();
+          }
+        } catch (e) {
+          console.error("Failed to assign new customer to bill:", e);
         }
-      } catch (e) {
-        console.error("Failed to assign new customer to bill:", e);
+      } else {
+        setActiveBill((prev) =>
+          prev
+            ? {
+                ...prev,
+                customer_id: newCustomer.id,
+                customer_name: newCustomer.name,
+                customer_phone: newCustomer.phone || undefined,
+                customer_address: newCustomer.address || undefined,
+              }
+            : null
+        );
       }
     }
   };

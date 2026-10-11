@@ -69,6 +69,7 @@ export const restaurantService = {
       items: RestaurantBillItem[];
       customer_name?: string;
       customer_phone?: string;
+      customer_address?: string;
       customer_id?: number;
       waiter_name?: string;
       guest_count?: number;

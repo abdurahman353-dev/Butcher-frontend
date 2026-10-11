@@ -218,7 +218,9 @@ export function TableBillsModal({
     : (table?.active_bills || []);
 
   const activeBills = currentBills.filter(
-    (b) => b.status === "open" || b.status === "printed"
+    (b) =>
+      (b.status === "open" || b.status === "printed") &&
+      (b.total > 0 || (b.items && b.items.length > 0) || Boolean(b.kitchen_printed_at))
   );
 
   const filteredBills = activeBills.filter((bill) => {
@@ -305,6 +307,7 @@ export function TableBillsModal({
         guest_count: Number(guestCount) || 1,
         customer_name: customerName.trim() || undefined,
         customer_phone: customerPhone.trim() || undefined,
+        customer_address: customerAddress.trim() || undefined,
         notes: billNotes.trim() || undefined,
       });
       setIsCreatingNew(false);

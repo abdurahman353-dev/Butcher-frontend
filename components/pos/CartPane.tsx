@@ -241,7 +241,7 @@ export function CartPane({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-black text-xs text-zinc-900">Table {activeBill.table_number}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-500 font-mono tracking-tight">
-                    {activeBill.bill_number}
+                    {activeBill.id === 0 ? "New Bill" : activeBill.bill_number}
                   </span>
                 </div>
                 <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
