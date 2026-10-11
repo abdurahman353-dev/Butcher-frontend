@@ -304,17 +304,34 @@ export function TableMapView({
                   <div className={`pt-2 mt-2 border-t ${bottomBorder} flex items-end justify-between gap-1`}>
                     {table.active_bills_count > 0 ? (
                       <>
-                        <div>
-                          <div className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">
-                            <Receipt className="w-3 h-3" />
-                            {table.active_bills_count}{" "}
-                            {table.active_bills_count === 1 ? "Bill" : "Bills"}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex-wrap">
+                            <span className="flex items-center gap-1 shrink-0">
+                              <Receipt className="w-3.5 h-3.5 text-zinc-400" />
+                              {table.active_bills_count}{" "}
+                              {table.active_bills_count === 1 ? "Bill" : "Bills"}
+                            </span>
+                            {/* Breakdown of each bill when table has 2+ bills */}
+                            {table.active_bills && table.active_bills.length > 1 && (
+                              <span className="text-[10px] font-bold text-zinc-500 normal-case tracking-normal truncate">
+                                ({table.active_bills.slice(0, 3).map((b) => `${Math.round(b.total)}`).join(" + ")}
+                                {table.active_bills.length > 3 ? "..." : ""})
+                              </span>
+                            )}
                           </div>
-                          <div className="text-xs font-black text-emerald-700 mt-0.5">
+                          <div
+                            className={`text-base sm:text-lg font-black tracking-tight mt-0.5 truncate font-mono ${
+                              table.status === "red"
+                                ? "text-rose-950"
+                                : table.status === "yellow"
+                                ? "text-amber-950"
+                                : "text-emerald-800"
+                            }`}
+                          >
                             {formatCurrency(table.total_active_amount)}
                           </div>
                         </div>
-                        <span className="text-[10px] font-bold text-zinc-400 group-hover:text-zinc-700 transition-colors">
+                        <span className="text-[11px] font-bold text-zinc-400 group-hover:text-zinc-800 transition-colors shrink-0 mb-0.5">
                           View →
                         </span>
                       </>
