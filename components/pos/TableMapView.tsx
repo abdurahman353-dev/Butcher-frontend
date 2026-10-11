@@ -319,15 +319,7 @@ export function TableMapView({
                               </span>
                             )}
                           </div>
-                          <div
-                            className={`text-base sm:text-lg font-black tracking-tight mt-0.5 truncate font-mono ${
-                              table.status === "red"
-                                ? "text-rose-950"
-                                : table.status === "yellow"
-                                ? "text-amber-950"
-                                : "text-emerald-800"
-                            }`}
-                          >
+                          <div className="text-base sm:text-lg font-black tracking-tight mt-0.5 truncate font-mono text-emerald-600">
                             {formatCurrency(table.total_active_amount)}
                           </div>
                         </div>

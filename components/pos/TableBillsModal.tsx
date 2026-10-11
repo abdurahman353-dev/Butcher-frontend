@@ -886,7 +886,7 @@ export function TableBillsModal({
                       {/* Bill Total Amount */}
                       <div className="text-right">
                         <div className="text-[10px] uppercase font-extrabold text-zinc-600">Total Bill</div>
-                        <div className="text-lg font-black text-zinc-950 tracking-tight">
+                        <div className="text-lg font-black text-emerald-600 tracking-tight font-mono">
                           {formatCurrency(bill.total)}
                         </div>
                       </div>
