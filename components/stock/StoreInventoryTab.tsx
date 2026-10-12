@@ -8,15 +8,18 @@ import {
     PlusCircle,
     AlertTriangle,
     Search,
-    Filter,
     Edit2,
     Trash2,
     UtensilsCrossed,
-    Layers,
-    ArrowUpRight,
     X,
     AlertCircle,
     Check,
+    ChevronLeft,
+    ChevronRight,
+    ArrowUp,
+    ArrowDown,
+    SlidersHorizontal,
+    ChevronDown,
 } from "lucide-react";
 
 interface StoreInventoryTabProps {
@@ -71,7 +74,36 @@ export function StoreInventoryTab({
     // Filters
     const [search, setSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("All Categories");
-    const [lowStockOnly, setLowStockOnly] = useState(false);
+    const [stockStatus, setStockStatus] = useState<"all" | "sufficient" | "low" | "out">("all");
+    const [sortBy, setSortBy] = useState<"name_az" | "name_za" | "qty_high" | "qty_low" | "value_high" | "value_low" | "cost_high" | "cost_low">("name_az");
+    const [supplierFilter, setSupplierFilter] = useState("all");
+    const [paymentFilter, setPaymentFilter] = useState("all");
+    const [showFilters, setShowFilters] = useState(false);
+
+    // Pagination
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 10;
+
+    // Inline quick-adjust (increment / dispense)
+    const [adjustTarget, setAdjustTarget] = useState<{ id: number; mode: "increment" | "dispense" } | null>(null);
+    const [adjustQty, setAdjustQty] = useState("");
+    const [isAdjusting, setIsAdjusting] = useState(false);
+
+    const handleQuickAdjust = async (stock: RestaurantStockItem) => {
+        const delta = parseFloat(adjustQty);
+        if (isNaN(delta) || delta <= 0) return;
+        const newQty = adjustTarget?.mode === "increment"
+            ? stock.current_quantity + delta
+            : Math.max(0, stock.current_quantity - delta);
+        try {
+            setIsAdjusting(true);
+            await onUpdateStock(stock.id, { current_quantity: newQty });
+            setAdjustTarget(null);
+            setAdjustQty("");
+        } finally {
+            setIsAdjusting(false);
+        }
+    };
 
     // Form State for Add / Edit
     const [itemName, setItemName] = useState("");
@@ -168,6 +200,7 @@ export function StoreInventoryTab({
                     notes: notes.trim() || undefined,
                 });
                 setEditingStock(null);
+                resetForm();
             } else {
                 await onAddStock({
                     item_name: itemName.trim(),
@@ -182,8 +215,8 @@ export function StoreInventoryTab({
                     notes: notes.trim() || undefined,
                 });
                 setIsAddModalOpen(false);
+                resetForm();
             }
-            resetForm();
         } catch (err: any) {
             setFormError(err.response?.data?.message || err.message || "Failed to save stock item.");
         } finally {
@@ -191,19 +224,50 @@ export function StoreInventoryTab({
         }
     };
 
-    // Filtered store stocks
-    const filteredStocks = stocks.filter((stk) => {
-        if (categoryFilter !== "All Categories" && stk.category !== categoryFilter) return false;
-        if (lowStockOnly && stk.current_quantity > stk.min_threshold) return false;
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            const matchName = stk.item_name.toLowerCase().includes(q);
-            const matchCat = stk.category.toLowerCase().includes(q);
-            const matchSup = stk.supplier?.toLowerCase().includes(q);
-            if (!matchName && !matchCat && !matchSup) return false;
-        }
-        return true;
-    });
+    // Derived filter options
+    const uniqueSuppliers = Array.from(new Set(stocks.map((s) => s.supplier).filter(Boolean))) as string[];
+
+    // Filtered + sorted store stocks
+    const filteredStocks = stocks
+        .filter((stk) => {
+            if (categoryFilter !== "All Categories" && stk.category !== categoryFilter) return false;
+            if (stockStatus === "sufficient" && stk.current_quantity <= stk.min_threshold) return false;
+            if (stockStatus === "low" && (stk.current_quantity === 0 || stk.current_quantity > stk.min_threshold)) return false;
+            if (stockStatus === "out" && stk.current_quantity > 0) return false;
+            if (supplierFilter !== "all" && stk.supplier !== supplierFilter) return false;
+            if (paymentFilter !== "all" && stk.payment_method !== paymentFilter) return false;
+            if (search.trim()) {
+                const q = search.toLowerCase();
+                if (
+                    !stk.item_name.toLowerCase().includes(q) &&
+                    !stk.category.toLowerCase().includes(q) &&
+                    !(stk.supplier?.toLowerCase().includes(q)) &&
+                    !(stk.notes?.toLowerCase().includes(q)) &&
+                    !(stk.invoice_number?.toLowerCase().includes(q))
+                ) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            switch (sortBy) {
+                case "name_az": return a.item_name.localeCompare(b.item_name);
+                case "name_za": return b.item_name.localeCompare(a.item_name);
+                case "qty_high": return b.current_quantity - a.current_quantity;
+                case "qty_low": return a.current_quantity - b.current_quantity;
+                case "value_high": return (b.current_quantity * b.unit_cost) - (a.current_quantity * a.unit_cost);
+                case "value_low": return (a.current_quantity * a.unit_cost) - (b.current_quantity * b.unit_cost);
+                case "cost_high": return b.unit_cost - a.unit_cost;
+                case "cost_low": return a.unit_cost - b.unit_cost;
+                default: return 0;
+            }
+        });
+
+    const totalPages = Math.max(1, Math.ceil(filteredStocks.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const pagedStocks = filteredStocks.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+    // Reset to page 1 when filters change
+    const handleFilterChange = (fn: () => void) => { fn(); setPage(1); };
 
     const totalValuation = stocks.reduce((acc, s) => acc + s.current_quantity * s.unit_cost, 0);
     const lowStockCount = stocks.filter((s) => s.current_quantity <= s.min_threshold).length;
@@ -253,62 +317,178 @@ export function StoreInventoryTab({
                 </button>
             </div>
 
-            {/* Filters and Search Bar */}
-            <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-2">
-                        <h3 className="text-sm sm:text-base font-bold text-zinc-900">Raw Store Materials Inventory</h3>
-                        <span className="text-xs text-zinc-400">({filteredStocks.length} of {stocks.length})</span>
+            {/* Filter Card */}
+            <div className="bg-white rounded-xl border border-zinc-200 shadow-xs overflow-hidden">
+                {/* Header row — always visible */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                    {/* Title */}
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <h3 className="text-sm sm:text-base font-bold text-zinc-900 truncate">Raw Store Materials Inventory</h3>
+                        <span className="text-xs text-zinc-400 shrink-0">({filteredStocks.length} of {stocks.length})</span>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                        {/* Search */}
-                        <div className="relative flex-1 sm:flex-initial">
-                            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search ingredients, supplier..."
-                                className="w-full sm:w-56 pl-9 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            />
-                        </div>
+                    {/* Search — always visible */}
+                    <div className="relative hidden sm:block">
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
+                            placeholder="Search..."
+                            className="w-44 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-zinc-50"
+                        />
+                    </div>
 
-                        {/* Category Filter */}
-                        <div className="relative">
-                            <select
-                                value={categoryFilter}
-                                onChange={(e) => setCategoryFilter(e.target.value)}
-                                className="w-full sm:w-auto text-xs px-3 py-1.5 rounded-lg border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-white"
-                            >
-                                {STOCK_CATEGORIES.map((cat) => (
-                                    <option key={cat} value={cat}>
-                                        {cat}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Low Stock Toggle */}
-                        <button
-                            onClick={() => setLowStockOnly(!lowStockOnly)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center justify-center gap-1.5 transition-colors ${lowStockOnly
-                                ? "bg-rose-50 border-rose-300 text-rose-700"
-                                : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                    {/* Filter toggle */}
+                    {(() => {
+                        const activeCount = [categoryFilter !== "All Categories", stockStatus !== "all", sortBy !== "name_az", supplierFilter !== "all", paymentFilter !== "all"].filter(Boolean).length;
+                        return (
+                            <button
+                                onClick={() => setShowFilters((v) => !v)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                                    showFilters || activeCount > 0
+                                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-200"
+                                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
                                 }`}
-                        >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>Low Stock Only</span>
-                        </button>
+                            >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                Filters
+                                {activeCount > 0 && (
+                                    <span className="ml-0.5 bg-white text-amber-700 rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center">{activeCount}</span>
+                                )}
+                                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showFilters ? "rotate-180" : ""}`} />
+                            </button>
+                        );
+                    })()}
+                </div>
+
+                {/* Mobile search */}
+                <div className="px-4 pb-3 sm:hidden">
+                    <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
+                            placeholder="Search name, category, supplier..."
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-zinc-50"
+                        />
                     </div>
                 </div>
+
+                {/* Collapsible filter panel - arranged horizontally */}
+                {/* Collapsible filter panel - arranged horizontally */}
+                {showFilters && (
+                    <div className="border-t border-zinc-100 px-3 sm:px-4 py-3 bg-gradient-to-r from-slate-50 via-amber-50/20 to-slate-50">
+                        <div className="flex flex-wrap items-end gap-2.5 sm:gap-3">
+                            {/* Category Dropdown */}
+                            <div className="w-full sm:w-auto flex-1 min-w-[160px] sm:max-w-xs">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Category</label>
+                                <select
+                                    value={categoryFilter}
+                                    onChange={(e) => handleFilterChange(() => setCategoryFilter(e.target.value))}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                >
+                                    {STOCK_CATEGORIES.map((cat) => (
+                                        <option key={cat} value={cat}>
+                                            {cat}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Stock Status */}
+                            <div className="w-full sm:w-auto min-w-0 sm:min-w-[260px]">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Stock Status</label>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {([
+                                        { key: "all", label: "All Items", active: "bg-zinc-800 text-white", idle: "bg-white text-zinc-600 border-zinc-200" },
+                                        { key: "sufficient", label: "✓ Sufficient", active: "bg-emerald-500 text-white shadow-emerald-200 shadow-sm", idle: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                                        { key: "low", label: "⚠ Low Stock", active: "bg-amber-500 text-white shadow-amber-200 shadow-sm", idle: "bg-amber-50 text-amber-700 border-amber-200" },
+                                        { key: "out", label: "✕ Out of Stock", active: "bg-rose-600 text-white shadow-rose-200 shadow-sm", idle: "bg-rose-50 text-rose-700 border-rose-200" },
+                                    ] as const).map(({ key, label, active, idle }) => (
+                                        <button key={key} type="button" onClick={() => handleFilterChange(() => setStockStatus(key))}
+                                            className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all text-center whitespace-nowrap ${stockStatus === key ? active : idle}`}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Sort by Dropdown */}
+                            <div className="w-full sm:w-auto min-w-[140px] flex-1 sm:flex-initial">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Sort by</label>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => handleFilterChange(() => setSortBy(e.target.value as any))}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                >
+                                    <option value="name_az">Name A → Z</option>
+                                    <option value="name_za">Name Z → A</option>
+                                    <option value="qty_high">Quantity: High → Low</option>
+                                    <option value="qty_low">Quantity: Low → High</option>
+                                    <option value="value_high">Total Value: High → Low</option>
+                                    <option value="value_low">Total Value: Low → High</option>
+                                    <option value="cost_high">Unit Cost: High → Low</option>
+                                    <option value="cost_low">Unit Cost: Low → High</option>
+                                </select>
+                            </div>
+
+                            {/* Payment Method */}
+                            <div className="w-full sm:w-auto min-w-[140px] flex-1 sm:flex-initial">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Payment Method</label>
+                                <select
+                                    value={paymentFilter}
+                                    onChange={(e) => handleFilterChange(() => setPaymentFilter(e.target.value as any))}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                >
+                                    <option value="all">All Payment Methods</option>
+                                    <option value="cash">Cash</option>
+                                    <option value="mpesa">M-Pesa</option>
+                                    <option value="bank">Bank</option>
+                                    <option value="credit">Credit</option>
+                                </select>
+                            </div>
+
+                            {/* Supplier Dropdown */}
+                            {uniqueSuppliers.length > 0 && (
+                                <div className="w-full sm:w-auto min-w-[140px] flex-1 sm:flex-initial">
+                                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Supplier</label>
+                                    <select
+                                        value={supplierFilter}
+                                        onChange={(e) => handleFilterChange(() => setSupplierFilter(e.target.value))}
+                                        className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                    >
+                                        <option value="all">All Suppliers</option>
+                                        {uniqueSuppliers.map((s) => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Clear All Filters */}
+                            {(search || categoryFilter !== "All Categories" || stockStatus !== "all" || sortBy !== "name_az" || supplierFilter !== "all" || paymentFilter !== "all") && (
+                                <div className="w-full sm:w-auto pb-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterChange(() => { setSearch(""); setCategoryFilter("All Categories"); setStockStatus("all"); setSortBy("name_az"); setSupplierFilter("all"); setPaymentFilter("all"); })}
+                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold hover:bg-rose-100 transition-colors shadow-xs"
+                                    >
+                                        <X className="w-3.5 h-3.5" /> Clear All
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Inventory Content: Mobile Cards + Desktop Table */}
                 {filteredStocks.length > 0 ? (
                     <div>
                         {/* Mobile Cards (< md) */}
                         <div className="block md:hidden divide-y divide-zinc-100">
-                            {filteredStocks.map((stock) => {
+                            {pagedStocks.map((stock) => {
                                 const isLow = stock.current_quantity <= stock.min_threshold;
                                 const valuation = stock.current_quantity * stock.unit_cost;
 
@@ -359,21 +539,65 @@ export function StoreInventoryTab({
                                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs"
                                             >
                                                 <UtensilsCrossed className="w-3.5 h-3.5" />
-                                                Issue to Kitchen
+                                                Issue
                                             </button>
 
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5">
+                                                {/* Inline adjust row */}
+                                                {adjustTarget?.id === stock.id ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            autoFocus
+                                                            type="number"
+                                                            min="0.001"
+                                                            step="0.001"
+                                                            value={adjustQty}
+                                                            onChange={(e) => setAdjustQty(e.target.value)}
+                                                            placeholder="qty"
+                                                            className="w-16 text-xs px-2 py-1 border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                                        />
+                                                        <button
+                                                            onClick={() => handleQuickAdjust(stock)}
+                                                            disabled={isAdjusting}
+                                                            className={`px-2 py-1 text-white text-xs font-bold rounded-md transition-colors disabled:opacity-50 ${
+                                                                adjustTarget.mode === "increment" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+                                                            }`}
+                                                        >
+                                                            {isAdjusting ? "..." : "OK"}
+                                                        </button>
+                                                        <button onClick={() => { setAdjustTarget(null); setAdjustQty(""); }} className="text-zinc-400 hover:text-zinc-600">
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={() => { setAdjustTarget({ id: stock.id, mode: "increment" }); setAdjustQty(""); }}
+                                                            className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-md transition-colors"
+                                                            title="Add / Increment stock"
+                                                        >
+                                                            <ArrowUp className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setAdjustTarget({ id: stock.id, mode: "dispense" }); setAdjustQty(""); }}
+                                                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors"
+                                                            title="Dispense / Reduce stock"
+                                                        >
+                                                            <ArrowDown className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                )}
                                                 <button
                                                     onClick={() => handleOpenEditModal(stock)}
-                                                    className="p-1.5 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 rounded-md"
-                                                    title="Restock / Edit details"
+                                                    className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                                                    title="Edit details"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => onDeleteStock(stock.id)}
-                                                    className="p-1.5 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 rounded-md"
-                                                    title="Delete ingredient"
+                                                    className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors"
+                                                    title="Delete"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
@@ -400,7 +624,7 @@ export function StoreInventoryTab({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100">
-                                    {filteredStocks.map((stock) => {
+                                    {pagedStocks.map((stock) => {
                                         const isLow = stock.current_quantity <= stock.min_threshold;
                                         const valuation = stock.current_quantity * stock.unit_cost;
 
@@ -434,24 +658,71 @@ export function StoreInventoryTab({
                                                 <td className="py-3 px-3 text-zinc-500 max-w-xs truncate">
                                                     {stock.supplier || "—"}
                                                 </td>
-                                                <td className="py-3 px-3 text-right">
+                                                <td className="py-3 px-3 text-right whitespace-nowrap">
                                                     <button
                                                         onClick={() => onIssueQuick(stock.id)}
-                                                        className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline mr-3 inline-flex items-center gap-1"
+                                                        className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline mr-2 inline-flex items-center gap-1"
                                                     >
                                                         <UtensilsCrossed className="w-3 h-3" />
                                                         Issue
                                                     </button>
+
+                                                    {/* Inline adjust */}
+                                                    {adjustTarget?.id === stock.id ? (
+                                                        <span className="inline-flex items-center gap-1 mr-1">
+                                                            <input
+                                                                autoFocus
+                                                                type="number"
+                                                                min="0.001"
+                                                                step="0.001"
+                                                                value={adjustQty}
+                                                                onChange={(e) => setAdjustQty(e.target.value)}
+                                                                onKeyDown={(e) => { if (e.key === "Enter") handleQuickAdjust(stock); if (e.key === "Escape") { setAdjustTarget(null); setAdjustQty(""); } }}
+                                                                placeholder="qty"
+                                                                className="w-14 text-xs px-1.5 py-0.5 border border-zinc-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                                            />
+                                                            <button
+                                                                onClick={() => handleQuickAdjust(stock)}
+                                                                disabled={isAdjusting}
+                                                                className={`px-2 py-0.5 text-white text-xs font-bold rounded transition-colors disabled:opacity-50 ${
+                                                                    adjustTarget.mode === "increment" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+                                                                }`}
+                                                            >
+                                                                {isAdjusting ? "..." : "OK"}
+                                                            </button>
+                                                            <button onClick={() => { setAdjustTarget(null); setAdjustQty(""); }} className="text-zinc-400 hover:text-zinc-600">
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </span>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => { setAdjustTarget({ id: stock.id, mode: "increment" }); setAdjustQty(""); }}
+                                                                className="text-emerald-600 hover:text-emerald-800 p-1 transition-colors"
+                                                                title="Add / Increment quantity"
+                                                            >
+                                                                <ArrowUp className="w-3.5 h-3.5 inline" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setAdjustTarget({ id: stock.id, mode: "dispense" }); setAdjustQty(""); }}
+                                                                className="text-rose-600 hover:text-rose-800 p-1 mr-1 transition-colors"
+                                                                title="Dispense / Reduce quantity"
+                                                            >
+                                                                <ArrowDown className="w-3.5 h-3.5 inline" />
+                                                            </button>
+                                                        </>
+                                                    )}
+
                                                     <button
                                                         onClick={() => handleOpenEditModal(stock)}
-                                                        className="text-zinc-400 hover:text-zinc-700 p-1 mr-1"
+                                                        className="text-blue-600 hover:text-blue-800 p-1 mr-1 transition-colors"
                                                         title="Edit / Restock"
                                                     >
                                                         <Edit2 className="w-3.5 h-3.5 inline" />
                                                     </button>
                                                     <button
                                                         onClick={() => onDeleteStock(stock.id)}
-                                                        className="text-zinc-400 hover:text-rose-600 p-1"
+                                                        className="text-rose-600 hover:text-rose-800 p-1 transition-colors"
                                                         title="Delete item"
                                                     >
                                                         <Trash2 className="w-3.5 h-3.5 inline" />
@@ -462,6 +733,32 @@ export function StoreInventoryTab({
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Pagination */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 pt-3 border-t border-zinc-100 gap-3 w-full">
+                            <p className="text-xs text-zinc-500 text-center sm:text-left">
+                                Showing <strong>{filteredStocks.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}</strong>–<strong>{Math.min(safePage * PAGE_SIZE, filteredStocks.length)}</strong> of <strong>{filteredStocks.length}</strong> ingredients
+                            </p>
+                            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-1.5">
+                                <button
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    disabled={safePage === 1}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    <ChevronLeft className="w-4 h-4" /> Previous
+                                </button>
+                                <span className="px-2 font-bold text-zinc-700 text-xs shrink-0">
+                                    {safePage} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={safePage === totalPages}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Next <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -704,21 +1001,21 @@ export function StoreInventoryTab({
                                 />
                             </div>
 
-                            <div className="pt-2 flex items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
+                            <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setIsAddModalOpen(false);
                                         setEditingStock(null);
                                     }}
-                                    className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100 text-center"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs text-center"
                                 >
                                     {isSubmitting ? "Saving..." : editingStock ? "Update Stock" : "Add to Store Inventory"}
                                 </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useSystemDialog } from "@/contexts/DialogContext";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { restaurantStockService } from "@/services/restaurantStock.service";
@@ -29,13 +30,16 @@ import {
 
 export default function RestaurantStockPage() {
     const { user, isLoading: isAuthLoading } = useAuth();
+    const { confirm } = useSystemDialog();
     const isRestaurant = user?.company?.business_type === "restaurant";
 
     // Tab State
     const [activeTab, setActiveTab] = useState<"overview" | "issues" | "store">("overview");
 
     // Timeframe Filter for Overview & Issues
-    const [period, setPeriod] = useState<"today" | "yesterday" | "7days" | "30days" | "this_month">("today");
+    const [period, setPeriod] = useState<string>("today");
+    const [startDate, setStartDate] = useState<string>("");
+    const [endDate, setEndDate] = useState<string>("");
 
     // Data States
     const [analytics, setAnalytics] = useState<StockExpenseAnalytics | null>(null);
@@ -54,10 +58,15 @@ export default function RestaurantStockPage() {
         else setIsRefreshing(true);
 
         try {
+            const analyticsParams: { period?: string; start_date?: string; end_date?: string } = {};
+            if (startDate) analyticsParams.start_date = startDate;
+            if (endDate) analyticsParams.end_date = endDate;
+            if (period && !startDate && !endDate) analyticsParams.period = period;
+
             const [analyticsRes, stockRes, issuesRes] = await Promise.all([
-                restaurantStockService.getAnalytics({ period }),
+                restaurantStockService.getAnalytics(analyticsParams),
                 restaurantStockService.getStock({ per_page: "all" }),
-                restaurantStockService.getKitchenIssues({ period, per_page: "all" }),
+                restaurantStockService.getKitchenIssues({ per_page: "all" }),
             ]);
 
             setAnalytics(analyticsRes);
@@ -81,7 +90,7 @@ export default function RestaurantStockPage() {
             setIsLoading(false);
             setIsRefreshing(false);
         }
-    }, [isRestaurant, period]);
+    }, [isRestaurant, period, startDate, endDate]);
 
     useEffect(() => {
         if (!isAuthLoading && isRestaurant) {
@@ -110,7 +119,7 @@ export default function RestaurantStockPage() {
     const handleAddStock = async (payload: CreateStockPayload) => {
         const res = await restaurantStockService.recordStockPurchase(payload);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleUpdateStock = async (
@@ -119,20 +128,27 @@ export default function RestaurantStockPage() {
     ) => {
         const res = await restaurantStockService.updateStock(id, payload);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleDeleteStock = async (id: number) => {
-        if (!confirm("Are you sure you want to delete this stock item from store?")) return;
+        const confirmed = await confirm({
+            title: "Delete Stock Item",
+            message: "Are you sure you want to permanently delete this ingredient from store? This cannot be undone.",
+            confirmText: "Yes, Delete",
+            cancelText: "Cancel",
+            type: "danger",
+        });
+        if (!confirmed) return;
         const res = await restaurantStockService.deleteStock(id);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleIssueStock = async (payload: IssueToKitchenPayload) => {
         const res = await restaurantStockService.issueToKitchen(payload);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleReconcileIssue = async (
@@ -141,14 +157,21 @@ export default function RestaurantStockPage() {
     ) => {
         const res = await restaurantStockService.reconcileKitchenIssue(issueId, payload);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleDeleteIssue = async (issueId: number) => {
-        if (!confirm("Cancel this kitchen issue and restore store stock?")) return;
+        const confirmed = await confirm({
+            title: "Cancel Kitchen Issue",
+            message: "Cancel this kitchen issue and restore the stock back to the store?",
+            confirmText: "Yes, Cancel & Restore",
+            cancelText: "Keep Issue",
+            type: "warning",
+        });
+        if (!confirmed) return;
         const res = await restaurantStockService.deleteKitchenIssue(issueId);
         setFeedbackMessage({ type: "success", text: res.message });
-        await loadData(true);
+        loadData(true);
     };
 
     const handleQuickIssueFromStore = (_stockId: number) => {
@@ -199,28 +222,12 @@ export default function RestaurantStockPage() {
                     </div>
                 </div>
 
-                {/* Global Controls: Period Selector & Refresh */}
-                <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
-                    {/* Timeframe selector */}
-                    <div className="relative flex-1 sm:flex-initial">
-                        <select
-                            value={period}
-                            onChange={(e) => setPeriod(e.target.value as any)}
-                            className="w-full sm:w-auto appearance-none bg-white border border-zinc-200 text-xs font-semibold text-zinc-700 pl-3 pr-8 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs cursor-pointer"
-                        >
-                            <option value="today">Today</option>
-                            <option value="yesterday">Yesterday</option>
-                            <option value="7days">Last 7 Days</option>
-                            <option value="30days">Last 30 Days</option>
-                            <option value="this_month">This Month</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-
+                {/* Global Controls: Refresh */}
+                <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end">
                     <button
                         onClick={() => loadData(true)}
                         disabled={isRefreshing || isLoading}
-                        className="p-2 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 transition-colors disabled:opacity-50 shrink-0"
+                        className="p-2 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 transition-colors disabled:opacity-50 shrink-0 shadow-xs"
                         title="Refresh Data"
                         aria-label="Refresh Data"
                     >
@@ -261,11 +268,11 @@ export default function RestaurantStockPage() {
             )}
 
             {/* Responsive Navigation Tabs (Horizontally scrollable on mobile) */}
-            <div className="border-b border-zinc-200 overflow-x-auto scrollbar-none no-scrollbar">
+            <div className="border-b border-zinc-200 overflow-x-auto scrollbar-none no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
                 <nav className="flex space-x-2 sm:space-x-6 min-w-max pb-px">
                     <button
                         onClick={() => setActiveTab("overview")}
-                        className={`py-2.5 sm:py-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors ${activeTab === "overview"
+                        className={`py-2.5 sm:py-3 px-2 sm:px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === "overview"
                                 ? "border-amber-600 text-amber-700"
                                 : "border-transparent text-zinc-500 hover:text-zinc-900"
                             }`}
@@ -276,7 +283,7 @@ export default function RestaurantStockPage() {
 
                     <button
                         onClick={() => setActiveTab("issues")}
-                        className={`py-2.5 sm:py-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors ${activeTab === "issues"
+                        className={`py-2.5 sm:py-3 px-2 sm:px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === "issues"
                                 ? "border-amber-600 text-amber-700"
                                 : "border-transparent text-zinc-500 hover:text-zinc-900"
                             }`}
@@ -292,7 +299,7 @@ export default function RestaurantStockPage() {
 
                     <button
                         onClick={() => setActiveTab("store")}
-                        className={`py-2.5 sm:py-3 px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors ${activeTab === "store"
+                        className={`py-2.5 sm:py-3 px-2 sm:px-1 text-xs font-bold border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 ${activeTab === "store"
                                 ? "border-amber-600 text-amber-700"
                                 : "border-transparent text-zinc-500 hover:text-zinc-900"
                             }`}
@@ -309,6 +316,12 @@ export default function RestaurantStockPage() {
                     <StockOverviewTab
                         analytics={analytics}
                         isLoading={isLoading}
+                        period={period}
+                        onPeriodChange={setPeriod}
+                        startDate={startDate}
+                        onStartDateChange={setStartDate}
+                        endDate={endDate}
+                        onEndDateChange={setEndDate}
                         onNavigateToIssues={() => setActiveTab("issues")}
                         onNavigateToStore={() => setActiveTab("store")}
                     />

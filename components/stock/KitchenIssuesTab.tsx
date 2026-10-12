@@ -15,6 +15,10 @@ import {
     Check,
     X,
     Sparkles,
+    ChevronLeft,
+    ChevronRight,
+    SlidersHorizontal,
+    ChevronDown,
 } from "lucide-react";
 
 interface KitchenIssuesTabProps {
@@ -68,6 +72,16 @@ export function KitchenIssuesTab({
     // Filter State
     const [statusFilter, setStatusFilter] = useState<"all" | "in_kitchen" | "reconciled">("all");
     const [search, setSearch] = useState("");
+    const [dateFilter, setDateFilter] = useState<"all" | "today" | "yesterday" | "week" | "month" | "custom">("all");
+    const [fromDate, setFromDate] = useState("");
+    const [toDate, setToDate] = useState("");
+    const [sortBy, setSortBy] = useState<"newest" | "oldest" | "cost_high" | "cost_low">("newest");
+    const [ingredientFilter, setIngredientFilter] = useState("all");
+    const [showFilters, setShowFilters] = useState(false);
+
+    // Pagination for ledger
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 10;
 
     const selectedStock = stocks.find((s) => s.id === Number(selectedStockId));
 
@@ -172,20 +186,69 @@ export function KitchenIssuesTab({
         }
     };
 
-    // Filtered issues
-    const filteredIssues = issues.filter((iss) => {
-        if (statusFilter !== "all" && iss.status !== statusFilter) return false;
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            const matchName = iss.item_name.toLowerCase().includes(q);
-            const matchDish = iss.expected_dish?.toLowerCase().includes(q);
-            const matchNotes = iss.notes?.toLowerCase().includes(q);
-            if (!matchName && !matchDish && !matchNotes) return false;
+    // Date range helper
+    const isInDateRange = (dateStr: string) => {
+        const d = new Date(dateStr);
+        if (fromDate) {
+            const f = new Date(fromDate + "T00:00:00");
+            if (d < f) return false;
+        }
+        if (toDate) {
+            const t = new Date(toDate + "T23:59:59");
+            if (d > t) return false;
+        }
+        if (!fromDate && !toDate && dateFilter !== "all") {
+            const now = new Date();
+            const startOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+            const today = startOfDay(now);
+            const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+            const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            if (dateFilter === "today") return d >= today;
+            if (dateFilter === "yesterday") return d >= yesterday && d < today;
+            if (dateFilter === "week") return d >= weekStart;
+            if (dateFilter === "month") return d >= monthStart;
         }
         return true;
-    });
+    };
+
+    // Unique ingredient names from issues
+    const uniqueIngredients = Array.from(new Set(issues.map((i) => i.item_name)));
+
+    // Filtered + sorted issues
+    const filteredIssues = issues
+        .filter((iss) => {
+            if (statusFilter !== "all" && iss.status !== statusFilter) return false;
+            if (!isInDateRange(iss.issued_at)) return false;
+            if (ingredientFilter !== "all" && iss.item_name !== ingredientFilter) return false;
+            if (search.trim()) {
+                const q = search.toLowerCase();
+                if (
+                    !iss.item_name.toLowerCase().includes(q) &&
+                    !(iss.expected_dish?.toLowerCase().includes(q)) &&
+                    !(iss.notes?.toLowerCase().includes(q)) &&
+                    !(iss.issued_by_name?.toLowerCase().includes(q))
+                ) return false;
+            }
+            return true;
+        })
+        .sort((a, b) => {
+            switch (sortBy) {
+                case "newest": return new Date(b.issued_at).getTime() - new Date(a.issued_at).getTime();
+                case "oldest": return new Date(a.issued_at).getTime() - new Date(b.issued_at).getTime();
+                case "cost_high": return b.issued_cost - a.issued_cost;
+                case "cost_low": return a.issued_cost - b.issued_cost;
+                default: return 0;
+            }
+        });
 
     const activeKitchenIssues = issues.filter((i) => i.status === "in_kitchen");
+
+    const totalPages = Math.max(1, Math.ceil(filteredIssues.length / PAGE_SIZE));
+    const safePage = Math.min(page, totalPages);
+    const pagedIssues = filteredIssues.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+    const handleFilterChange = (fn: () => void) => { fn(); setPage(1); };
 
     return (
         <div className="space-y-5 sm:space-y-6">
@@ -212,137 +275,159 @@ export function KitchenIssuesTab({
                 </button>
             </div>
 
-            {/* Active in Kitchen Section */}
-            {activeKitchenIssues.length > 0 && (
-                <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/80 p-4 sm:p-5 rounded-xl border border-amber-200/80 shadow-xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 mb-3">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                            <h3 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wider">
-                                Currently Cooking / In-Kitchen Batches ({activeKitchenIssues.length})
-                            </h3>
-                        </div>
-                        <span className="text-xs text-amber-800 font-medium">
-                            Total in pots:{" "}
-                            <strong>
-                                {formatCurrency(activeKitchenIssues.reduce((acc, curr) => acc + curr.issued_cost, 0))}
-                            </strong>
-                        </span>
+
+
+            {/* Issues Ledger — Filter Card */}
+            <div className="bg-white rounded-xl border border-zinc-200 shadow-xs overflow-hidden">
+                {/* Header row — always visible */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <h3 className="text-sm sm:text-base font-bold text-zinc-900 truncate">Kitchen Issue Ledger</h3>
+                        <span className="text-xs text-zinc-400 shrink-0">({filteredIssues.length} records)</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {activeKitchenIssues.map((issue) => (
-                            <div
-                                key={issue.id}
-                                className="bg-white p-3.5 sm:p-4 rounded-xl border border-amber-200/90 shadow-xs flex flex-col justify-between"
-                            >
-                                <div>
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="min-w-0">
-                                            <h4 className="text-sm font-bold text-zinc-900 truncate">{issue.item_name}</h4>
-                                            <p className="text-xs font-semibold text-amber-700 mt-0.5">
-                                                {issue.issued_quantity} {issue.unit} ({formatCurrency(issue.issued_cost)})
-                                            </p>
-                                        </div>
-                                        <span className="text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 flex items-center gap-1 shrink-0">
-                                            <Clock className="w-3 h-3" />
-                                            In Kitchen
-                                        </span>
-                                    </div>
+                    {/* Search — always visible */}
+                    <div className="relative hidden sm:block">
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={search}
+                            onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
+                            placeholder="Search..."
+                            className="w-44 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-zinc-50" />
+                    </div>
 
-                                    {issue.expected_dish && (
-                                        <div className="mt-2 text-xs text-zinc-600 bg-zinc-50 px-2.5 py-1 rounded-md border border-zinc-100 flex items-center gap-1.5">
-                                            <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                            <span className="truncate">{issue.expected_dish}</span>
-                                        </div>
-                                    )}
+                    {/* Filter toggle */}
+                    {(() => {
+                        const activeCount = [
+                            statusFilter !== "all",
+                            dateFilter !== "all" || Boolean(fromDate) || Boolean(toDate),
+                            sortBy !== "newest",
+                            ingredientFilter !== "all"
+                        ].filter(Boolean).length;
+                        return (
+                            <button onClick={() => setShowFilters((v) => !v)}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                                    showFilters || activeCount > 0
+                                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white"
+                                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                                }`}>
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                Filters
+                                {activeCount > 0 && (
+                                    <span className="bg-white text-amber-700 rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center">{activeCount}</span>
+                                )}
+                                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showFilters ? "rotate-180" : ""}`} />
+                            </button>
+                        );
+                    })()}
+                </div>
 
-                                    <div className="mt-2 text-[11px] text-zinc-400">
-                                        Issued: {formatDateTime(issue.issued_at)} by {issue.issued_by_name || "Staff"}
-                                    </div>
+                {/* Mobile search */}
+                <div className="px-4 pb-3 sm:hidden">
+                    <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={search}
+                            onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
+                            placeholder="Search ingredient, dish, notes, staff..."
+                            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-zinc-50" />
+                    </div>
+                </div>
+
+                {/* Collapsible filter panel - arranged horizontally */}
+                {showFilters && (
+                    <div className="border-t border-zinc-100 px-3 sm:px-4 py-3 bg-gradient-to-r from-slate-50 via-amber-50/20 to-slate-50">
+                        <div className="flex flex-wrap items-end gap-2.5 sm:gap-3">
+
+                            {/* Ingredient Dropdown */}
+                            <div className="w-full sm:w-auto flex-1 min-w-[160px] sm:max-w-xs">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Ingredient</label>
+                                <select
+                                    value={ingredientFilter}
+                                    onChange={(e) => handleFilterChange(() => setIngredientFilter(e.target.value))}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                >
+                                    <option value="all">All Ingredients</option>
+                                    {uniqueIngredients.map((n) => (
+                                        <option key={n} value={n}>{n}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Date: From & To */}
+                            <div className="w-full sm:w-auto grid grid-cols-2 gap-2 sm:flex sm:items-end sm:gap-2">
+                                <div className="w-full sm:w-auto">
+                                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">From Date</label>
+                                    <input
+                                        type="date"
+                                        value={fromDate}
+                                        onChange={(e) => handleFilterChange(() => { setFromDate(e.target.value); setDateFilter("custom"); })}
+                                        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                    />
                                 </div>
-
-                                <div className="mt-3 sm:mt-4 pt-3 border-t border-zinc-100 flex items-center gap-2">
-                                    <button
-                                        onClick={() => handleOpenReconcileModal(issue)}
-                                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
-                                    >
-                                        <CheckCircle className="w-3.5 h-3.5" />
-                                        Reconcile Count
-                                    </button>
-
-                                    <button
-                                        onClick={() => onDeleteIssue(issue.id)}
-                                        title="Cancel issue and return to store"
-                                        className="p-1.5 text-zinc-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors shrink-0"
-                                    >
-                                        <RotateCcw className="w-4 h-4" />
-                                    </button>
+                                <div className="w-full sm:w-auto">
+                                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">To Date</label>
+                                    <input
+                                        type="date"
+                                        value={toDate}
+                                        onChange={(e) => handleFilterChange(() => { setToDate(e.target.value); setDateFilter("custom"); })}
+                                        className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                    />
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
-            {/* Issues History & Filters */}
-            <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-2">
-                        <h3 className="text-sm sm:text-base font-bold text-zinc-900">Kitchen Issue Ledger</h3>
-                        <span className="text-xs text-zinc-400">({filteredIssues.length} records)</span>
-                    </div>
+                            {/* Status */}
+                            <div className="w-full sm:w-auto min-w-0 sm:min-w-[200px]">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Issue Status</label>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {([
+                                        { key: "all", label: "All Issues", active: "bg-zinc-800 text-white", idle: "bg-white text-zinc-600 border-zinc-200" },
+                                        { key: "in_kitchen", label: "🔥 In Kitchen", active: "bg-amber-500 text-white shadow-amber-200 shadow-sm", idle: "bg-amber-50 text-amber-700 border-amber-200" },
+                                        { key: "reconciled", label: "✓ Reconciled", active: "bg-emerald-500 text-white shadow-emerald-200 shadow-sm", idle: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+                                    ] as const).map(({ key, label, active, idle }) => (
+                                        <button key={key} type="button" onClick={() => handleFilterChange(() => setStatusFilter(key))}
+                                            className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all text-center whitespace-nowrap ${statusFilter === key ? active : idle}`}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
-                        {/* Search */}
-                        <div className="relative w-full sm:w-auto">
-                            <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search ingredient, dish..."
-                                className="w-full sm:w-56 pl-9 pr-3 py-1.5 text-xs rounded-lg border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            />
-                        </div>
+                            {/* Sort */}
+                            <div className="w-full sm:w-auto min-w-[140px] flex-1 sm:flex-initial">
+                                <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Sort by</label>
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => handleFilterChange(() => setSortBy(e.target.value as any))}
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold text-zinc-700 shadow-xs"
+                                >
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="cost_high">Cost: High → Low</option>
+                                    <option value="cost_low">Cost: Low → High</option>
+                                </select>
+                            </div>
 
-                        {/* Status Pills */}
-                        <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg text-xs font-semibold self-start sm:self-auto">
-                            <button
-                                onClick={() => setStatusFilter("all")}
-                                className={`px-3 py-1 rounded-md transition-colors ${statusFilter === "all" ? "bg-white text-zinc-900 shadow-xs" : "text-zinc-500 hover:text-zinc-900"
-                                    }`}
-                            >
-                                All
-                            </button>
-                            <button
-                                onClick={() => setStatusFilter("in_kitchen")}
-                                className={`px-3 py-1 rounded-md transition-colors ${statusFilter === "in_kitchen"
-                                        ? "bg-white text-zinc-900 shadow-xs"
-                                        : "text-zinc-500 hover:text-zinc-900"
-                                    }`}
-                            >
-                                In Kitchen
-                            </button>
-                            <button
-                                onClick={() => setStatusFilter("reconciled")}
-                                className={`px-3 py-1 rounded-md transition-colors ${statusFilter === "reconciled"
-                                        ? "bg-white text-zinc-900 shadow-xs"
-                                        : "text-zinc-500 hover:text-zinc-900"
-                                    }`}
-                            >
-                                Reconciled
-                            </button>
+                            {/* Clear */}
+                            {(search || statusFilter !== "all" || dateFilter !== "all" || fromDate || toDate || sortBy !== "newest" || ingredientFilter !== "all") && (
+                                <div className="w-full sm:w-auto pb-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFilterChange(() => { setSearch(""); setStatusFilter("all"); setDateFilter("all"); setFromDate(""); setToDate(""); setSortBy("newest"); setIngredientFilter("all"); })}
+                                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold hover:bg-rose-100 transition-colors shadow-xs"
+                                    >
+                                        <X className="w-3.5 h-3.5" /> Clear All
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Ledger Content: Responsive Mobile Cards + Desktop Table */}
                 {filteredIssues.length > 0 ? (
                     <div>
                         {/* Mobile Cards (< md) */}
                         <div className="block md:hidden divide-y divide-zinc-100">
-                            {filteredIssues.map((issue) => {
+                            {pagedIssues.map((issue) => {
                                 const isReconciled = issue.status === "reconciled";
 
                                 return (
@@ -408,7 +493,7 @@ export function KitchenIssuesTab({
                                             )}
                                             <button
                                                 onClick={() => onDeleteIssue(issue.id)}
-                                                className="p-1 text-zinc-400 hover:text-rose-600"
+                                                className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors"
                                                 title="Delete issue record"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -424,7 +509,7 @@ export function KitchenIssuesTab({
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-zinc-50 text-zinc-500 uppercase tracking-wider text-[11px] border-y border-zinc-200">
                                     <tr>
-                                        <th className="py-2.5 px-3 font-semibold">Date & Time</th>
+                                        <th className="py-2.5 px-3 font-semibold">Date &amp; Time</th>
                                         <th className="py-2.5 px-3 font-semibold">Ingredient</th>
                                         <th className="py-2.5 px-3 font-semibold">Issued Qty</th>
                                         <th className="py-2.5 px-3 font-semibold">Leftover (Store)</th>
@@ -436,7 +521,7 @@ export function KitchenIssuesTab({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100">
-                                    {filteredIssues.map((issue) => {
+                                    {pagedIssues.map((issue) => {
                                         const isReconciled = issue.status === "reconciled";
 
                                         return (
@@ -501,7 +586,7 @@ export function KitchenIssuesTab({
                                                     <button
                                                         onClick={() => onDeleteIssue(issue.id)}
                                                         title="Delete issue record"
-                                                        className="text-zinc-400 hover:text-rose-600 p-1"
+                                                        className="text-rose-600 hover:text-rose-800 p-1 transition-colors"
                                                     >
                                                         <Trash2 className="w-3.5 h-3.5 inline" />
                                                     </button>
@@ -511,6 +596,32 @@ export function KitchenIssuesTab({
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Pagination */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 pt-3 border-t border-zinc-100 gap-3 w-full">
+                            <p className="text-xs text-zinc-500 text-center sm:text-left">
+                                Showing <strong>{filteredIssues.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}</strong>–<strong>{Math.min(safePage * PAGE_SIZE, filteredIssues.length)}</strong> of <strong>{filteredIssues.length}</strong> records
+                            </p>
+                            <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-1.5">
+                                <button
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    disabled={safePage === 1}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    <ChevronLeft className="w-4 h-4" /> Previous
+                                </button>
+                                <span className="px-2 font-bold text-zinc-700 text-xs shrink-0">
+                                    {safePage} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={safePage === totalPages}
+                                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-xs transition-colors shadow-xs"
+                                >
+                                    Next <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -656,18 +767,18 @@ export function KitchenIssuesTab({
                                 />
                             </div>
 
-                            <div className="pt-2 flex items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
+                            <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => setIsIssueModalOpen(false)}
-                                    className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100 text-center"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isSubmittingIssue}
-                                    className="px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs text-center"
                                 >
                                     {isSubmittingIssue ? "Issuing..." : "Confirm & Issue to Kitchen"}
                                 </button>
@@ -798,18 +909,18 @@ export function KitchenIssuesTab({
                                 />
                             </div>
 
-                            <div className="pt-2 flex items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
+                            <div className="pt-2 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-zinc-100 shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => setReconcileTarget(null)}
-                                    className="px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-800 rounded-lg hover:bg-zinc-100 text-center"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={isSubmittingReconcile}
-                                    className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs"
+                                    className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 transition-colors shadow-xs text-center"
                                 >
                                     {isSubmittingReconcile ? "Saving..." : "Save Reconciliation"}
                                 </button>
