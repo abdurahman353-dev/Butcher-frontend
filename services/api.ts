@@ -21,8 +21,8 @@ const isBrowser = typeof window !== "undefined";
 const BASE = isBrowser
   ? ""
   : (process.env.NEXT_PUBLIC_API_BASE_URL ||
-     process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ||
-     "http://127.0.0.1:8000");
+    process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ||
+    "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 // ─── Axios Instance ───────────────────────────────────────────────────────────
 export const apiClient: AxiosInstance = axios.create({

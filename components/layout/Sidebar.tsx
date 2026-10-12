@@ -18,6 +18,7 @@ import {
   UserCheck,
   ChevronLeft,
   ChevronRight,
+  UtensilsCrossed,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
@@ -66,6 +67,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
     { name: isRestaurant ? "F&B Terminal" : "POS Terminal", href: "/pos", icon: ShoppingCart },
     { name: "Sales", href: "/sales", icon: Receipt },
     { name: isRestaurant ? "Menu & Items" : "Products", href: "/products", icon: Package },
+    ...(isRestaurant ? [{ name: "Stock & Expenses", href: "/stock", icon: UtensilsCrossed }] : []),
     { name: "Inventory", href: "/inventory", icon: Boxes },
     { name: "Customers", href: "/customers", icon: Users },
     { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
@@ -202,9 +204,8 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
             {/* Role badge (read-only) */}
             <div className="flex items-center justify-between text-[11px] text-zinc-400 px-1">
               <span>Role:</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
-                isAdmin ? "bg-green-600 text-white" : isWaiter ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"
-              }`}>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${isAdmin ? "bg-green-600 text-white" : isWaiter ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"
+                }`}>
                 <UserCheck className="w-2.5 h-2.5" />
                 {isAdmin ? "Admin" : isWaiter ? "Waiter" : "Cashier"}
               </span>

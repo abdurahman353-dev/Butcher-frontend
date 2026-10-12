@@ -3,22 +3,10 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { X, LayoutDashboard, ShoppingCart, Receipt, Package, Boxes, Users, BarChart3, Settings, Clock, LogOut } from "lucide-react";
+import { X, LayoutDashboard, ShoppingCart, Receipt, Package, Boxes, Users, BarChart3, Settings, Clock, LogOut, UtensilsCrossed } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOutOfStock } from "@/hooks/useOutOfStock";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
-
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "POS Terminal", href: "/pos", icon: ShoppingCart },
-  { name: "Sales", href: "/sales", icon: Receipt },
-  { name: "Products", href: "/products", icon: Package },
-  { name: "Inventory", href: "/inventory", icon: Boxes },
-  { name: "Customers", href: "/customers", icon: Users },
-  { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
-  { name: "Shifts & Till", href: "/shift", icon: Clock },
-  { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
-];
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -33,10 +21,25 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
   if (!isOpen) return null;
 
+  const isRestaurant = user?.company?.business_type === "restaurant";
+
+  const navigation = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: isRestaurant ? "F&B Terminal" : "POS Terminal", href: "/pos", icon: ShoppingCart },
+    { name: "Sales", href: "/sales", icon: Receipt },
+    { name: isRestaurant ? "Menu & Items" : "Products", href: "/products", icon: Package },
+    ...(isRestaurant ? [{ name: "Stock & Expenses", href: "/stock", icon: UtensilsCrossed }] : []),
+    { name: "Inventory", href: "/inventory", icon: Boxes },
+    { name: "Customers", href: "/customers", icon: Users },
+    { name: "Reports", href: "/reports", icon: BarChart3, adminOnly: true },
+    { name: "Shifts & Till", href: "/shift", icon: Clock },
+    { name: "Settings", href: "/settings", icon: Settings, adminOnly: true },
+  ];
+
   const roleLabel =
     user?.role === "admin" ? "Super Admin" :
-    user?.role === "waiter" ? "Waiter / Server" :
-    "Cashier";
+      user?.role === "waiter" ? "Waiter / Server" :
+        "Cashier";
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
@@ -70,13 +73,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${isActive
                     ? hasAlert ? "bg-rose-50 text-rose-700 font-semibold" : "bg-green-50 text-green-700 font-semibold"
                     : hasAlert
                       ? "text-rose-600 hover:bg-rose-50 hover:text-rose-800"
                       : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
-                }`}
+                  }`}
               >
                 <div className="relative shrink-0">
                   <Icon className={`w-4 h-4 ${isActive ? (hasAlert ? "text-rose-600" : "text-green-600") : hasAlert ? "text-rose-500 animate-pulse" : "text-zinc-400"}`} />
@@ -100,9 +102,8 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
         <div className="p-4 border-t border-zinc-100">
           <div className="flex items-center gap-2.5">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${
-              user?.role === "admin" ? "bg-emerald-600" : user?.role === "waiter" ? "bg-amber-500" : "bg-blue-600"
-            }`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white ${user?.role === "admin" ? "bg-emerald-600" : user?.role === "waiter" ? "bg-amber-500" : "bg-blue-600"
+              }`}>
               {user?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">

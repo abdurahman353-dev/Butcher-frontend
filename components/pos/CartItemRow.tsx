@@ -33,8 +33,8 @@ export function CartItemRow({
     item.unit?.toUpperCase() === "PACK"
       ? "Pack"
       : item.unit?.toUpperCase() === "PCS"
-      ? "Pc"
-      : "KG";
+        ? "Pc"
+        : "KG";
 
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState(
@@ -160,7 +160,7 @@ export function CartItemRow({
           </span>
           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
             <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
-              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             Sent to Kitchen
           </span>
@@ -192,11 +192,10 @@ export function CartItemRow({
               type="button"
               onClick={() => onAdjustWeight(item.id, stepDelta)}
               disabled={isAtMaxStock}
-              className={`w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center border transition-colors ${
-                isAtMaxStock
+              className={`w-8 h-8 sm:w-6 sm:h-6 rounded flex items-center justify-center border transition-colors ${isAtMaxStock
                   ? "bg-zinc-100 border-zinc-200 text-zinc-300 cursor-not-allowed"
                   : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-100 active:bg-zinc-200"
-              }`}
+                }`}
               title={
                 isAtMaxStock
                   ? `Max available stock reached (${formatWeight(item.available_stock ?? 0)})`
@@ -219,11 +218,10 @@ export function CartItemRow({
               type="button"
               onClick={handleDiscountToggle}
               title={item.discount > 0 ? `Discount: -${formatCurrency(item.discount)} (click to edit)` : "Add item discount"}
-              className={`flex items-center gap-1.5 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-xs font-bold border transition-colors ${
-                item.discount > 0
+              className={`flex items-center gap-1.5 px-3 py-2 sm:px-2 sm:py-1 rounded-lg text-xs font-bold border transition-colors ${item.discount > 0
                   ? "bg-amber-500 border-amber-600 text-white hover:bg-amber-600 active:bg-amber-700"
                   : "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 hover:border-amber-400"
-              }`}
+                }`}
             >
               <Tag className="w-3.5 h-3.5 shrink-0" />
               <span>{item.discount > 0 ? `-${formatCurrency(item.discount)}` : "Disc"}</span>

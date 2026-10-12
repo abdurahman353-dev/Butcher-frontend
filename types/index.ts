@@ -419,3 +419,113 @@ export interface ApiError {
   status_code?: number;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RESTAURANT RAW STOCK & KITCHEN TRACKING
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RestaurantStockItem {
+  id: number;
+  company_id: number;
+  item_name: string;
+  category: string;
+  current_quantity: number;
+  unit: string; // KG, LITRE, BAG, CRATE, PACK, PCS
+  unit_cost: number;
+  total_cost: number;
+  min_threshold: number;
+  supplier?: string | null;
+  payment_method: string;
+  invoice_number?: string | null;
+  purchased_at: string;
+  notes?: string | null;
+  created_by_name?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface KitchenIssue {
+  id: number;
+  company_id: number;
+  stock_id: number;
+  item_name: string;
+  unit: string;
+  issued_quantity: number;
+  unit_cost: number;
+  issued_cost: number;
+  remaining_quantity?: number | null;
+  used_quantity?: number | null;
+  actual_cost_used?: number | null;
+  expected_dish?: string | null;
+  shift_id?: number | null;
+  status: "in_kitchen" | "reconciled";
+  issued_at: string;
+  reconciled_at?: string | null;
+  issued_by_name?: string | null;
+  reconciled_by_name?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at?: string;
+  stock?: RestaurantStockItem;
+}
+
+export interface StockExpenseAnalytics {
+  period: string;
+  start_date: string;
+  end_date: string;
+  total_sales_revenue: number;
+  sales_transactions_count: number;
+  total_stock_purchased: number;
+  total_kitchen_issued: number;
+  total_stock_consumed: number;
+  in_kitchen_active_cost: number;
+  gross_kitchen_margin: number;
+  food_cost_ratio: number;
+  category_breakdown: Array<{
+    category: string;
+    total_cost: number;
+    percentage: number;
+  }>;
+  top_items: Array<{
+    item_name: string;
+    unit: string;
+    total_qty: number;
+    total_cost: number;
+  }>;
+  trend: Array<{
+    date: string;
+    label: string;
+    sales: number;
+    expenses: number;
+    net: number;
+  }>;
+}
+
+export interface CreateStockPayload {
+  item_name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  unit_cost?: number;
+  total_cost?: number;
+  min_threshold?: number;
+  supplier?: string;
+  payment_method?: string;
+  invoice_number?: string;
+  purchased_at?: string;
+  notes?: string;
+}
+
+export interface IssueToKitchenPayload {
+  stock_id: number;
+  issued_quantity: number;
+  expected_dish?: string;
+  notes?: string;
+}
+
+export interface ReconcileKitchenIssuePayload {
+  remaining_quantity: number;
+  return_to_store?: boolean;
+  notes?: string;
+}
+
+

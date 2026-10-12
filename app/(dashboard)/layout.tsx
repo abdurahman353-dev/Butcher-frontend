@@ -75,21 +75,19 @@ function ExpiryBanner({
   return (
     <aside
       aria-label="Subscription status notice"
-      className={`w-full z-20 border-b transition-colors select-none ${
-        isExpired
+      className={`w-full z-20 border-b transition-colors select-none ${isExpired
           ? "bg-rose-50/95 border-rose-200 text-rose-950"
           : "bg-amber-50/90 border-amber-200 text-amber-950"
-      }`}
+        }`}
     >
       <div className="max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
         {/* Left Side: Icon + Details */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div
-            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
-              isExpired
+            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${isExpired
                 ? "bg-rose-100 border-rose-300 text-rose-700"
                 : "bg-amber-100 border-amber-300 text-amber-800"
-            }`}
+              }`}
           >
             <AlertTriangle className="w-4 h-4 shrink-0" />
           </div>
@@ -215,7 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="w-8 h-8 rounded-xl bg-zinc-200 animate-pulse" />
             <div className="h-4 w-24 rounded-lg bg-zinc-200 animate-pulse" />
           </div>
-          {[1,2,3,4,5,6].map((i) => (
+          {[1, 2, 3, 4, 5, 6].map((i) => (
             <div key={i} className="flex items-center gap-3 px-2 py-2 rounded-xl">
               <div className="w-5 h-5 rounded-lg bg-zinc-200 animate-pulse shrink-0" />
               <div className="h-3.5 rounded-lg bg-zinc-200 animate-pulse" style={{ width: `${55 + (i % 3) * 20}%` }} />
@@ -245,7 +243,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="h-3.5 w-64 bg-zinc-100 rounded-xl animate-pulse" />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[1,2,3,4].map((i) => (
+              {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="bg-white rounded-2xl border border-zinc-100 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="h-3 w-20 bg-zinc-200 rounded-lg animate-pulse" />
@@ -258,11 +256,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div className="bg-white rounded-2xl border border-zinc-100 overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-3.5 border-b border-zinc-100">
-                {[40,80,60,70,50].map((w, i) => (
+                {[40, 80, 60, 70, 50].map((w, i) => (
                   <div key={i} className="h-3 bg-zinc-200 rounded-lg animate-pulse" style={{ width: `${w}px` }} />
                 ))}
               </div>
-              {[1,2,3,4,5,6,7].map((i) => (
+              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
                 <div key={i} className="flex items-center gap-4 px-5 py-3.5 border-b border-zinc-50">
                   <div className="w-7 h-7 rounded-xl bg-zinc-100 animate-pulse shrink-0" />
                   <div className="h-3 w-28 bg-zinc-200 rounded-lg animate-pulse" />
