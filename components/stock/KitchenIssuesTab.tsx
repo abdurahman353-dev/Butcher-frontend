@@ -188,16 +188,11 @@ export function KitchenIssuesTab({
 
     // Date range helper
     const isInDateRange = (dateStr: string) => {
-        const d = new Date(dateStr);
-        if (fromDate) {
-            const f = new Date(fromDate + "T00:00:00");
-            if (d < f) return false;
-        }
-        if (toDate) {
-            const t = new Date(toDate + "T23:59:59");
-            if (d > t) return false;
-        }
+        const dayStr = dateStr.slice(0, 10);
+        if (fromDate && dayStr < fromDate) return false;
+        if (toDate && dayStr > toDate) return false;
         if (!fromDate && !toDate && dateFilter !== "all") {
+            const d = new Date(dateStr);
             const now = new Date();
             const startOfDay = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
             const today = startOfDay(now);

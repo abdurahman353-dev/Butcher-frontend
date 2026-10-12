@@ -81,12 +81,10 @@ export function StockOverviewTab({
     const filteredTrend = useMemo(() => {
         let items = [...(trend || [])];
         if (startDate) {
-            const s = new Date(startDate + "T00:00:00");
-            items = items.filter((d) => new Date(d.date) >= s);
+            items = items.filter((d) => d.date.slice(0, 10) >= startDate);
         }
         if (endDate) {
-            const e = new Date(endDate + "T23:59:59");
-            items = items.filter((d) => new Date(d.date) <= e);
+            items = items.filter((d) => d.date.slice(0, 10) <= endDate);
         }
         if (trendFilter === "profit") {
             items = items.filter((d) => d.net >= 0);

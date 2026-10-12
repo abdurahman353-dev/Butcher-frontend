@@ -280,30 +280,74 @@ function saveStoredIssues(items: KitchenIssue[]) {
     } catch { }
 }
 
-function computeLocalAnalytics(): StockExpenseAnalytics {
+function computeLocalAnalytics(params?: {
+    period?: string;
+    start_date?: string;
+    end_date?: string;
+}): StockExpenseAnalytics {
     const stocks = getStoredStocks();
     const issues = getStoredIssues();
 
-    // Mock revenue baseline for restaurant comparison
-    const mockRevenue = 28500;
-    const mockOrdersCount = 42;
+    // Generate trend for the full requested date range
+    const trendStart = params?.start_date
+        ? new Date(params.start_date + "T00:00:00")
+        : new Date(Date.now() - 13 * 86400000);
+    const trendEnd = params?.end_date
+        ? new Date(params.end_date + "T23:59:59")
+        : new Date();
 
-    const totalConsumed = issues
+    const trend: Array<{ date: string; label: string; sales: number; expenses: number; net: number }> = [];
+    const cur = new Date(trendStart);
+    while (cur <= trendEnd) {
+        const dateStr = cur.toISOString().split("T")[0];
+        const dayLabel = cur.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+        const dSales = cur.getDay() === 0 || cur.getDay() === 6 ? 31000 : 22000;
+        const dExp = Math.round(dSales * 0.28);
+        trend.push({
+            date: dateStr,
+            label: dayLabel,
+            sales: dSales,
+            expenses: dExp,
+            net: dSales - dExp,
+        });
+        cur.setDate(cur.getDate() + 1);
+    }
+
+    const fromStr = params?.start_date ? params.start_date : null;
+    const toStr = params?.end_date ? params.end_date : null;
+
+    const filteredIssues = issues.filter((iss) => {
+        const d = (iss.issued_at || iss.created_at || "").slice(0, 10);
+        if (fromStr && d < fromStr) return false;
+        if (toStr && d > toStr) return false;
+        return true;
+    });
+
+    const filteredStocks = stocks.filter((stk) => {
+        const d = (stk.purchased_at || stk.created_at || "").slice(0, 10);
+        if (fromStr && d < fromStr) return false;
+        if (toStr && d > toStr) return false;
+        return true;
+    });
+
+    const totalConsumed = filteredIssues
         .filter((i) => i.status === "reconciled")
         .reduce((acc, i) => acc + (i.actual_cost_used || 0), 0);
 
-    const activeInPots = issues
+    const activeInPots = filteredIssues
         .filter((i) => i.status === "in_kitchen")
         .reduce((acc, i) => acc + i.issued_cost, 0);
 
-    const totalPurchased = stocks.reduce((acc, s) => acc + s.current_quantity * s.unit_cost, 0);
-    const totalIssued = issues.reduce((acc, i) => acc + i.issued_cost, 0);
+    const totalPurchased = filteredStocks.reduce((acc, s) => acc + s.current_quantity * s.unit_cost, 0);
+    const totalIssued = filteredIssues.reduce((acc, i) => acc + i.issued_cost, 0);
+    const mockRevenue = trend.reduce((acc, d) => acc + d.sales, 0);
+    const mockOrdersCount = Math.max(1, trend.length * 6);
     const grossMargin = mockRevenue - totalConsumed;
     const foodCostRatio = mockRevenue > 0 ? parseFloat(((totalConsumed / mockRevenue) * 100).toFixed(1)) : 0;
 
     // Category breakdown
     const catMap: Record<string, number> = {};
-    issues
+    filteredIssues
         .filter((i) => i.status === "reconciled" && i.actual_cost_used)
         .forEach((i) => {
             const stockItem = stocks.find((s) => s.id === i.stock_id);
@@ -319,7 +363,7 @@ function computeLocalAnalytics(): StockExpenseAnalytics {
 
     // Top items
     const itemMap: Record<string, { total_cost: number; total_qty: number; unit: string }> = {};
-    issues
+    filteredIssues
         .filter((i) => i.status === "reconciled" && i.actual_cost_used)
         .forEach((i) => {
             if (!itemMap[i.item_name]) {
@@ -336,17 +380,10 @@ function computeLocalAnalytics(): StockExpenseAnalytics {
         unit: data.unit,
     }));
 
-    const trend = [
-        { date: "2026-10-09", label: "Fri, Oct 9", sales: 24200, expenses: 6200, net: 18000 },
-        { date: "2026-10-10", label: "Sat, Oct 10", sales: 31500, expenses: 8400, net: 23100 },
-        { date: "2026-10-11", label: "Sun, Oct 11", sales: 29000, expenses: 7600, net: 21400 },
-        { date: "2026-10-12", label: "Today", sales: mockRevenue, expenses: totalConsumed, net: grossMargin },
-    ];
-
     return {
-        period: "today",
-        start_date: new Date().toISOString().split("T")[0],
-        end_date: new Date().toISOString().split("T")[0],
+        period: params?.period || "today",
+        start_date: params?.start_date || new Date().toISOString().split("T")[0],
+        end_date: params?.end_date || new Date().toISOString().split("T")[0],
         total_sales_revenue: mockRevenue,
         sales_transactions_count: mockOrdersCount,
         total_stock_consumed: totalConsumed,
@@ -748,7 +785,7 @@ export const restaurantStockService = {
             return res.data;
         } catch (err: any) {
             if (err?.status_code === 404 || err?.response?.status === 404 || err?.message?.includes("not found")) {
-                return computeLocalAnalytics();
+                return computeLocalAnalytics(params);
             }
             throw err;
         }
