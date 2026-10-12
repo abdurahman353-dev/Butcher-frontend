@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Sale } from "@/types";
 import { formatCurrency } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
@@ -48,6 +48,19 @@ export function SettlePaymentModal({
 
   // Notes
   const [notes, setNotes] = useState<string>("");
+
+  // Reset all state whenever the modal opens for a (new) sale so previous
+  // settlement data never bleeds through to the next bill.
+  useEffect(() => {
+    if (isOpen && sale) {
+      setSelectedMethod("cash");
+      setIsProcessing(false);
+      setSettledSale(null);
+      setAmountReceived("");
+      setMpesaRef("");
+      setNotes("");
+    }
+  }, [isOpen, sale?.id]);
 
   if (!isOpen || !sale) return null;
 
