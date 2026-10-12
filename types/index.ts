@@ -498,6 +498,7 @@ export interface StockExpenseAnalytics {
     expenses: number;
     net: number;
   }>;
+  is_offline_preview?: boolean;
 }
 
 export interface CreateStockPayload {
