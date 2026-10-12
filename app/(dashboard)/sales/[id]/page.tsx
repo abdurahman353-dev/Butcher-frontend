@@ -329,8 +329,13 @@ export default function SaleDetailPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-zinc-900 font-mono">{sale.sale_number}</h1>
+              {sale.bill_number && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                  Bill #{sale.bill_number}
+                </span>
+              )}
               <StatusBadge
                 status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
                 type="sale"
@@ -486,20 +491,44 @@ export default function SaleDetailPage() {
       )}
 
       {/* Sale Info Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${(isRestaurant || sale.table_number || sale.bill_number) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3`}>
+        {/* Table & Dining (if restaurant or table exists) */}
+        {(isRestaurant || sale.table_number || sale.bill_number) && (
+          <div className="p-4 bg-white border border-zinc-200 rounded-xl space-y-1 shadow-xs">
+            <span className="text-[10px] uppercase font-bold text-zinc-600 block">Table & Dining Mode</span>
+            <p className="text-sm font-black text-zinc-950 flex items-center gap-1.5">
+              <span>🍽️</span>
+              {sale.table_number ? `Table ${sale.table_number}` : "Takeaway / Counter"}
+            </p>
+            {sale.order_type && (
+              <p className="text-[10px] text-amber-800 font-bold uppercase">
+                {sale.order_type.replace('_', ' ')}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="p-4 bg-white border border-zinc-200 rounded-xl space-y-1 shadow-xs">
-          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">Cashier</span>
-          <p className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5 text-zinc-400" />
-            {sale.cashier_name}
+          <span className="text-[10px] uppercase font-bold text-zinc-600 block">Staff & Service</span>
+          <p className="text-sm font-black text-zinc-950 flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-zinc-500" />
+            {sale.cashier_name || "Cashier"}
           </p>
+          {sale.waiter_name && (
+            <div className="pt-1">
+              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-zinc-950 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-300">
+                <span className="text-zinc-600 font-semibold">Server:</span>
+                <span className="text-black font-black">{sale.waiter_name}</span>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="p-4 bg-white border border-zinc-200 rounded-xl space-y-1 shadow-xs">
-          <span className="text-[10px] uppercase font-semibold text-zinc-500 block">Customer</span>
-          <p className="text-sm font-bold text-zinc-900">{sale.customer_name || "Walk-in Customer"}</p>
+          <span className="text-[10px] uppercase font-bold text-zinc-600 block">Customer</span>
+          <p className="text-sm font-black text-zinc-950">{sale.customer_name || (sale.table_number ? "Dine-in Guest" : "Walk-in Customer")}</p>
           {sale.customer_phone && (
-            <p className="text-[10px] text-zinc-500">{sale.customer_phone}</p>
+            <p className="text-xs font-bold text-zinc-700">{sale.customer_phone}</p>
           )}
         </div>
 
@@ -511,6 +540,9 @@ export default function SaleDetailPage() {
           </p>
           {sale.mpesa_reference && (
             <p className="text-[10px] text-zinc-500 font-mono">Ref: {sale.mpesa_reference}</p>
+          )}
+          {sale.bill_number && (
+            <p className="text-[10px] text-amber-700 font-bold font-mono">Bill #{sale.bill_number}</p>
           )}
         </div>
       </div>

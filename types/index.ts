@@ -156,6 +156,7 @@ export interface Sale {
   table_number?: string | null;
   bill_number?: string | null;
   waiter_name?: string | null;
+  guest_count?: number | null;
   payment_status: PaymentStatus;
   sale_status: SaleStatus;
   amount_received?: number;
@@ -380,6 +381,7 @@ export interface PaginatedResponse<T> {
   };
   filter_options?: {
     cashiers: Array<{ id: number; name: string; role?: string }>;
+    tables?: Array<{ table_number: string; name?: string | null; zone?: string | null }>;
   };
 }
 
@@ -396,6 +398,7 @@ export interface PaginationParams {
   payment_method?: string;
   payment_status?: string;
   cashier_id?: number | string;
+  table_number?: string;
   min_amount?: number | string;
   max_amount?: number | string;
   sort_by?: string;

@@ -52,6 +52,7 @@ function SalesLedger() {
   const searchParams = useSearchParams();
   const urlPaymentStatus = searchParams?.get("payment_status") || "all";
   const urlPaymentMethod = searchParams?.get("payment_method") || "all";
+  const urlTableNumber = searchParams?.get("table_number") || searchParams?.get("table") || "all";
 
   const [paginated, setPaginated] = useState<PaginatedResponse<Sale>>({
     data: [],
@@ -64,12 +65,13 @@ function SalesLedger() {
   });
 
   // Filter States - directly initialized from URL query params
-  const [isFilterOpen, setIsFilterOpen] = useState(urlPaymentStatus !== "all" || urlPaymentMethod !== "all");
+  const [isFilterOpen, setIsFilterOpen] = useState(urlPaymentStatus !== "all" || urlPaymentMethod !== "all" || urlTableNumber !== "all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<string>(urlPaymentMethod);
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>(urlPaymentStatus);
+  const [tableFilter, setTableFilter] = useState<string>(urlTableNumber);
   const [statusFilter, setStatusFilter] = useState("all");
   const [cashierFilter, setCashierFilter] = useState("all");
   const [minAmount, setMinAmount] = useState("");
@@ -81,9 +83,11 @@ function SalesLedger() {
   useEffect(() => {
     const ps = searchParams?.get("payment_status") || "all";
     const pm = searchParams?.get("payment_method") || "all";
+    const tbl = searchParams?.get("table_number") || searchParams?.get("table") || "all";
     setPaymentStatusFilter(ps);
     setPaymentFilter(pm);
-    if (ps !== "all" || pm !== "all") {
+    setTableFilter(tbl);
+    if (ps !== "all" || pm !== "all" || tbl !== "all") {
       setDateFrom("");
       setDateTo("");
       setCurrentPage(1);
@@ -130,6 +134,7 @@ function SalesLedger() {
       if (dateTo) params.date_to = dateTo;
       if (paymentFilter !== "all") params.payment_method = paymentFilter;
       if (paymentStatusFilter !== "all") params.payment_status = paymentStatusFilter;
+      if (tableFilter !== "all") params.table_number = tableFilter;
       if (statusFilter !== "all") params.status = statusFilter;
       if (cashierFilter !== "all") params.cashier_id = cashierFilter;
       if (minAmount) params.min_amount = minAmount;
@@ -146,6 +151,7 @@ function SalesLedger() {
         !dateTo &&
         paymentFilter === "all" &&
         paymentStatusFilter === "all" &&
+        tableFilter === "all" &&
         statusFilter === "all" &&
         cashierFilter === "all"
       ) {
@@ -165,6 +171,7 @@ function SalesLedger() {
     dateTo,
     paymentFilter,
     paymentStatusFilter,
+    tableFilter,
     statusFilter,
     cashierFilter,
     minAmount,
@@ -260,6 +267,7 @@ function SalesLedger() {
     setDateTo("");
     setPaymentFilter("all");
     setPaymentStatusFilter("all");
+    setTableFilter("all");
     setStatusFilter("all");
     setCashierFilter("all");
     setMinAmount("");
@@ -276,12 +284,13 @@ function SalesLedger() {
     if (dateTo) count++;
     if (paymentFilter !== "all") count++;
     if (paymentStatusFilter !== "all") count++;
+    if (tableFilter !== "all") count++;
     if (statusFilter !== "all") count++;
     if (cashierFilter !== "all") count++;
     if (minAmount) count++;
     if (maxAmount) count++;
     return count;
-  }, [search, dateFrom, dateTo, paymentFilter, paymentStatusFilter, statusFilter, cashierFilter, minAmount, maxAmount]);
+  }, [search, dateFrom, dateTo, paymentFilter, paymentStatusFilter, tableFilter, statusFilter, cashierFilter, minAmount, maxAmount]);
 
   // Export Filtered Records to CSV
   const handleExportCSV = () => {
@@ -298,6 +307,7 @@ function SalesLedger() {
       [],
       [
         "Sale Number",
+        ...(isRestaurant ? ["Bill Number", "Table", "Waiter / Server"] : []),
         "Date Time",
         "Cashier",
         "Customer Name",
@@ -311,6 +321,7 @@ function SalesLedger() {
       ],
       ...paginated.data.map((s) => [
         s.sale_number,
+        ...(isRestaurant ? [s.bill_number || "N/A", s.table_number ? `Table ${s.table_number}` : "Counter", s.waiter_name || "N/A"] : []),
         formatDateTime(s.created_at),
         s.cashier_name || "N/A",
         s.customer_name || "Walk-in",
@@ -492,6 +503,27 @@ function SalesLedger() {
       (c) => String(c.id) === String(cashierFilter)
     )?.name || `Staff #${cashierFilter}`;
   }, [cashierFilter, paginated]);
+
+  // Available Tables for Restaurant Filtering
+  const availableTables = useMemo(() => {
+    const fromApi = paginated.filter_options?.tables || [];
+    if (fromApi.length > 0) return fromApi;
+    const seen = new Set<string>();
+    const list: Array<{ table_number: string; name?: string | null; zone?: string | null }> = [];
+    paginated.data.forEach((s) => {
+      if (s.table_number && !seen.has(s.table_number)) {
+        seen.add(s.table_number);
+        list.push({ table_number: s.table_number });
+      }
+    });
+    return list.sort((a, b) => a.table_number.localeCompare(b.table_number, undefined, { numeric: true }));
+  }, [paginated]);
+
+  const selectedTableName = useMemo(() => {
+    if (tableFilter === "all") return null;
+    const found = availableTables.find((t) => t.table_number === tableFilter);
+    return found?.name ? `Table ${found.table_number} (${found.name})` : `Table ${tableFilter}`;
+  }, [tableFilter, availableTables]);
 
   // Executive summary metrics (from backend aggregate or calculated)
   const summaryRevenue =
@@ -731,9 +763,19 @@ function SalesLedger() {
         {/* Search hint chips */}
         {!search && (
           <div className="absolute inset-y-0 right-4 flex items-center gap-1.5 pointer-events-none">
-            <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Sale #</span>
-            <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Customer</span>
-            <span className="hidden md:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Phone</span>
+            {isRestaurant ? (
+              <>
+                <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Bill #</span>
+                <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Table</span>
+                <span className="hidden md:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Server</span>
+              </>
+            ) : (
+              <>
+                <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Sale #</span>
+                <span className="hidden sm:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Customer</span>
+                <span className="hidden md:inline text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full border border-zinc-200">Phone</span>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -997,8 +1039,32 @@ function SalesLedger() {
               </div>
             </div>
 
-            {/* Secondary Filters: Cashier, Amount Range, Sorting */}
-            <div className="p-3 sm:p-4 bg-zinc-50/50 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 items-end">
+            {/* Secondary Filters: Table (Restaurant), Cashier, Amount Range, Sorting */}
+            <div className={`p-3 sm:p-4 bg-zinc-50/50 grid grid-cols-1 sm:grid-cols-2 ${isRestaurant ? "lg:grid-cols-5" : "lg:grid-cols-4"} gap-2.5 sm:gap-3 items-end`}>
+              {/* Table Filter (Restaurant only) */}
+              {isRestaurant && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <span>🍽️</span> Table
+                  </label>
+                  <select
+                    value={tableFilter}
+                    onChange={(e) => {
+                      setTableFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full h-10 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
+                  >
+                    <option value="all">All Tables</option>
+                    {availableTables.map((t) => (
+                      <option key={t.table_number} value={t.table_number}>
+                        Table {t.table_number}{t.name && t.name !== t.table_number ? ` (${t.name})` : ""}{t.zone ? ` · ${t.zone}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Cashier / Staff */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
@@ -1147,6 +1213,15 @@ function SalesLedger() {
                 </span>
               )}
 
+              {tableFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-950 text-[11px] font-bold">
+                  🍽️ {selectedTableName || `Table ${tableFilter}`}
+                  <button onClick={() => setTableFilter("all")} className="hover:text-emerald-950 ml-0.5" title="Clear table filter">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
               {cashierFilter !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold">
                   👤 {selectedCashierName}
@@ -1192,10 +1267,10 @@ function SalesLedger() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/90 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                <th className="py-3.5 pl-4">Sale #</th>
+                <th className="py-3.5 pl-4">{isRestaurant ? "Sale / Bill #" : "Sale #"}</th>
                 <th className="py-3.5 px-3">Date & Time</th>
-                <th className="py-3.5 px-3">Cashier / Staff</th>
-                <th className="py-3.5 px-3">Customer Details</th>
+                <th className="py-3.5 px-3">{isRestaurant ? "Cashier & Waiter" : "Cashier / Staff"}</th>
+                <th className="py-3.5 px-3">{isRestaurant ? "Table & Customer" : "Customer Details"}</th>
                 <th className="py-3.5 px-3">Payment Tender</th>
                 <th className="py-3.5 px-3 text-right">{isRestaurant ? "Items Ordered" : "Items / Cuts"}</th>
                 <th className="py-3.5 px-3 text-right">Amount (KSh)</th>
@@ -1245,7 +1320,7 @@ function SalesLedger() {
                     key={sale.id}
                     className="hover:bg-zinc-50/80 transition-colors group"
                   >
-                    {/* Sale # */}
+                    {/* Sale / Bill # */}
                     <td className="py-3.5 pl-4 font-mono font-bold text-zinc-900 whitespace-nowrap">
                       <Link
                         href={`/sales/${sale.id}`}
@@ -1254,6 +1329,13 @@ function SalesLedger() {
                         <span className="w-2 h-2 rounded-full bg-green-500/70 shrink-0" />
                         <span>{sale.sale_number}</span>
                       </Link>
+                      {sale.bill_number && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                            Bill #{sale.bill_number}
+                          </span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Date & Time */}
@@ -1270,25 +1352,47 @@ function SalesLedger() {
                       )}
                     </td>
 
-                    {/* Cashier */}
+                    {/* Cashier & Server */}
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-6 h-6 rounded-full bg-zinc-100 text-zinc-700 font-bold text-[10px] flex items-center justify-center border border-zinc-200">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-900 font-black text-[10px] flex items-center justify-center border border-zinc-300 shrink-0">
                           {sale.cashier_name ? sale.cashier_name.charAt(0).toUpperCase() : "S"}
                         </div>
-                        <span className="font-semibold text-zinc-800 text-xs">
-                          {sale.cashier_name || "Cashier"}
-                        </span>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-zinc-950 text-xs">
+                            {sale.cashier_name || "Cashier"}
+                          </div>
+                          {sale.waiter_name && (
+                            <div className="inline-flex items-center gap-1 text-[11px] font-extrabold text-zinc-950 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-300 shadow-2xs">
+                              <span className="text-zinc-600 font-semibold">Server:</span>
+                              <span className="text-black font-black">{sale.waiter_name}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
 
-                    {/* Customer */}
+                    {/* Customer & Table */}
                     <td className="py-3.5 px-3 whitespace-nowrap">
-                      <div className="font-semibold text-zinc-800">
-                        {sale.customer_name || "Walk-in Customer"}
+                      {(sale.table_number || sale.order_type) && (
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          {sale.table_number && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-950 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-300">
+                              🍽️ Table {sale.table_number}
+                            </span>
+                          )}
+                          {sale.order_type && sale.order_type !== "dine_in" && sale.order_type !== "counter" && (
+                            <span className="text-[10px] text-amber-800 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 uppercase">
+                              {sale.order_type.replace('_', ' ')}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="font-bold text-zinc-950 text-xs tracking-tight">
+                        {sale.customer_name || (sale.table_number ? "Dine-in Guest" : "Walk-in Customer")}
                       </div>
                       {sale.customer_phone && (
-                        <div className="text-[10px] text-zinc-400 tabular-nums">
+                        <div className="text-[11px] font-semibold text-zinc-700 tabular-nums">
                           {sale.customer_phone}
                         </div>
                       )}
