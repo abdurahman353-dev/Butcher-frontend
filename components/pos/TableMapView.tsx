@@ -53,6 +53,11 @@ export function TableMapView({
   const unprintedCount = tables.filter((t) => t.status === "red").length;
   const printedCount = tables.filter((t) => t.status === "yellow").length;
 
+  // Only show skeleton placeholders if there are NO tables loaded yet (initial boot).
+  // During any subsequent refresh or background sync, keep the real tables on screen
+  // so cashiers and waitresses are never blocked from tapping and posting orders.
+  const showSkeleton = isLoading && tables.length === 0;
+
   return (
     <div className="flex flex-col h-full bg-[#f8fafc]">
 
@@ -66,7 +71,7 @@ export function TableMapView({
               Floor Tables
             </h2>
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500">
-              {isLoading ? (
+              {showSkeleton ? (
                 <span className="inline-block w-8 h-3 rounded bg-zinc-200 animate-pulse align-middle" />
               ) : (
                 `${tables.length} Total`
@@ -102,7 +107,7 @@ export function TableMapView({
 
         {/* Status Legend pills */}
         <div className="px-4 pb-2.5 flex flex-wrap items-center gap-2">
-          {isLoading ? (
+          {showSkeleton ? (
             <>
               <div className="h-6 w-20 rounded-lg bg-zinc-100 border border-zinc-200 animate-pulse" />
               <div className="h-6 w-28 rounded-lg bg-rose-50/70 border border-rose-200/70 animate-pulse" />
@@ -169,11 +174,18 @@ export function TableMapView({
             ))}
           </div>
         </div>
+
+        {/* Non-blocking subtle sync indicator when updating existing tables */}
+        {isLoading && tables.length > 0 && (
+          <div className="h-0.5 w-full bg-emerald-100 overflow-hidden">
+            <div className="h-full bg-emerald-500 animate-pulse w-full" />
+          </div>
+        )}
       </div>
 
       {/* ── Table Grid ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-        {isLoading ? (
+        {showSkeleton ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <div

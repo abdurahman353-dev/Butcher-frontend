@@ -36,7 +36,8 @@ export const restaurantService = {
     }
   ): Promise<RestaurantBill> {
     const res = await apiClient.post<{ data: RestaurantBill }>(`/restaurant/tables/${tableId}/bills`, payload);
-    return res.data.data;
+    const bill = (res.data as any)?.data ?? res.data;
+    return bill;
   },
 
   async updateBillCustomer(

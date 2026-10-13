@@ -128,17 +128,9 @@ export function CartPane({
   };
 
   const handleExitSession = async () => {
+    if (isSavingOrder) return;
     if (!onCloseActiveBillSession) return;
-    const confirmed = await confirm({
-      title: "Exit Table Session?",
-      message: `Are you sure you want to exit Table ${activeBill?.table_number}? The bill remains open and can be reopened from the Floor Tables view.`,
-      confirmText: "Yes, Exit Table",
-      cancelText: "No, Stay",
-      type: "warning",
-    });
-    if (confirmed) {
-      onCloseActiveBillSession();
-    }
+    onCloseActiveBillSession();
   };
 
   const weighedItems = items.filter((it) => (it.unit || "").toUpperCase() === "KG");
@@ -257,8 +249,17 @@ export function CartPane({
                 <button
                   type="button"
                   onClick={onManageTableBills}
-                  className="shrink-0 h-7 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-[11px] font-bold text-white transition-all shadow-sm flex items-center gap-1"
-                  title={`View all bills or create a new bill on Table ${activeBill.table_number}`}
+                  disabled={isSavingOrder}
+                  className={`shrink-0 h-7 px-3 rounded-lg text-[11px] font-bold text-white transition-all shadow-sm flex items-center gap-1 ${
+                    isSavingOrder
+                      ? "bg-zinc-400 cursor-not-allowed opacity-60 pointer-events-none"
+                      : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95"
+                  }`}
+                  title={
+                    isSavingOrder
+                      ? "Saving order in progress..."
+                      : `View all bills or create a new bill on Table ${activeBill.table_number}`
+                  }
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>New Bill</span>
@@ -274,10 +275,15 @@ export function CartPane({
                 <button
                   type="button"
                   onClick={handleExitSession}
-                  className="shrink-0 h-7 px-3 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 active:scale-95 text-[11px] font-bold text-white transition-all shadow-sm"
-                  title="Exit Table Session"
+                  disabled={isSavingOrder}
+                  className={`shrink-0 h-7 px-3 rounded-lg text-[11px] font-bold text-white transition-all shadow-sm ${
+                    isSavingOrder
+                      ? "bg-zinc-400 cursor-not-allowed opacity-60 pointer-events-none"
+                      : "bg-red-600 hover:bg-red-700 active:bg-red-800 active:scale-95"
+                  }`}
+                  title={isSavingOrder ? "Saving order in progress..." : "Exit Table Session"}
                 >
-                  Exit
+                  {isSavingOrder ? "Saving..." : "Exit"}
                 </button>
               )}
             </div>

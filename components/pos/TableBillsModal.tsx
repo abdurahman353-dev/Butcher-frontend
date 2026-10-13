@@ -178,7 +178,9 @@ export function TableBillsModal({
     }
   };
 
-  const [billsList, setBillsList] = useState<RestaurantBill[]>(table?.active_bills || []);
+  const [billsList, setBillsList] = useState<RestaurantBill[]>(
+    (table?.active_bills || []).filter((b) => b.table_id === table?.id)
+  );
   const [splittingBill, setSplittingBill] = useState<RestaurantBill | null>(null);
 
   const handleSplitSuccess = (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
@@ -210,17 +212,12 @@ export function TableBillsModal({
   };
 
   useEffect(() => {
-    setBillsList(table?.active_bills || []);
-  }, [table?.active_bills, table]);
+    setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
+  }, [table?.active_bills, table?.id]);
 
-  const currentBills = billsList.length > 0 || !table?.active_bills?.length
-    ? billsList
-    : (table?.active_bills || []);
-
-  const activeBills = currentBills.filter(
-    (b) =>
-      (b.status === "open" || b.status === "printed") &&
-      (b.total > 0 || (b.items && b.items.length > 0) || Boolean(b.kitchen_printed_at))
+  // Strictly ensure ONLY bills belonging to this specific table are shown
+  const activeBills = (billsList || []).filter(
+    (b) => b.table_id === table?.id && (b.status === "open" || b.status === "printed")
   );
 
   const filteredBills = activeBills.filter((bill) => {
