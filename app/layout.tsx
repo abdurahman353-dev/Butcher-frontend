@@ -9,9 +9,7 @@ export const metadata: Metadata = {
   title: "Butchery & Restaurant POS — Point of Sale System",
   description: "Fast, weight-based butcher and restaurant point of sale system with tables, kitchen orders, real-time inventory, M-Pesa & Cash payments.",
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png",
+    icon: "data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
   },
 };
 

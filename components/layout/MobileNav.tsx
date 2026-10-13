@@ -47,11 +47,13 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
       <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
         <div className="h-14 px-4 border-b border-zinc-200 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img
-              src="/logo.png"
-              alt={`${settings.shop_name} Logo`}
-              className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0"
-            />
+            {settings.logo_url && (
+              <img
+                src={settings.logo_url}
+                alt={`${settings.shop_name} Logo`}
+                className="w-8 h-8 rounded-full object-cover border border-amber-300 shrink-0"
+              />
+            )}
             <span suppressHydrationWarning className="text-sm font-bold text-zinc-900">{settings.shop_name}</span>
           </div>
           <button onClick={onClose} className="p-1 rounded text-zinc-400 hover:text-zinc-700">

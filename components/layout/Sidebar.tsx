@@ -87,11 +87,17 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
           }`}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <img
-            src="/logo.png"
-            alt={`${settings.shop_name} Logo`}
-            className="w-9 h-9 rounded-full object-cover border border-amber-300 shadow-2xs shrink-0"
-          />
+          {settings.logo_url ? (
+            <img
+              src={settings.logo_url}
+              alt={`${settings.shop_name} Logo`}
+              className="w-9 h-9 rounded-full object-cover border border-amber-300 shadow-2xs shrink-0"
+            />
+          ) : isCollapsed ? (
+            <div className="w-8 h-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center font-bold text-xs shrink-0">
+              {(settings.shop_name || "P").charAt(0).toUpperCase()}
+            </div>
+          ) : null}
           {!isCollapsed && (
             <div className="min-w-0">
               <h1 suppressHydrationWarning className="text-sm font-black text-zinc-900 leading-tight tracking-tight truncate">

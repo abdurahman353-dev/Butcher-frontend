@@ -32,16 +32,23 @@ export default function LoginPage() {
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
   // SSR-safe: initialize with neutral value, update from localStorage after mount
+  const [mounted, setMounted] = useState(false);
   const [cachedShopName, setCachedShopName] = useState("Butchery & Restaurant POS");
+  const [cachedLogoUrl, setCachedLogoUrl] = useState<string | null>(null);
 
   const shopDisplayName = (settings.shop_name && settings.shop_name !== "Butchery POS" && settings.shop_name !== "Butchery & Restaurant POS")
     ? settings.shop_name
     : (cachedShopName || "Butchery & Restaurant POS");
 
+  const activeLogoUrl = mounted ? (settings.logo_url || cachedLogoUrl) : null;
+
   useEffect(() => {
+    setMounted(true);
     try {
       const cached = localStorage.getItem("butcher_shop_name");
       if (cached && cached.trim()) setCachedShopName(cached.trim());
+      const cachedLogo = localStorage.getItem("butcher_shop_logo");
+      if (cachedLogo && cachedLogo.trim()) setCachedLogoUrl(cachedLogo.trim());
     } catch {}
   }, []);
 
@@ -100,22 +107,22 @@ export default function LoginPage() {
       {/* ─── Centered Content Container (max-w-[420px] prevents full-screen stretch on tablets/desktops) ─── */}
       <div className="relative z-10 w-full max-w-[420px] my-auto flex flex-col items-center">
 
-        {/* 1. Floating Brand Logo Card */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-black/10 px-5 sm:px-7 py-3 sm:py-3.5 mb-4 sm:mb-5 flex items-center justify-center gap-3 sm:gap-3.5 border border-white/80 transition-transform hover:scale-[1.01]">
-          <img
-            src="/logo.png"
-            alt="Shop Logo"
-            className="w-11 h-11 sm:w-13 sm:h-13 object-contain drop-shadow-xs"
-          />
-          <div className="text-left">
-            <div className="flex items-center gap-1.5">
-              <span
-                suppressHydrationWarning
-                className="text-sm sm:text-base font-black text-zinc-900 tracking-tight leading-none"
-              >
-                {shopDisplayName.toUpperCase()}
-              </span>
-            </div>
+        {/* 1. Floating Brand Header Card */}
+        <div suppressHydrationWarning className={`bg-white rounded-2xl shadow-xl shadow-black/10 px-5 sm:px-7 py-3 sm:py-3.5 mb-4 sm:mb-5 flex items-center justify-center ${activeLogoUrl ? "gap-3 sm:gap-3.5" : ""} border border-white/80 transition-transform hover:scale-[1.01]`}>
+          {activeLogoUrl && (
+            <img
+              src={activeLogoUrl}
+              alt="Store Logo"
+              className="w-11 h-11 sm:w-13 sm:h-13 object-cover rounded-full border border-amber-300 shadow-2xs shrink-0"
+            />
+          )}
+          <div className={activeLogoUrl ? "text-left" : "text-center"}>
+            <span
+              suppressHydrationWarning
+              className="text-sm sm:text-base font-black text-zinc-900 tracking-tight leading-none"
+            >
+              {shopDisplayName.toUpperCase()}
+            </span>
             <p className="text-[10px] sm:text-[11px] font-bold tracking-wider text-red-600 uppercase mt-1">
               Butchery &amp; Restaurant POS
             </p>

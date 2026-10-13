@@ -12,6 +12,7 @@ import { settingsService } from "@/services/settings.service";
 
 /** Key used to persist the shop name between sessions */
 const CACHE_KEY = "butcher_shop_name";
+const LOGO_CACHE_KEY = "butcher_shop_logo";
 const FULL_SETTINGS_CACHE_KEY = "butcher_shop_settings_cache";
 
 /** SSR-safe base defaults (no window access) */
@@ -27,6 +28,7 @@ const DEFAULT_SETTINGS: ShopSettings = {
   default_min_stock: 10,
   tax_rate_percent: 0,
   enable_mpesa_stk: true,
+  logo_url: "",
 };
 
 /** Read the cached settings from localStorage after mount (client-only) */
@@ -120,10 +122,12 @@ export function ShopSettingsProvider({
           default_min_stock: data.default_min_stock ?? 10,
           tax_rate_percent: data.tax_rate_percent ?? 0,
           enable_mpesa_stk: data.enable_mpesa_stk ?? true,
+          logo_url: data.logo_url ?? "",
         };
         setSettings(full);
         try {
           localStorage.setItem(CACHE_KEY, full.shop_name);
+          localStorage.setItem(LOGO_CACHE_KEY, full.logo_url || "");
           localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(full));
         } catch { }
       }
@@ -173,6 +177,7 @@ export function ShopSettingsProvider({
       setSettings(merged);
       try {
         localStorage.setItem(CACHE_KEY, merged.shop_name);
+        localStorage.setItem(LOGO_CACHE_KEY, merged.logo_url || "");
         localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(merged));
       } catch { }
 
@@ -192,10 +197,12 @@ export function ShopSettingsProvider({
             default_min_stock: saved.default_min_stock ?? 10,
             tax_rate_percent: saved.tax_rate_percent ?? 0,
             enable_mpesa_stk: saved.enable_mpesa_stk ?? true,
+            logo_url: saved.logo_url ?? merged.logo_url ?? "",
           };
           setSettings(reconciled);
           try {
             localStorage.setItem(CACHE_KEY, reconciled.shop_name);
+            localStorage.setItem(LOGO_CACHE_KEY, reconciled.logo_url || "");
             localStorage.setItem(FULL_SETTINGS_CACHE_KEY, JSON.stringify(reconciled));
           } catch { }
         }

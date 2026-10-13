@@ -359,6 +359,7 @@ export interface ShopSettings {
   default_min_stock: number;
   tax_rate_percent: number;
   enable_mpesa_stk: boolean;
+  logo_url?: string;
 }
 
 export interface PaginatedResponse<T> {
