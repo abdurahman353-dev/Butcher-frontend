@@ -322,6 +322,7 @@ export function TableBillsModal({
   };
 
   const handleCancelCreate = () => {
+    if (isSubmitting) return;
     setIsCreatingNew(false);
     setWaiterPin("");
     setVerifiedStaff(null);
@@ -496,8 +497,9 @@ export function TableBillsModal({
 
           <button
             type="button"
-            onClick={onClose}
-            className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 rounded-xl transition-all active:scale-95 shadow-2xs"
+            onClick={() => !isSubmitting && onClose()}
+            disabled={isSubmitting}
+            className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 rounded-xl transition-all active:scale-95 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed"
             title="Close"
           >
             <X className="w-4 h-4 stroke-[2.5]" />
@@ -570,7 +572,8 @@ export function TableBillsModal({
                 <button
                   type="button"
                   onClick={handleCancelCreate}
-                  className="h-7 px-3 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 text-xs font-bold transition-all shrink-0"
+                  disabled={isSubmitting}
+                  className="h-7 px-3 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 text-xs font-bold transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -771,8 +774,9 @@ export function TableBillsModal({
               <div className="px-4 py-3 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreatingNew(false)}
-                  className="h-9 px-4 rounded-xl border border-zinc-300 bg-white hover:bg-zinc-100 active:bg-zinc-200 text-zinc-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                  onClick={() => !isSubmitting && setIsCreatingNew(false)}
+                  disabled={isSubmitting}
+                  className="h-9 px-4 rounded-xl border border-zinc-300 bg-white hover:bg-zinc-100 active:bg-zinc-200 text-zinc-700 text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   ← Back
                 </button>
@@ -781,16 +785,17 @@ export function TableBillsModal({
                   disabled={isSubmitting || (isWaiter && (!verifiedStaff || waiterPin.length !== 4))}
                   className="h-9 px-5 bg-zinc-900 hover:bg-zinc-800 active:bg-black active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 transition-all"
                 >
+                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />}
                   <span>
                     {isSubmitting
-                      ? "Opening..."
+                      ? "Opening Bill..."
                       : isWaiter && (!verifiedStaff || waiterPin.length !== 4)
                       ? "Enter Your Waiter PIN"
                       : verifiedStaff
                       ? `Open Bill (${verifiedStaff.name})`
                       : "Open Bill"}
                   </span>
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  {!isSubmitting && <ChevronRight className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </form>
@@ -1166,8 +1171,9 @@ export function TableBillsModal({
           </span>
           <button
             type="button"
-            onClick={onClose}
-            className="h-8 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 active:scale-95 text-xs font-black text-white transition-all shadow-xs cursor-pointer"
+            onClick={() => !isSubmitting && onClose()}
+            disabled={isSubmitting}
+            className="h-8 px-5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 active:scale-95 text-xs font-black text-white transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Close
           </button>
