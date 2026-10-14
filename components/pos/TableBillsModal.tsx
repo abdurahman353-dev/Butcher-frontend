@@ -642,18 +642,18 @@ export function TableBillsModal({
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         {[0, 1, 2, 3].map((idx) => {
                           const isFilled = waiterPin.length > idx;
                           const isCurrent = waiterPin.length === idx;
                           return (
                             <div
                               key={idx}
-                              className={`w-8 h-10 rounded-lg border-2 flex items-center justify-center font-mono text-sm font-black transition-all ${
+                              className={`w-11 h-13 rounded-xl border-2 flex items-center justify-center font-mono text-lg font-black transition-all ${
                                 isFilled
                                   ? "border-emerald-600 bg-emerald-600 text-white shadow-2xs scale-105"
                                   : isCurrent
-                                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-500/20"
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 ring-4 ring-emerald-500/20"
                                   : "border-zinc-200 bg-zinc-50 text-zinc-300"
                               }`}
                             >
@@ -702,14 +702,14 @@ export function TableBillsModal({
                     </div>
 
                     {showNumpad && (
-                      <div className="pt-2 border-t border-zinc-100 animate-in fade-in duration-100">
-                        <div className="max-w-[210px] mx-auto grid grid-cols-3 gap-1.5">
+                      <div className="pt-3 border-t border-zinc-100 animate-in fade-in duration-100">
+                        <div className="w-full max-w-[340px] mx-auto grid grid-cols-3 gap-2 sm:gap-2.5">
                           {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
                             <button
                               key={num}
                               type="button"
                               onClick={() => handleNumpadPress(num)}
-                              className="h-9 rounded-lg bg-zinc-100 hover:bg-emerald-50 active:bg-emerald-600 active:text-white font-mono text-base font-bold text-zinc-800 transition-colors shadow-2xs"
+                              className="h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-zinc-100 hover:bg-emerald-50 active:bg-emerald-600 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                             >
                               {num}
                             </button>
@@ -717,24 +717,24 @@ export function TableBillsModal({
                           <button
                             type="button"
                             onClick={handleNumpadClear}
-                            className="h-9 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs uppercase transition-colors"
+                            className="h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 active:scale-95 text-rose-700 font-black text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center cursor-pointer select-none border border-rose-200"
                           >
                             Clear
                           </button>
                           <button
                             type="button"
                             onClick={() => handleNumpadPress("0")}
-                            className="h-9 rounded-lg bg-zinc-100 hover:bg-emerald-50 active:bg-emerald-600 active:text-white font-mono text-base font-bold text-zinc-800 transition-colors shadow-2xs"
+                            className="h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-zinc-100 hover:bg-emerald-50 active:bg-emerald-600 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                           >
                             0
                           </button>
                           <button
                             type="button"
                             onClick={handleNumpadBackspace}
-                            className="h-9 rounded-lg bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold flex items-center justify-center transition-colors"
+                            className="h-14 sm:h-16 rounded-xl sm:rounded-2xl bg-zinc-200/80 hover:bg-zinc-300 active:bg-zinc-400 active:scale-95 text-zinc-700 font-bold flex items-center justify-center transition-all cursor-pointer select-none border border-zinc-300"
                             title="Backspace"
                           >
-                            <Delete className="w-4 h-4" />
+                            <Delete className="w-5 h-5 sm:w-6 sm:h-6" />
                           </button>
                         </div>
                       </div>
@@ -1266,14 +1266,14 @@ export function TableBillsModal({
 
             {/* On-Screen Touch Numpad */}
             <div className="px-5 pb-5 pt-1">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2.5">
                 {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
                   <button
                     key={num}
                     type="button"
                     disabled={isOpenBillVerifying}
                     onClick={() => handleOpenBillNumpadPress(num)}
-                    className="h-12 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-xl font-black text-zinc-800 transition-all shadow-2xs flex items-center justify-center cursor-pointer select-none"
+                    className="h-14 sm:h-16 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                   >
                     {num}
                   </button>
@@ -1282,7 +1282,7 @@ export function TableBillsModal({
                   type="button"
                   disabled={isOpenBillVerifying}
                   onClick={handleOpenBillNumpadClear}
-                  className="h-12 rounded-2xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 active:scale-95 text-rose-700 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 sm:h-16 rounded-2xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 active:scale-95 text-rose-700 font-black text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center cursor-pointer select-none border border-rose-200"
                 >
                   Clear
                 </button>
@@ -1290,7 +1290,7 @@ export function TableBillsModal({
                   type="button"
                   disabled={isOpenBillVerifying}
                   onClick={() => handleOpenBillNumpadPress("0")}
-                  className="h-12 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-xl font-black text-zinc-800 transition-all shadow-2xs flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 sm:h-16 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                 >
                   0
                 </button>
@@ -1298,10 +1298,10 @@ export function TableBillsModal({
                   type="button"
                   disabled={isOpenBillVerifying}
                   onClick={handleOpenBillNumpadBackspace}
-                  className="h-12 rounded-2xl bg-zinc-200/80 hover:bg-zinc-300 active:bg-zinc-400 active:scale-95 text-zinc-700 font-bold transition-all flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 sm:h-16 rounded-2xl bg-zinc-200/80 hover:bg-zinc-300 active:bg-zinc-400 active:scale-95 text-zinc-700 font-bold transition-all flex items-center justify-center cursor-pointer select-none border border-zinc-300"
                   title="Backspace"
                 >
-                  <Delete className="w-5 h-5" />
+                  <Delete className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
             </div>
