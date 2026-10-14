@@ -493,6 +493,9 @@ export interface StockExpenseAnalytics {
     category: string;
     total_sales: number;
     total_qty: number;
+    subtotal_freed_qty?: number;
+    subtotal_freed_amount?: number;
+    subtotal_discount?: number;
     items_count: number;
     percentage: number;
     items?: Array<{
@@ -500,6 +503,9 @@ export interface StockExpenseAnalytics {
       unit: string;
       qty: number;
       total_price: number;
+      freed_qty?: number;
+      freed_amount?: number;
+      discount?: number;
       price_per_unit?: number;
     }>;
   }>;

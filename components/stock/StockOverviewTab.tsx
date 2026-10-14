@@ -206,7 +206,11 @@ export function StockOverviewTab({
             (sum, s) => sum + Math.max(0, s.min_threshold - s.current_quantity) * (s.unit_cost || 0), 0
         );
 
-        // Sales Category Table HTML with itemized dish breakdown
+        const totalFreedQty = salesCategories.reduce((sum, sc) => sum + (sc.subtotal_freed_qty || 0), 0);
+        const totalFreedAmount = salesCategories.reduce((sum, sc) => sum + (sc.subtotal_freed_amount || 0), 0);
+        const totalDiscount = salesCategories.reduce((sum, sc) => sum + (sc.subtotal_discount || 0), 0);
+
+        // Sales Category Table HTML with itemized dish breakdown (including Freed Quantity, Freed Amount, Discount)
         const salesCatHTML = salesCategories.length > 0 ? `
         <div style="margin-bottom:18px">
           <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#15803d;border-bottom:2px solid #16a34a;padding:6px 0;margin:18px 0 8px;display:flex;justify-content:space-between">
@@ -220,48 +224,60 @@ export function StockOverviewTab({
                       ? sc.items.map((it: any) => `
                         <tr>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600">${it.name}</td>
-                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(it.qty, it.unit)}</td>
-                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#6b7280">${it.price_per_unit ? fmt(it.price_per_unit) : "—"}</td>
-                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#15803d">${fmt(it.total_price)}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${it.qty > 0 ? fmtQty(it.qty, it.unit) : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#15803d">${it.total_price > 0 ? fmt(it.total_price) : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${(it.freed_qty || 0) > 0 ? fmtQty(it.freed_qty, it.unit) : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${(it.freed_amount || 0) > 0 ? fmt(it.freed_amount) : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${(it.discount || 0) > 0 ? "#b45309" : "#9ca3af"}">${(it.discount || 0) > 0 ? `-${fmt(it.discount)}` : "-"}</td>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center"><span style="background:#f0fdf4;color:#166534;padding:1.5px 6px;border-radius:10px;font-size:9px;font-weight:700">${sc.total_sales > 0 ? Math.round((it.total_price / sc.total_sales) * 100) : 0}%</span></td>
                         </tr>`).join("")
                       : `
                         <tr>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600">${sc.category} Items</td>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(sc.total_qty, "ITEMS")}</td>
-                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#6b7280">—</td>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#15803d">${fmt(sc.total_sales)}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${(sc.subtotal_freed_qty || 0) > 0 ? fmtQty(sc.subtotal_freed_qty || 0, "ITEMS") : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#7e22ce;font-weight:700">${(sc.subtotal_freed_amount || 0) > 0 ? fmt(sc.subtotal_freed_amount || 0) : "-"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:${(sc.subtotal_discount || 0) > 0 ? "#b45309" : "#9ca3af"}">${(sc.subtotal_discount || 0) > 0 ? `-${fmt(sc.subtotal_discount || 0)}` : "-"}</td>
                           <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">100%</td>
                         </tr>`;
 
                   return `
                   <!-- Category Header Banner -->
                   <tr style="background:#14532d;color:#fff">
-                    <th colspan="5" style="padding:7px 10px;font-size:10px;font-weight:800;text-align:left;letter-spacing:0.5px;${catIdx > 0 ? "border-top:12px solid #fff;" : ""}">
+                    <th colspan="7" style="padding:7px 10px;font-size:10px;font-weight:800;text-align:left;letter-spacing:0.5px;${catIdx > 0 ? "border-top:12px solid #fff;" : ""}">
                       CATEGORY: ${sc.category.toUpperCase()} &nbsp;·&nbsp; ${sc.percentage}% OF TOTAL SALES
                     </th>
                   </tr>
                   <tr style="background:#dcfce7;color:#14532d;font-size:9px;font-weight:700;text-transform:uppercase">
                     <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:left">Dish / Menu Product Item</th>
                     <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Qty Sold</th>
-                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Selling Price</th>
-                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Total Sales</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Amount</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right;color:#7e22ce">Freed Quantity</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right;color:#7e22ce">Freed Amount</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right;color:#b45309">Discount</th>
                     <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:center">Share of Cat</th>
                   </tr>
                   ${itemRows}
                   <!-- Category Subtotal -->
                   <tr style="background:#f0fdf4;font-weight:800;border-top:2px solid #16a34a">
                     <td style="padding:6px 10px;border:1px solid #dcfce7;color:#14532d">SUBTOTAL — ${sc.category}</td>
-                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#14532d">${fmtQty(sc.total_qty, "ITEMS")}</td>
-                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#a1a1aa">—</td>
-                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#15803d;font-size:11.5px">${fmt(sc.total_sales)}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#14532d">${sc.total_qty > 0 ? fmtQty(sc.total_qty, "ITEMS") : "-"}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#15803d;font-size:11px">${fmt(sc.total_sales)}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#7e22ce;font-weight:800">${(sc.subtotal_freed_qty || 0) > 0 ? fmtQty(sc.subtotal_freed_qty || 0, "ITEMS") : "-"}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#7e22ce;font-weight:800">${(sc.subtotal_freed_amount || 0) > 0 ? fmt(sc.subtotal_freed_amount || 0) : "-"}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#b45309">${(sc.subtotal_discount || 0) > 0 ? `-${fmt(sc.subtotal_discount || 0)}` : "-"}</td>
                     <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:center;color:#15803d">${sc.percentage}%</td>
                   </tr>`;
               }).join("")}
               <!-- Grand Total Row -->
-              <tr style="background:#166534;color:#fff;font-weight:900;font-size:11.5px">
-                <td colspan="3" style="padding:9px 12px;border:1px solid #166534">GRAND TOTAL RESTAURANT SALES REVENUE</td>
-                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#bbf7d0;font-size:13px">${fmt(total_sales_revenue)}</td>
+              <tr style="background:#166534;color:#fff;font-weight:900;font-size:11px">
+                <td style="padding:9px 12px;border:1px solid #166534">GRAND TOTAL SALES REVENUE</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#bbf7d0">${fmtQty(salesCategories.reduce((sum, sc) => sum + sc.total_qty, 0), "ITEMS")}</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#bbf7d0;font-size:12.5px">${fmt(total_sales_revenue)}</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#e9d5ff">${totalFreedQty > 0 ? fmtQty(totalFreedQty, "ITEMS") : "-"}</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#e9d5ff">${totalFreedAmount > 0 ? fmt(totalFreedAmount) : "-"}</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#fde68a">${totalDiscount > 0 ? `-${fmt(totalDiscount)}` : "-"}</td>
                 <td style="padding:9px 12px;border:1px solid #166534;text-align:center;font-size:10px">100%</td>
               </tr>
             </tbody>
@@ -1027,10 +1043,22 @@ export function StockOverviewTab({
                                             {sc.items && sc.items.length > 0 && (
                                                 <div className="mt-2 pl-2.5 border-l-2 border-emerald-400/80 space-y-1 bg-emerald-50/40 py-1.5 px-2 rounded-r-md">
                                                     {itemsToDisplay.map((it) => (
-                                                        <div key={it.name} className="flex items-center justify-between text-[11px]">
-                                                            <span className="font-medium text-zinc-700 truncate pr-2">
-                                                                {it.name} <span className="text-zinc-400 font-normal">({it.qty} {it.unit})</span>
-                                                            </span>
+                                                        <div key={it.name} className="flex items-center justify-between text-[11px] gap-2">
+                                                            <div className="flex items-center gap-1.5 flex-wrap min-w-0 pr-1">
+                                                                <span className="font-medium text-zinc-700 truncate">
+                                                                    {it.name} <span className="text-zinc-400 font-normal">({it.qty} {it.unit})</span>
+                                                                </span>
+                                                                {(it.freed_qty || 0) > 0 && (
+                                                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                                                                        Freed: {it.freed_qty} {it.unit}
+                                                                    </span>
+                                                                )}
+                                                                {(it.discount || 0) > 0 && (
+                                                                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                                                                        Disc: -{formatCurrency(it.discount || 0)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             <span className="font-bold text-zinc-900 shrink-0">{formatCurrency(it.total_price)}</span>
                                                         </div>
                                                     ))}
