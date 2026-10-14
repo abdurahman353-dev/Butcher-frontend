@@ -23,6 +23,7 @@ import {
   ArrowUpDown,
   X,
   Filter,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -150,12 +151,12 @@ export default function InventoryPage() {
   // Real-time KPI calculations
   const kpis = useMemo(() => {
     const totalValue = products.reduce(
-      (sum, p) => sum + (p.current_stock || 0) * (p.buying_cost_per_kg || 0),
+      (sum, p) => (p.current_stock >= 9999 ? sum : sum + (p.current_stock || 0) * (p.buying_cost_per_kg || 0)),
       0
     );
-    const lowStock = products.filter((p) => p.current_stock > 0 && p.current_stock <= p.min_stock).length;
+    const lowStock = products.filter((p) => p.current_stock < 9999 && p.current_stock > 0 && p.current_stock <= p.min_stock).length;
     const outOfStock = products.filter((p) => p.current_stock <= 0).length;
-    const goodStock = products.filter((p) => p.current_stock > p.min_stock).length;
+    const goodStock = products.filter((p) => p.current_stock >= 9999 || p.current_stock > p.min_stock).length;
     return { totalValue, lowStock, outOfStock, goodStock, total: products.length };
   }, [products]);
 
@@ -579,10 +580,11 @@ export default function InventoryPage() {
                   </tr>
                 ) : (
                   paginatedProducts.map((p) => {
-                    const isOut = p.current_stock <= 0;
-                    const isLow = !isOut && p.current_stock <= p.min_stock;
-                    const stockStatus = isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
-                    const valuation = (p.current_stock || 0) * (p.buying_cost_per_kg || 0);
+                    const isInfinite = p.current_stock >= 9999;
+                    const isOut = !isInfinite && p.current_stock <= 0;
+                    const isLow = !isInfinite && !isOut && p.current_stock <= p.min_stock;
+                    const stockStatus = isInfinite ? "good" : isOut ? "out_of_stock" : isLow ? "low_stock" : "good";
+                    const valuation = isInfinite ? 0 : (p.current_stock || 0) * (p.buying_cost_per_kg || 0);
 
                     return (
                       <tr key={p.id} className="hover:bg-zinc-50/60 transition-colors">
@@ -594,25 +596,42 @@ export default function InventoryPage() {
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right font-bold tabular-nums text-sm">
-                          <span className={isOut ? "text-rose-600" : isLow ? "text-amber-700" : "text-green-700"}>
-                            {formatWeight(p.current_stock, p.unit)}
-                          </span>
+                          {isInfinite ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Unlimited / Infinite Stock">
+                              <InfinityIcon className="w-3.5 h-3.5" />
+                              <span>Unlimited</span>
+                            </span>
+                          ) : (
+                            <span className={isOut ? "text-rose-600" : isLow ? "text-amber-700" : "text-green-700"}>
+                              {formatWeight(p.current_stock, p.unit)}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right text-zinc-500 tabular-nums">
-                          {formatWeight(p.min_stock, p.unit)}
+                          {isInfinite ? (
+                            <span className="text-zinc-300 font-normal">—</span>
+                          ) : (
+                            formatWeight(p.min_stock, p.unit)
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right font-bold text-green-700 tabular-nums text-xs">
                           {formatCurrency(p.price_per_kg)}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-zinc-600 tabular-nums text-xs">
-                          {p.buying_cost_per_kg && Number(p.buying_cost_per_kg) > 0 ? (
+                          {isInfinite ? (
+                            <span className="text-zinc-300 font-normal">—</span>
+                          ) : p.buying_cost_per_kg && Number(p.buying_cost_per_kg) > 0 ? (
                             formatCurrency(p.buying_cost_per_kg)
                           ) : (
                             <span className="text-rose-500 font-medium">Unset</span>
                           )}
                         </td>
                         <td className="py-3 px-3 text-right font-semibold text-zinc-900 tabular-nums">
-                          {formatCurrency(valuation)}
+                          {isInfinite ? (
+                            <span className="text-zinc-300 font-normal">—</span>
+                          ) : (
+                            formatCurrency(valuation)
+                          )}
                         </td>
                         <td className="py-3 px-3 text-center">
                           <StatusBadge status={stockStatus} type="stock" />

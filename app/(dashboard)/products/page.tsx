@@ -230,9 +230,9 @@ export default function ProductsPage() {
         sku: r.sku.trim() || undefined,
         category_id: Number(r.category_id),
         price_per_kg: parseFloat(r.price_per_kg),
-        buying_cost_per_kg: r.buying_cost_per_kg !== "" ? parseFloat(r.buying_cost_per_kg) : 0,
-        current_stock: r.current_stock !== "" ? parseFloat(r.current_stock) : (isRestaurant ? 9999 : 0),
-        min_stock: r.min_stock !== "" ? parseFloat(r.min_stock) : 0,
+        buying_cost_per_kg: isRestaurant ? 0 : (r.buying_cost_per_kg !== "" ? parseFloat(r.buying_cost_per_kg) : 0),
+        current_stock: isRestaurant ? 9999 : (r.current_stock !== "" ? parseFloat(r.current_stock) : 0),
+        min_stock: isRestaurant ? 0 : (r.min_stock !== "" ? parseFloat(r.min_stock) : 0),
         unit: r.unit || "KG",
       }));
       const res = await productsService.bulkCreateProducts(payload);
@@ -388,11 +388,11 @@ export default function ProductsPage() {
         sku: formData.sku.trim() || undefined,
         category_id: Number(formData.category_id),
         price_per_kg: parseFloat(formData.price_per_kg),
-        buying_cost_per_kg: formData.buying_cost_per_kg !== "" ? parseFloat(formData.buying_cost_per_kg) : 0,
+        buying_cost_per_kg: isRestaurant ? 0 : (formData.buying_cost_per_kg !== "" ? parseFloat(formData.buying_cost_per_kg) : 0),
         current_stock: editingProduct && !isAdmin
           ? editingProduct.current_stock
-          : (formData.current_stock !== "" ? parseFloat(formData.current_stock) : (isRestaurant ? 9999 : 0)),
-        min_stock: formData.min_stock !== "" ? parseFloat(formData.min_stock) : 0,
+          : (isRestaurant ? 9999 : (formData.current_stock !== "" ? parseFloat(formData.current_stock) : 0)),
+        min_stock: isRestaurant ? 0 : (formData.min_stock !== "" ? parseFloat(formData.min_stock) : 0),
         unit: formData.unit || "KG",
       };
 
@@ -943,15 +943,22 @@ export default function ProductsPage() {
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
                     Buying Cost / {formData.unit} (KSh) {!isRestaurant && <span className="text-rose-500">*</span>}
+                    {isRestaurant && <span className="text-[10px] text-zinc-400 font-normal ml-1">(Kitchen tracked)</span>}
                   </label>
                   <input
                     type="number"
                     step="0.01"
+                    disabled={isRestaurant}
+                    readOnly={isRestaurant}
                     required={!isRestaurant}
-                    value={formData.buying_cost_per_kg}
-                    onChange={(e) => setFormData({ ...formData, buying_cost_per_kg: e.target.value })}
-                    placeholder={isRestaurant ? "Optional (e.g. 0)" : "720"}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
+                    value={isRestaurant ? "" : formData.buying_cost_per_kg}
+                    onChange={(e) => !isRestaurant && setFormData({ ...formData, buying_cost_per_kg: e.target.value })}
+                    placeholder={isRestaurant ? "N/A (Kitchen tracked)" : "720"}
+                    className={`w-full rounded-xl px-3 py-2 shadow-2xs ${
+                      isRestaurant
+                        ? "bg-zinc-100 border border-zinc-200 text-zinc-400 placeholder:text-zinc-400 cursor-not-allowed select-none"
+                        : "bg-white border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500"
+                    }`}
                   />
                 </div>
               </div>
@@ -962,8 +969,9 @@ export default function ProductsPage() {
                     <label className="font-semibold text-zinc-700">
                       {editingProduct ? `Current Stock (${formData.unit})` : `Initial Stock (${formData.unit})`}
                       {!isRestaurant && !editingProduct && <span className="text-rose-500 ml-0.5">*</span>}
+                      {isRestaurant && <span className="text-[10px] text-zinc-400 font-normal ml-1">(Kitchen)</span>}
                     </label>
-                    {editingProduct && !isAdmin && (
+                    {editingProduct && !isAdmin && !isRestaurant && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
                         <Lock className="w-2.5 h-2.5" />
                         Read-only
@@ -975,18 +983,18 @@ export default function ProductsPage() {
                     step="0.001"
                     min="0"
                     required={!isRestaurant && !editingProduct}
-                    readOnly={Boolean(editingProduct && !isAdmin)}
-                    disabled={Boolean(editingProduct && !isAdmin)}
-                    value={formData.current_stock}
-                    onChange={(e) => setFormData({ ...formData, current_stock: e.target.value })}
-                    placeholder={isRestaurant ? "Optional (infinite)" : "e.g. 42.5"}
+                    readOnly={isRestaurant || Boolean(editingProduct && !isAdmin)}
+                    disabled={isRestaurant || Boolean(editingProduct && !isAdmin)}
+                    value={isRestaurant ? "" : formData.current_stock}
+                    onChange={(e) => !isRestaurant && setFormData({ ...formData, current_stock: e.target.value })}
+                    placeholder={isRestaurant ? "N/A (Kitchen tracked)" : "e.g. 42.5"}
                     className={`w-full rounded-xl px-3 py-2 font-bold shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                      editingProduct && !isAdmin
-                        ? "bg-zinc-100 text-zinc-500 border border-zinc-200 cursor-not-allowed select-none"
+                      isRestaurant || (editingProduct && !isAdmin)
+                        ? "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed select-none"
                         : "bg-white border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
                     }`}
                   />
-                  {editingProduct && !isAdmin && (
+                  {editingProduct && !isAdmin && !isRestaurant && (
                     <p className="text-[10px] text-zinc-400 mt-1">
                       Cashier cannot edit current stock directly.
                     </p>
@@ -996,16 +1004,23 @@ export default function ProductsPage() {
                 <div>
                   <label className="block font-semibold text-zinc-700 mb-1">
                     Minimum Alert Stock ({formData.unit}) {!isRestaurant && <span className="text-rose-500">*</span>}
+                    {isRestaurant && <span className="text-[10px] text-zinc-400 font-normal ml-1">(Kitchen)</span>}
                   </label>
                   <input
                     type="number"
                     step="0.001"
                     min="0"
+                    disabled={isRestaurant}
+                    readOnly={isRestaurant}
                     required={!isRestaurant}
-                    value={formData.min_stock}
-                    onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })}
-                    placeholder={isRestaurant ? "Optional (e.g. 0)" : "e.g. 5"}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    value={isRestaurant ? "" : formData.min_stock}
+                    onChange={(e) => !isRestaurant && setFormData({ ...formData, min_stock: e.target.value })}
+                    placeholder={isRestaurant ? "N/A (Kitchen tracked)" : "e.g. 5"}
+                    className={`w-full rounded-xl px-3 py-2 shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      isRestaurant
+                        ? "bg-zinc-100 border border-zinc-200 text-zinc-400 placeholder:text-zinc-400 cursor-not-allowed select-none"
+                        : "bg-white border border-zinc-200 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500"
+                    }`}
                   />
                 </div>
               </div>
@@ -1114,9 +1129,15 @@ export default function ProductsPage() {
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[130px]">Category <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[95px]">Unit <span className="text-red-500">*</span></th>
                             <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Price/Unit <span className="text-red-500">*</span></th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">Buy Cost/Unit {!isRestaurant && <span className="text-red-500">*</span>}</th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">Stock {!isRestaurant && <span className="text-red-500">*</span>}</th>
-                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">Min Stock {!isRestaurant && <span className="text-red-500">*</span>}</th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[100px]">
+                              Buy Cost/Unit {isRestaurant ? <span className="text-[10px] text-zinc-400 font-normal block leading-tight">(N/A)</span> : <span className="text-red-500">*</span>}
+                            </th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[90px]">
+                              Stock {isRestaurant ? <span className="text-[10px] text-zinc-400 font-normal block leading-tight">(N/A)</span> : <span className="text-red-500">*</span>}
+                            </th>
+                            <th className="text-left p-2 font-semibold text-zinc-600 min-w-[80px]">
+                              Min Stock {isRestaurant ? <span className="text-[10px] text-zinc-400 font-normal block leading-tight">(N/A)</span> : <span className="text-red-500">*</span>}
+                            </th>
                             <th className="p-2 w-8"></th>
                           </tr>
                         </thead>
@@ -1182,19 +1203,37 @@ export default function ProductsPage() {
                                     className={errPrice ? err : ok} />
                                 </td>
                                 <td className="p-1.5">
-                                  <input type="number" value={row.buying_cost_per_kg} onChange={e => updateBulkRow(i, "buying_cost_per_kg", e.target.value)}
+                                  <input
+                                    type="number"
+                                    disabled={isRestaurant}
+                                    readOnly={isRestaurant}
+                                    value={isRestaurant ? "" : row.buying_cost_per_kg}
+                                    onChange={e => !isRestaurant && updateBulkRow(i, "buying_cost_per_kg", e.target.value)}
+                                    placeholder={isRestaurant ? "—" : ""}
                                     min="0" step="0.01"
-                                    className={errBuying ? err : ok} />
+                                    className={isRestaurant ? "w-full px-2.5 py-1.5 bg-zinc-100 border border-zinc-200 rounded-lg text-xs text-zinc-400 placeholder:text-zinc-400 cursor-not-allowed text-center select-none" : (errBuying ? err : ok)} />
                                 </td>
                                 <td className="p-1.5">
-                                  <input type="number" value={row.current_stock} onChange={e => updateBulkRow(i, "current_stock", e.target.value)}
+                                  <input
+                                    type="number"
+                                    disabled={isRestaurant}
+                                    readOnly={isRestaurant}
+                                    value={isRestaurant ? "" : row.current_stock}
+                                    onChange={e => !isRestaurant && updateBulkRow(i, "current_stock", e.target.value)}
+                                    placeholder={isRestaurant ? "—" : ""}
                                     min="0" step="0.1"
-                                    className={errStock ? err : ok} />
+                                    className={isRestaurant ? "w-full px-2.5 py-1.5 bg-zinc-100 border border-zinc-200 rounded-lg text-xs text-zinc-400 placeholder:text-zinc-400 cursor-not-allowed text-center select-none" : (errStock ? err : ok)} />
                                 </td>
                                 <td className="p-1.5">
-                                  <input type="number" value={row.min_stock} onChange={e => updateBulkRow(i, "min_stock", e.target.value)}
+                                  <input
+                                    type="number"
+                                    disabled={isRestaurant}
+                                    readOnly={isRestaurant}
+                                    value={isRestaurant ? "" : row.min_stock}
+                                    onChange={e => !isRestaurant && updateBulkRow(i, "min_stock", e.target.value)}
+                                    placeholder={isRestaurant ? "—" : ""}
                                     min="0"
-                                    className={errMinStk ? err : ok} />
+                                    className={isRestaurant ? "w-full px-2.5 py-1.5 bg-zinc-100 border border-zinc-200 rounded-lg text-xs text-zinc-400 placeholder:text-zinc-400 cursor-not-allowed text-center select-none" : (errMinStk ? err : ok)} />
                                 </td>
                                 <td className="p-1.5 text-center">
                                   <button type="button" onClick={() => removeBulkRow(i)}
