@@ -489,6 +489,37 @@ export interface StockExpenseAnalytics {
     total_cost: number;
     percentage: number;
   }>;
+  sales_category_breakdown?: Array<{
+    category: string;
+    total_sales: number;
+    total_qty: number;
+    items_count: number;
+    percentage: number;
+    items?: Array<{
+      name: string;
+      unit: string;
+      qty: number;
+      total_price: number;
+      price_per_unit?: number;
+    }>;
+  }>;
+  categorized_kitchen_stock?: Array<{
+    category_name: string;
+    subtotal_qty: number;
+    subtotal_restock_cost: number;
+    items: Array<{
+      item_name: string;
+      unit: string;
+      unit_cost: number;
+      used_quantity: number;
+      restock_cost: number;
+      current_quantity: number;
+      min_threshold: number;
+      is_low_stock?: boolean;
+    }>;
+  }>;
+  total_restock_cost_used?: number;
+  store_restock_budget_needed?: number;
   top_items: Array<{
     item_name: string;
     unit: string;

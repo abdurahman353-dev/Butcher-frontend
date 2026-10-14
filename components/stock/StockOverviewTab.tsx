@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { StockExpenseAnalytics } from "@/types";
+import { StockExpenseAnalytics, RestaurantStockItem } from "@/types";
 import { formatCurrency } from "@/lib/formatters";
+import { useShopSettings } from "@/contexts/ShopSettingsContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
     TrendingUp,
     TrendingDown,
@@ -16,10 +18,16 @@ import {
     ChevronRight,
     X,
     Calendar,
+    FileText,
+    Boxes,
+    ShoppingBag,
+    AlertTriangle,
+    RotateCcw,
 } from "lucide-react";
 
 interface StockOverviewTabProps {
     analytics: StockExpenseAnalytics | null;
+    stocks: RestaurantStockItem[];
     isLoading: boolean;
     period: string;
     onPeriodChange: (p: string) => void;
@@ -33,6 +41,7 @@ interface StockOverviewTabProps {
 
 export function StockOverviewTab({
     analytics,
+    stocks,
     isLoading,
     period,
     onPeriodChange,
@@ -49,9 +58,14 @@ export function StockOverviewTab({
     const [trendPage, setTrendPage] = useState(1);
     const [catPage, setCatPage] = useState(1);
     const [itemPage, setItemPage] = useState(1);
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
     const TREND_PAGE_SIZE = 5;
     const CAT_PAGE_SIZE = 4;
     const ITEM_PAGE_SIZE = 5;
+
+    const toggleCategory = (cat: string) => {
+        setExpandedCategories((prev) => ({ ...prev, [cat]: !prev[cat] }));
+    };
 
     const {
         total_sales_revenue,
@@ -129,6 +143,379 @@ export function StockOverviewTab({
     const isHealthyFoodCost = food_cost_ratio > 0 && food_cost_ratio <= 35;
     const isModerateFoodCost = food_cost_ratio > 35 && food_cost_ratio <= 45;
 
+    const { settings: shopSettings } = useShopSettings();
+    const { user } = useAuth();
+
+    // ── PDF Generator ────────────────────────────────────────────────────────
+    const generatePDF = () => {
+        const fmt = (n: number) => `KSh ${Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const fmtQty = (q: number, unit?: string) => {
+            const val = Number(q) % 1 === 0 ? Number(q).toFixed(0) : Number(q).toFixed(2);
+            return `${val} ${unit || "KG"}`;
+        };
+        const now = new Date().toLocaleString("en-KE", { timeZone: "Africa/Nairobi", dateStyle: "long", timeStyle: "short" });
+        const shopTitle = shopSettings?.shop_name || user?.company?.name || "RESTAURANT KITCHEN";
+        const shopAddress = shopSettings?.address || "Kitchen & Stock Inventory Operations";
+        const rangeLabel = startDate && endDate
+            ? `${startDate} to ${endDate}`
+            : startDate
+            ? `From ${startDate}`
+            : endDate
+            ? `Up to ${endDate}`
+            : (period ? period.replace("_", " ").toUpperCase() : "Today");
+
+        // 1. Sales per category of items
+        const salesCategories = analytics?.sales_category_breakdown || [];
+
+        // 2. Kitchen stock items used grouped by category (with Restock Needed: Qty Used * Unit Cost)
+        const categorizedKitchenStock = (analytics?.categorized_kitchen_stock && analytics.categorized_kitchen_stock.length > 0)
+            ? analytics.categorized_kitchen_stock
+            : (() => {
+                const catMap: Record<string, { category_name: string; subtotal_qty: number; subtotal_restock_cost: number; items: any[] }> = {};
+                (top_items || []).forEach((it) => {
+                    const matchStock = (stocks || []).find((s) => s.item_name.toLowerCase() === it.item_name.toLowerCase());
+                    const cat = matchStock?.category || "Kitchen Ingredients";
+                    const unitCost = it.total_qty > 0 ? it.total_cost / it.total_qty : (matchStock?.unit_cost || 0);
+                    const restockCost = it.total_qty * unitCost;
+                    if (!catMap[cat]) {
+                        catMap[cat] = { category_name: cat, subtotal_qty: 0, subtotal_restock_cost: 0, items: [] };
+                    }
+                    catMap[cat].subtotal_qty += it.total_qty;
+                    catMap[cat].subtotal_restock_cost += restockCost;
+                    catMap[cat].items.push({
+                        item_name: it.item_name,
+                        unit: it.unit || "KG",
+                        unit_cost: unitCost,
+                        used_quantity: it.total_qty,
+                        restock_cost: restockCost,
+                        current_quantity: matchStock?.current_quantity || 0,
+                        min_threshold: matchStock?.min_threshold || 0,
+                        is_low_stock: matchStock ? matchStock.current_quantity < matchStock.min_threshold : false,
+                    });
+                });
+                return Object.values(catMap);
+            })();
+
+        const totalRestockCostUsed = analytics?.total_restock_cost_used ?? total_stock_consumed;
+
+        // 3. Low-stock store items (current_quantity < min_threshold)
+        const lowStockItems = (stocks || []).filter(
+            (s) => s.min_threshold > 0 && s.current_quantity < s.min_threshold
+        );
+        const storeShortfallBudget = analytics?.store_restock_budget_needed ?? lowStockItems.reduce(
+            (sum, s) => sum + Math.max(0, s.min_threshold - s.current_quantity) * (s.unit_cost || 0), 0
+        );
+
+        // Sales Category Table HTML with itemized dish breakdown
+        const salesCatHTML = salesCategories.length > 0 ? `
+        <div style="margin-bottom:18px">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#15803d;border-bottom:2px solid #16a34a;padding:6px 0;margin:18px 0 8px;display:flex;justify-content:space-between">
+            <span>🍽️ 1. Restaurant Sales by Menu Category & Itemized Dishes</span>
+            <span style="font-size:10px;color:#6b7280;text-transform:none">Total Revenue: ${fmt(total_sales_revenue)}</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+            <tbody>
+              ${salesCategories.map((sc, catIdx) => {
+                  const itemRows = (sc.items && sc.items.length > 0)
+                      ? sc.items.map((it: any) => `
+                        <tr>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600">${it.name}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(it.qty, it.unit)}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#6b7280">${it.price_per_unit ? fmt(it.price_per_unit) : "—"}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#15803d">${fmt(it.total_price)}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center"><span style="background:#f0fdf4;color:#166534;padding:1.5px 6px;border-radius:10px;font-size:9px;font-weight:700">${sc.total_sales > 0 ? Math.round((it.total_price / sc.total_sales) * 100) : 0}%</span></td>
+                        </tr>`).join("")
+                      : `
+                        <tr>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600">${sc.category} Items</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(sc.total_qty, "ITEMS")}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#6b7280">—</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:700;color:#15803d">${fmt(sc.total_sales)}</td>
+                          <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">100%</td>
+                        </tr>`;
+
+                  return `
+                  <!-- Category Header Banner -->
+                  <tr style="background:#14532d;color:#fff">
+                    <th colspan="5" style="padding:7px 10px;font-size:10px;font-weight:800;text-align:left;letter-spacing:0.5px;${catIdx > 0 ? "border-top:12px solid #fff;" : ""}">
+                      CATEGORY: ${sc.category.toUpperCase()} &nbsp;·&nbsp; ${sc.percentage}% OF TOTAL SALES
+                    </th>
+                  </tr>
+                  <tr style="background:#dcfce7;color:#14532d;font-size:9px;font-weight:700;text-transform:uppercase">
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:left">Dish / Menu Product Item</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Qty Sold</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Selling Price</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:right">Total Sales</th>
+                    <th style="padding:5px 10px;border:1px solid #bbf7d0;text-align:center">Share of Cat</th>
+                  </tr>
+                  ${itemRows}
+                  <!-- Category Subtotal -->
+                  <tr style="background:#f0fdf4;font-weight:800;border-top:2px solid #16a34a">
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;color:#14532d">SUBTOTAL — ${sc.category}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#14532d">${fmtQty(sc.total_qty, "ITEMS")}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#a1a1aa">—</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:right;color:#15803d;font-size:11.5px">${fmt(sc.total_sales)}</td>
+                    <td style="padding:6px 10px;border:1px solid #dcfce7;text-align:center;color:#15803d">${sc.percentage}%</td>
+                  </tr>`;
+              }).join("")}
+              <!-- Grand Total Row -->
+              <tr style="background:#166534;color:#fff;font-weight:900;font-size:11.5px">
+                <td colspan="3" style="padding:9px 12px;border:1px solid #166534">GRAND TOTAL RESTAURANT SALES REVENUE</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:right;color:#bbf7d0;font-size:13px">${fmt(total_sales_revenue)}</td>
+                <td style="padding:9px 12px;border:1px solid #166534;text-align:center;font-size:10px">100%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : "";
+
+        // Categorized Kitchen Stock Used & Restock Cost HTML
+        const categorizedStockHTML = categorizedKitchenStock.length > 0 ? `
+        <div style="margin-bottom:18px">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b45309;border-bottom:2px solid #d97706;padding:6px 0;margin:18px 0 8px;display:flex;justify-content:space-between">
+            <span>📦 2. Kitchen Stock Used per Item & Required Restock Amount</span>
+            <span style="font-size:10px;color:#6b7280;text-transform:none">Restock = Qty Cooked × Buying Price</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:10.5px">
+            <tbody>
+              ${categorizedKitchenStock.map((cat, catIdx) => {
+                  const itemRows = (cat.items || []).map((it: any) => `
+                  <tr>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;font-weight:600">${it.item_name}</td>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(it.used_quantity, it.unit)}</td>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;color:#6b7280">${fmt(it.unit_cost)} / ${it.unit}</td>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:#b45309">${fmt(it.restock_cost)}</td>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:right">${fmtQty(it.current_quantity, it.unit)}</td>
+                    <td style="padding:6px 10px;border:1px solid #e5e7eb;text-align:center">
+                      ${it.is_low_stock
+                          ? `<span style="background:#fee2e2;color:#b91c1c;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:800">LOW STOCK</span>`
+                          : `<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:700">OK</span>`
+                      }
+                    </td>
+                  </tr>`).join("");
+
+                  return `
+                  <!-- Category Header Banner -->
+                  <tr style="background:#92400e;color:#fff">
+                    <th colspan="6" style="padding:7px 10px;font-size:10px;font-weight:800;text-align:left;letter-spacing:0.5px;${catIdx > 0 ? "border-top:12px solid #fff;" : ""}">
+                      CATEGORY: ${cat.category_name.toUpperCase()}
+                    </th>
+                  </tr>
+                  <tr style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;text-transform:uppercase">
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:left">Ingredient / Stock Item</th>
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:right">Qty Cooked</th>
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:right">Buying Cost</th>
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:right">Restock Required</th>
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:right">Store Balance</th>
+                    <th style="padding:5px 10px;border:1px solid #fde68a;text-align:center">Health</th>
+                  </tr>
+                  ${itemRows}
+                  <!-- Category Subtotal -->
+                  <tr style="background:#fffbeb;font-weight:800;border-top:2px solid #f59e0b">
+                    <td style="padding:6px 10px;border:1px solid #fde68a;color:#92400e">SUBTOTAL — ${cat.category_name}</td>
+                    <td style="padding:6px 10px;border:1px solid #fde68a;text-align:right;color:#92400e">${fmtQty(cat.subtotal_qty)}</td>
+                    <td style="padding:6px 10px;border:1px solid #fde68a;text-align:right;color:#a1a1aa">—</td>
+                    <td style="padding:6px 10px;border:1px solid #fde68a;text-align:right;color:#b45309;font-size:11px">${fmt(cat.subtotal_restock_cost)}</td>
+                    <td colspan="2" style="padding:6px 10px;border:1px solid #fde68a"></td>
+                  </tr>`;
+              }).join("")}
+              <!-- Grand Total Restock Row -->
+              <tr style="background:#78350f;color:#fff;font-weight:900;font-size:11.5px">
+                <td colspan="3" style="padding:10px 12px;border:1px solid #78350f">TOTAL RESTOCK CAPITAL NEEDED (FOR ITEMS COOKED/USED)</td>
+                <td style="padding:10px 12px;border:1px solid #78350f;text-align:right;color:#fef08a;font-size:13px">${fmt(totalRestockCostUsed)}</td>
+                <td colspan="2" style="padding:10px 12px;border:1px solid #78350f;text-align:right;font-size:9.5px;color:rgba(255,255,255,0.8)">To fully replenish ingredients</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : "";
+
+        // Low stock store alert HTML
+        const lowStockHTML = lowStockItems.length > 0 ? `
+        <div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin:18px 0">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between">
+            <span>⚠️ 3. Store Low-Stock Alert (Items Below Minimum Threshold)</span>
+            <span>Total Threshold Deficit: ${fmt(storeShortfallBudget)}</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:10px">
+            <thead>
+              <tr style="background:#ffe4e6;color:#9f1239;font-weight:700">
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:left">Item</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:left">Category</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:right">Current Store Stock</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:right">Min Threshold</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:right">Deficit to Restock</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:right">Unit Cost</th>
+                <th style="padding:6px 8px;border:1px solid #fecdd3;text-align:right">Reorder Budget</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lowStockItems.map((s) => {
+                  const shortfall = Math.max(0, s.min_threshold - s.current_quantity);
+                  const cost = shortfall * (s.unit_cost || 0);
+                  return `
+                  <tr style="background:#fff">
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;font-weight:700">${s.item_name}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3">${s.category}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;text-align:right;color:#be123c;font-weight:700">${fmtQty(s.current_quantity, s.unit)}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;text-align:right">${fmtQty(s.min_threshold, s.unit)}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;text-align:right;font-weight:700;color:#b91c1c">${fmtQty(shortfall, s.unit)}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;text-align:right">${fmt(s.unit_cost || 0)}</td>
+                    <td style="padding:5px 8px;border:1px solid #fecdd3;text-align:right;font-weight:800;color:#be123c">${fmt(cost)}</td>
+                  </tr>`;
+              }).join("")}
+              <tr style="background:#ffe4e6;font-weight:800">
+                <td colspan="6" style="padding:6px 8px;border:1px solid #fecdd3;color:#9f1239">TOTAL STORE DEFICIT REORDER BUDGET</td>
+                <td style="padding:6px 8px;border:1px solid #fecdd3;text-align:right;color:#be123c;font-size:11.5px">${fmt(storeShortfallBudget)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>` : `
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin:14px 0;color:#15803d;font-weight:700;font-size:10.5px">
+          ✅ All store items are above minimum safety thresholds. No emergency store reorder required.
+        </div>`;
+
+        // Daily P&L Table HTML
+        const trendHTML = (filteredTrend || []).length > 0 ? `
+        <div style="margin-bottom:18px">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;border-bottom:2px solid #2563eb;padding:6px 0;margin:18px 0 8px;display:flex;justify-content:space-between">
+            <span>📈 4. Daily Profit & Loss Trend</span>
+            <span style="font-size:10px;color:#6b7280;text-transform:none">POS Revenue vs Kitchen Stock Expenses</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:10px">
+            <thead>
+              <tr style="background:#eff6ff;color:#1e40af;font-weight:700">
+                <th style="padding:6px 8px;border:1px solid #dbeafe;text-align:left">Date</th>
+                <th style="padding:6px 8px;border:1px solid #dbeafe;text-align:right">Sales Revenue</th>
+                <th style="padding:6px 8px;border:1px solid #dbeafe;text-align:right">Stock Expenses</th>
+                <th style="padding:6px 8px;border:1px solid #dbeafe;text-align:right">Net Margin</th>
+                <th style="padding:6px 8px;border:1px solid #dbeafe;text-align:center">Performance</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredTrend.map((d, i) => `
+              <tr style="background:${i % 2 === 0 ? "#fafafa" : "#fff"}">
+                <td style="padding:5px 8px;border:1px solid #e5e7eb;font-weight:600">${d.label}</td>
+                <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right;color:#15803d;font-weight:700">${fmt(d.sales)}</td>
+                <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right;color:#b45309;font-weight:700">${fmt(d.expenses)}</td>
+                <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:800;color:${d.net >= 0 ? "#15803d" : "#be123c"}">${fmt(d.net)}</td>
+                <td style="padding:5px 8px;border:1px solid #e5e7eb;text-align:center">
+                  <span style="background:${d.net >= 0 ? "#dcfce7" : "#fee2e2"};color:${d.net >= 0 ? "#15803d" : "#b91c1c"};padding:1.5px 6px;border-radius:10px;font-size:9px;font-weight:700">
+                    ${d.net >= 0 ? "PROFITABLE" : "LOSS"}
+                  </span>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>` : "";
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>${shopTitle} - Kitchen Stock & Expenses Executive Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif; font-size: 11px; color: #1e293b; background: #fff; }
+  .header { background: linear-gradient(135deg, #78350f, #b45309, #d97706); color: #fff; padding: 24px 30px 20px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .kpi-strip { display: flex; background: #f8fafc; border-bottom: 2px solid #e2e8f0; }
+  .kpi-box { flex: 1; padding: 12px 14px; border-right: 1px solid #e2e8f0; }
+  .kpi-box:last-child { border-right: none; }
+  .kpi-lbl { font-size: 8.5px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; }
+  .kpi-val { font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 3px; }
+  .kpi-sub { font-size: 9px; color: #94a3b8; margin-top: 1px; }
+  .body-content { padding: 18px 26px; }
+  .footer-bar { border-top: 2px solid #e2e8f0; padding: 12px 26px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; font-size: 9.5px; color: #64748b; margin-top: 24px; }
+  @media print {
+    body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body>
+  <!-- Header Banner -->
+  <div class="header">
+    <div>
+      <div style="font-size:20px;font-weight:900;letter-spacing:-0.5px">🍽️ ${shopTitle.toUpperCase()}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:1px;margin-top:3px">${shopAddress}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;font-weight:800;letter-spacing:0.5px">EXECUTIVE STOCK & EXPENSES REPORT</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.85);margin-top:3px">Generated: ${now}</div>
+      <div style="display:inline-block;margin-top:6px;background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.35);font-size:9.5px;font-weight:700;padding:2px 10px;border-radius:12px;text-transform:uppercase">
+        Range: ${rangeLabel}
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Overview Strip -->
+  <div class="kpi-strip">
+    <div class="kpi-box">
+      <div class="kpi-lbl">Restaurant Sales</div>
+      <div class="kpi-val" style="color:#15803d">${fmt(total_sales_revenue)}</div>
+      <div class="kpi-sub">${sales_transactions_count} settled orders</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Kitchen Stock Used</div>
+      <div class="kpi-val" style="color:#b45309">${fmt(total_stock_consumed)}</div>
+      <div class="kpi-sub">Active in kitchen: ${fmt(in_kitchen_active_cost)}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Restock Cost (Used)</div>
+      <div class="kpi-val" style="color:#d97706">${fmt(totalRestockCostUsed)}</div>
+      <div class="kpi-sub">To replace cooked items</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Net Kitchen Margin</div>
+      <div class="kpi-val" style="color:${gross_kitchen_margin >= 0 ? "#15803d" : "#be123c"}">${fmt(gross_kitchen_margin)}</div>
+      <div class="kpi-sub">Sales − Consumed Stock</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Food Cost Ratio</div>
+      <div class="kpi-val">${food_cost_ratio}%</div>
+      <div class="kpi-sub">${isHealthyFoodCost ? "Optimal (<35%)" : isModerateFoodCost ? "Moderate (35-45%)" : "High Alert (>45%)"}</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-lbl">Store Deficit Budget</div>
+      <div class="kpi-val" style="color:#be123c">${fmt(storeShortfallBudget)}</div>
+      <div class="kpi-sub">${lowStockItems.length} low-stock items</div>
+    </div>
+  </div>
+
+  <!-- Main Report Content -->
+  <div class="body-content">
+    ${salesCatHTML}
+    ${categorizedStockHTML}
+    ${lowStockHTML}
+    ${trendHTML}
+  </div>
+
+  <!-- Audit Footer -->
+  <div class="footer-bar">
+    <div><strong>Report ID:</strong> KSE-${Date.now()} &nbsp;|&nbsp; <strong>Shop:</strong> ${shopTitle}</div>
+    <div style="font-weight:700">Internal Operational Audit — Confidential</div>
+    <div>${now}</div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 400);
+    };
+  <\/script>
+</body>
+</html>`;
+
+        const win = window.open("", "_blank", "width=1000,height=750");
+        if (!win) {
+            alert("Please allow popups to open the printable PDF report.");
+            return;
+        }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+    };
+
     if (isLoading && !analytics) {
         return (
             <div className="space-y-6 animate-pulse">
@@ -160,24 +547,36 @@ export function StockOverviewTab({
                             </span>
                         )}
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setShowFilters((v) => !v)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
-                            showFilters || activeFilterCount > 0
-                                ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-200"
-                                : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
-                        }`}
-                    >
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                        <span>{showFilters ? "Hide Filters" : "Show Filters"}</span>
-                        {activeFilterCount > 0 && (
-                            <span className="bg-white text-amber-700 rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center">
-                                {activeFilterCount}
-                            </span>
-                        )}
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showFilters ? "rotate-180" : ""}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            id="executive-pdf-export-btn"
+                            type="button"
+                            onClick={generatePDF}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold transition-all shadow-xs"
+                            title="Print / Save Executive PDF Report"
+                        >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>PDF</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowFilters((v) => !v)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                                showFilters || activeFilterCount > 0
+                                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-amber-200"
+                                    : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                            }`}
+                        >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                            <span>{showFilters ? "Hide Filters" : "Show Filters"}</span>
+                            {activeFilterCount > 0 && (
+                                <span className="bg-white text-amber-700 rounded-full w-4 h-4 text-[10px] font-black flex items-center justify-center">
+                                    {activeFilterCount}
+                                </span>
+                            )}
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showFilters ? "rotate-180" : ""}`} />
+                        </button>
+                    </div>
                 </div>
 
                 {showFilters && (
@@ -298,7 +697,7 @@ export function StockOverviewTab({
             </div>
 
             {/* Executive Financial KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                 {/* Sales Revenue */}
                 <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs flex flex-col justify-between">
                     <div className="flex items-center justify-between text-zinc-500 mb-2">
@@ -331,12 +730,30 @@ export function StockOverviewTab({
                     </div>
                 </div>
 
+                {/* Restock Cost (Cooked Items) */}
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/30 shadow-xs flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-amber-800 mb-2">
+                        <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-900">Restock Needed</span>
+                        <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                            <RotateCcw className="w-4 h-4" />
+                        </div>
+                    </div>
+                    <div>
+                        <div className="text-xl sm:text-2xl font-extrabold text-amber-900 break-words">
+                            {formatCurrency(analytics?.total_restock_cost_used ?? total_stock_consumed)}
+                        </div>
+                        <div className="text-xs text-amber-700/80 mt-1 flex items-center gap-1 font-medium">
+                            <span>Qty Used × Buying Price</span>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Net Kitchen Margin */}
                 <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs flex flex-col justify-between">
                     <div className="flex items-center justify-between text-zinc-500 mb-2">
                         <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Net Kitchen Margin</span>
                         <div
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${gross_kitchen_margin >= 0 ? "bg-blue-50 text-blue-600" : "bg-rose-50 text-rose-600"
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${gross_kitchen_margin >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                                 }`}
                         >
                             {gross_kitchen_margin >= 0 ? (
@@ -379,7 +796,7 @@ export function StockOverviewTab({
                                 {isHealthyFoodCost ? "Optimal (<35%)" : isModerateFoodCost ? "Moderate" : "High Alert"}
                             </span>
                         </div>
-                        <div className="text-xs text-zinc-500 mt-1">% of revenue spent on ingredients</div>
+                        <div className="text-xs text-zinc-500 mt-1">% spent on ingredients</div>
                     </div>
                 </div>
             </div>
@@ -569,12 +986,148 @@ export function StockOverviewTab({
                 </div>
             </div>
 
+            {/* Sales by Menu Category & Restock Overview Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                {/* Sales by Menu Category */}
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 className="text-sm sm:text-base font-bold text-zinc-900">Sales by Menu Category</h3>
+                                <p className="text-xs text-zinc-500">POS orders categorized by food & drink menu sections</p>
+                            </div>
+                            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                                <ShoppingBag className="w-4 h-4" />
+                            </div>
+                        </div>
+
+                        {analytics?.sales_category_breakdown && analytics.sales_category_breakdown.length > 0 ? (
+                            <div className="divide-y divide-zinc-100 max-h-[340px] overflow-y-auto pr-1">
+                                {analytics.sales_category_breakdown.map((sc) => {
+                                    const isExpanded = !!expandedCategories[sc.category];
+                                    const itemsToDisplay = isExpanded ? (sc.items || []) : (sc.items || []).slice(0, 3);
+                                    const hasMore = (sc.items || []).length > 3;
+
+                                    return (
+                                        <div key={sc.category} className="py-2.5 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="font-bold text-zinc-900">{sc.category}</span>
+                                                    <div className="text-[11px] text-zinc-500 mt-0.5">
+                                                        {sc.items_count} {sc.items_count === 1 ? "item" : "items"} · {sc.total_qty} sold
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="font-bold text-emerald-700">{formatCurrency(sc.total_sales)}</span>
+                                                    <span className="block text-[10px] text-zinc-400 font-medium">{sc.percentage}% share</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Itemized dishes sold in this category (top 3 peek + expand) */}
+                                            {sc.items && sc.items.length > 0 && (
+                                                <div className="mt-2 pl-2.5 border-l-2 border-emerald-400/80 space-y-1 bg-emerald-50/40 py-1.5 px-2 rounded-r-md">
+                                                    {itemsToDisplay.map((it) => (
+                                                        <div key={it.name} className="flex items-center justify-between text-[11px]">
+                                                            <span className="font-medium text-zinc-700 truncate pr-2">
+                                                                {it.name} <span className="text-zinc-400 font-normal">({it.qty} {it.unit})</span>
+                                                            </span>
+                                                            <span className="font-bold text-zinc-900 shrink-0">{formatCurrency(it.total_price)}</span>
+                                                        </div>
+                                                    ))}
+                                                    {hasMore && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleCategory(sc.category)}
+                                                            className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline pt-0.5 block"
+                                                        >
+                                                            {isExpanded ? "Show less" : `+ ${sc.items.length - 3} more items`}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="py-8 text-center text-zinc-400 text-xs">
+                                No sales recorded in this timeframe.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-100 mt-3 flex items-center justify-between text-xs font-semibold">
+                        <span className="text-zinc-600">Total Period Sales:</span>
+                        <span className="text-emerald-700 font-bold">{formatCurrency(total_sales_revenue)}</span>
+                    </div>
+                </div>
+
+                {/* Restock Budget & Low Stock Alerts */}
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 className="text-sm sm:text-base font-bold text-zinc-900">Restock Requirements</h3>
+                                <p className="text-xs text-zinc-500">Replenishment cost of consumed ingredients & safety store alerts</p>
+                            </div>
+                            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                                <RotateCcw className="w-4 h-4" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 pt-1">
+                            <div className="p-3 rounded-lg bg-amber-50/60 border border-amber-200/70 flex items-center justify-between text-xs">
+                                <div>
+                                    <span className="font-bold text-amber-900 block">Ingredients Consumed Restock</span>
+                                    <span className="text-[11px] text-amber-700">Cost to replace everything cooked in period</span>
+                                </div>
+                                <span className="text-sm font-extrabold text-amber-900">
+                                    {formatCurrency(analytics?.total_restock_cost_used ?? total_stock_consumed)}
+                                </span>
+                            </div>
+
+                            {/* Low Stock Items preview */}
+                            {(stocks || []).filter((s) => s.min_threshold > 0 && s.current_quantity < s.min_threshold).length > 0 ? (
+                                <div className="p-3 rounded-lg bg-rose-50/70 border border-rose-200 flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2">
+                                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                                        <div>
+                                            <span className="font-bold text-rose-900 block">
+                                                {(stocks || []).filter((s) => s.min_threshold > 0 && s.current_quantity < s.min_threshold).length} Items Low on Store Stock
+                                            </span>
+                                            <span className="text-[11px] text-rose-700">Below minimum safety threshold</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={onNavigateToStore}
+                                        className="px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors shadow-xs"
+                                    >
+                                        Restock Store
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 font-medium">
+                                    <span>✅ All ingredients in store are above minimum threshold levels.</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-zinc-100 mt-3 flex items-center justify-between text-xs font-semibold">
+                        <span className="text-zinc-600">Store Threshold Deficit Budget:</span>
+                        <span className="text-rose-700 font-bold">
+                            {formatCurrency(analytics?.store_restock_budget_needed ?? (stocks || []).filter(s => s.min_threshold > 0 && s.current_quantity < s.min_threshold).reduce((sum, s) => sum + Math.max(0, s.min_threshold - s.current_quantity) * (s.unit_cost || 0), 0))}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             {/* Top Consumed Items Card / Table */}
             <div className="bg-white p-4 sm:p-5 rounded-xl border border-zinc-200 shadow-xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                     <div>
-                        <h3 className="text-sm sm:text-base font-bold text-zinc-900">Highest Consumed Raw Materials</h3>
-                        <p className="text-xs text-zinc-500">Top ingredients used in kitchen cooking for this timeframe</p>
+                        <h3 className="text-sm sm:text-base font-bold text-zinc-900">Highest Consumed Raw Materials & Restock Cost</h3>
+                        <p className="text-xs text-zinc-500">Top ingredients used in cooking with calculated replenishment cost (Qty Used × Unit Cost)</p>
                     </div>
                     <button
                         onClick={onNavigateToIssues}
@@ -593,6 +1146,7 @@ export function StockOverviewTab({
                                     total_stock_consumed > 0
                                         ? Math.round((item.total_cost / total_stock_consumed) * 100)
                                         : 0;
+                                const unitCost = item.total_qty > 0 ? item.total_cost / item.total_qty : 0;
 
                                 return (
                                     <div key={item.item_name} className="py-2.5 flex items-center justify-between text-xs">
@@ -602,11 +1156,11 @@ export function StockOverviewTab({
                                                 <span>{item.item_name}</span>
                                             </div>
                                             <div className="text-zinc-500 mt-0.5">
-                                                Used: {item.total_qty} {item.unit}
+                                                Used: {item.total_qty} {item.unit} @ {formatCurrency(unitCost)}/{item.unit}
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="font-bold text-zinc-900">{formatCurrency(item.total_cost)}</div>
+                                            <div className="font-bold text-amber-900">{formatCurrency(item.total_cost)}</div>
                                             <span className="inline-block px-1.5 py-0.2 rounded-full bg-zinc-100 text-[10px] font-semibold text-zinc-600 mt-0.5">
                                                 {pct}% share
                                             </span>
@@ -623,7 +1177,8 @@ export function StockOverviewTab({
                                     <tr>
                                         <th className="py-2.5 px-3 font-semibold">Ingredient</th>
                                         <th className="py-2.5 px-3 font-semibold">Total Quantity Used</th>
-                                        <th className="py-2.5 px-3 font-semibold">Total Cost Incurred</th>
+                                        <th className="py-2.5 px-3 font-semibold">Buying Unit Cost</th>
+                                        <th className="py-2.5 px-3 font-semibold text-amber-900">Restock Cost (Used)</th>
                                         <th className="py-2.5 px-3 font-semibold text-right">Cost Share</th>
                                     </tr>
                                 </thead>
@@ -633,6 +1188,7 @@ export function StockOverviewTab({
                                             total_stock_consumed > 0
                                                 ? Math.round((item.total_cost / total_stock_consumed) * 100)
                                                 : 0;
+                                        const unitCost = item.total_qty > 0 ? item.total_cost / item.total_qty : 0;
 
                                         return (
                                             <tr key={item.item_name} className="hover:bg-zinc-50/60">
@@ -643,7 +1199,10 @@ export function StockOverviewTab({
                                                 <td className="py-2.5 px-3 text-zinc-700">
                                                     {item.total_qty} {item.unit}
                                                 </td>
-                                                <td className="py-2.5 px-3 font-semibold text-zinc-900">
+                                                <td className="py-2.5 px-3 text-zinc-500">
+                                                    {formatCurrency(unitCost)} / {item.unit}
+                                                </td>
+                                                <td className="py-2.5 px-3 font-bold text-amber-900">
                                                     {formatCurrency(item.total_cost)}
                                                 </td>
                                                 <td className="py-2.5 px-3 text-right">

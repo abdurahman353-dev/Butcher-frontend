@@ -26,6 +26,7 @@ import {
     ArrowLeft,
     ChevronDown,
     Info,
+    FileText,
 } from "lucide-react";
 
 export default function RestaurantStockPage() {
@@ -222,8 +223,21 @@ export default function RestaurantStockPage() {
                     </div>
                 </div>
 
-                {/* Global Controls: Refresh */}
+                {/* Global Controls: Refresh & PDF Export */}
                 <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto justify-end">
+                    <button
+                        onClick={() => {
+                            const btn = document.getElementById("executive-pdf-export-btn");
+                            if (btn) {
+                                btn.click();
+                            }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0 cursor-pointer"
+                        title="Print / Save Executive Stock & Expenses PDF"
+                    >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>PDF</span>
+                    </button>
                     <button
                         onClick={() => loadData(true)}
                         disabled={isRefreshing || isLoading}
@@ -315,6 +329,7 @@ export default function RestaurantStockPage() {
                 {activeTab === "overview" && (
                     <StockOverviewTab
                         analytics={analytics}
+                        stocks={stocks}
                         isLoading={isLoading}
                         period={period}
                         onPeriodChange={setPeriod}
