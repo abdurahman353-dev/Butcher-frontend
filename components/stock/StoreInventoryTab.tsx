@@ -46,19 +46,6 @@ const STOCK_CATEGORIES = [
     "General Kitchen Supplies",
 ];
 
-const PRESET_INGREDIENTS = [
-    { name: "Wheat Flour (Baking)", cat: "Flour & Grains", unit: "KG", cost: 180 },
-    { name: "Pishori Rice", cat: "Flour & Grains", unit: "KG", cost: 240 },
-    { name: "Cooking Oil (Vegetable)", cat: "Cooking Oil & Fats", unit: "LITRE", cost: 280 },
-    { name: "Irish Potatoes (Warua)", cat: "Vegetables & Produce", unit: "KG", cost: 90 },
-    { name: "Red Onions", cat: "Vegetables & Produce", unit: "KG", cost: 110 },
-    { name: "Tomatoes (Fresh)", cat: "Vegetables & Produce", unit: "KG", cost: 120 },
-    { name: "Fresh Milk", cat: "Dairy & Eggs", unit: "LITRE", cost: 70 },
-    { name: "Kitchen Cuts Beef", cat: "Meat & Poultry", unit: "KG", cost: 650 },
-    { name: "White Sugar", cat: "Spices & Seasoning", unit: "KG", cost: 150 },
-    { name: "Pilau Masala & Spices", cat: "Spices & Seasoning", unit: "KG", cost: 450 },
-];
-
 export function StoreInventoryTab({
     stocks,
     isLoading,
@@ -67,6 +54,14 @@ export function StoreInventoryTab({
     onDeleteStock,
     onIssueQuick,
 }: StoreInventoryTabProps) {
+    // Dynamic real-time categories from existing inventory
+    const availableCategories = Array.from(
+        new Set([
+            ...stocks.map((s) => s.category).filter(Boolean),
+            ...STOCK_CATEGORIES.filter((c) => c !== "All Categories"),
+        ])
+    );
+
     // Modal states
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingStock, setEditingStock] = useState<RestaurantStockItem | null>(null);
@@ -105,16 +100,13 @@ export function StoreInventoryTab({
         }
     };
 
-    // Form State for Add / Edit
+    // Form State for Add / Edit — strictly NO hardcodes, no autofilling
     const [itemName, setItemName] = useState("");
-    const [category, setCategory] = useState("Flour & Grains");
+    const [category, setCategory] = useState("");
     const [quantity, setQuantity] = useState("");
-    const [unit, setUnit] = useState("KG");
+    const [unit, setUnit] = useState("");
     const [unitCost, setUnitCost] = useState("");
-    const [minThreshold, setMinThreshold] = useState("5");
-    const [supplier, setSupplier] = useState("");
-    const [paymentMethod, setPaymentMethod] = useState<"cash" | "mpesa" | "bank" | "credit">("cash");
-    const [invoiceNumber, setInvoiceNumber] = useState("");
+    const [minThreshold, setMinThreshold] = useState("");
     const [notes, setNotes] = useState("");
 
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -122,14 +114,11 @@ export function StoreInventoryTab({
 
     const resetForm = () => {
         setItemName("");
-        setCategory("Flour & Grains");
+        setCategory("");
         setQuantity("");
-        setUnit("KG");
+        setUnit("");
         setUnitCost("");
-        setMinThreshold("5");
-        setSupplier("");
-        setPaymentMethod("cash");
-        setInvoiceNumber("");
+        setMinThreshold("");
         setNotes("");
         setFormError(null);
     };
@@ -146,19 +135,9 @@ export function StoreInventoryTab({
         setQuantity(String(stock.current_quantity));
         setUnit(stock.unit);
         setUnitCost(String(stock.unit_cost));
-        setMinThreshold(String(stock.min_threshold));
-        setSupplier(stock.supplier || "");
-        setPaymentMethod((stock.payment_method as "cash" | "mpesa" | "bank" | "credit") || "cash");
-        setInvoiceNumber(stock.invoice_number || "");
+        setMinThreshold(stock.min_threshold ? String(stock.min_threshold) : "");
         setNotes(stock.notes || "");
         setFormError(null);
-    };
-
-    const handleSelectPreset = (preset: typeof PRESET_INGREDIENTS[0]) => {
-        setItemName(preset.name);
-        setCategory(preset.cat);
-        setUnit(preset.unit);
-        setUnitCost(String(preset.cost));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -167,13 +146,21 @@ export function StoreInventoryTab({
             setFormError("Ingredient item name is required.");
             return;
         }
+        if (!category.trim()) {
+            setFormError("Please select a category.");
+            return;
+        }
+        if (!unit.trim()) {
+            setFormError("Please select a measurement unit.");
+            return;
+        }
 
         const qty = parseFloat(quantity);
         const cost = parseFloat(unitCost);
-        const min = parseFloat(minThreshold);
+        const min = minThreshold.trim() ? parseFloat(minThreshold) : 0;
 
         if (isNaN(qty) || qty < 0) {
-            setFormError("Quantity must be a valid number (0 or greater).");
+            setFormError("Store quantity must be a valid number (0 or greater).");
             return;
         }
         if (isNaN(cost) || cost < 0) {
@@ -188,15 +175,12 @@ export function StoreInventoryTab({
             if (editingStock) {
                 await onUpdateStock(editingStock.id, {
                     item_name: itemName.trim(),
-                    category,
+                    category: category.trim(),
                     quantity: qty,
                     current_quantity: qty,
-                    unit,
+                    unit: unit.trim().toUpperCase(),
                     unit_cost: cost,
-                    min_threshold: isNaN(min) ? 5 : min,
-                    supplier: supplier.trim() || undefined,
-                    payment_method: paymentMethod,
-                    invoice_number: invoiceNumber.trim() || undefined,
+                    min_threshold: isNaN(min) ? 0 : min,
                     notes: notes.trim() || undefined,
                 });
                 setEditingStock(null);
@@ -204,14 +188,11 @@ export function StoreInventoryTab({
             } else {
                 await onAddStock({
                     item_name: itemName.trim(),
-                    category,
+                    category: category.trim(),
                     quantity: qty,
-                    unit,
+                    unit: unit.trim().toUpperCase(),
                     unit_cost: cost,
-                    min_threshold: isNaN(min) ? 5 : min,
-                    supplier: supplier.trim() || undefined,
-                    payment_method: paymentMethod,
-                    invoice_number: invoiceNumber.trim() || undefined,
+                    min_threshold: isNaN(min) ? 0 : min,
                     notes: notes.trim() || undefined,
                 });
                 setIsAddModalOpen(false);
@@ -807,27 +788,6 @@ export function StoreInventoryTab({
                                 </div>
                             )}
 
-                            {/* Quick Preset Buttons (for new additions) */}
-                            {!editingStock && (
-                                <div>
-                                    <label className="block text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">
-                                        Quick Preset Ingredients
-                                    </label>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {PRESET_INGREDIENTS.map((item) => (
-                                            <button
-                                                key={item.name}
-                                                type="button"
-                                                onClick={() => handleSelectPreset(item)}
-                                                className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-100 hover:bg-amber-100 hover:text-amber-900 text-zinc-600 transition-colors"
-                                            >
-                                                + {item.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Item Name */}
                             <div>
                                 <label className="block text-xs font-semibold text-zinc-700 mb-1">
@@ -837,7 +797,7 @@ export function StoreInventoryTab({
                                     type="text"
                                     value={itemName}
                                     onChange={(e) => setItemName(e.target.value)}
-                                    placeholder="e.g. Wheat Flour (Exe / Baking), Cooking Oil"
+                                    placeholder="Enter raw material or ingredient name..."
                                     required
                                     className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                                 />
@@ -852,9 +812,13 @@ export function StoreInventoryTab({
                                     <select
                                         value={category}
                                         onChange={(e) => setCategory(e.target.value)}
+                                        required
                                         className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                                     >
-                                        {STOCK_CATEGORIES.filter((c) => c !== "All Categories").map((c) => (
+                                        <option value="" disabled>
+                                            Select Category *
+                                        </option>
+                                        {availableCategories.map((c) => (
                                             <option key={c} value={c}>
                                                 {c}
                                             </option>
@@ -869,8 +833,12 @@ export function StoreInventoryTab({
                                     <select
                                         value={unit}
                                         onChange={(e) => setUnit(e.target.value)}
+                                        required
                                         className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                                     >
+                                        <option value="" disabled>
+                                            Select Measurement Unit *
+                                        </option>
                                         <option value="KG">Kilogram (KG)</option>
                                         <option value="LITRE">Litre (L)</option>
                                         <option value="BAG">Bag / Sack (50KG/90KG)</option>
@@ -886,7 +854,7 @@ export function StoreInventoryTab({
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Store Quantity ({unit}) *
+                                        Store Quantity {unit ? `(${unit})` : ""} *
                                     </label>
                                     <input
                                         type="number"
@@ -894,7 +862,7 @@ export function StoreInventoryTab({
                                         min="0"
                                         value={quantity}
                                         onChange={(e) => setQuantity(e.target.value)}
-                                        placeholder="e.g. 50"
+                                        placeholder="Enter quantity"
                                         required
                                         className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                                     />
@@ -902,7 +870,7 @@ export function StoreInventoryTab({
 
                                 <div>
                                     <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Unit Cost (KSh per {unit}) *
+                                        Unit Cost {unit ? `(KSh per ${unit})` : "(KSh)"} *
                                     </label>
                                     <input
                                         type="number"
@@ -910,7 +878,7 @@ export function StoreInventoryTab({
                                         min="0"
                                         value={unitCost}
                                         onChange={(e) => setUnitCost(e.target.value)}
-                                        placeholder="e.g. 180"
+                                        placeholder="Enter cost per unit"
                                         required
                                         className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                                     />
@@ -925,66 +893,20 @@ export function StoreInventoryTab({
                                 </div>
                             )}
 
-                            {/* Low Stock Threshold & Supplier */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Low Stock Alert Level ({unit})
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.001"
-                                        value={minThreshold}
-                                        onChange={(e) => setMinThreshold(e.target.value)}
-                                        placeholder="e.g. 5"
-                                        className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Supplier / Source
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={supplier}
-                                        onChange={(e) => setSupplier(e.target.value)}
-                                        placeholder="e.g. Unga Limited, Wakulima"
-                                        className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Payment Method & Invoice */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Payment Method
-                                    </label>
-                                    <select
-                                        value={paymentMethod}
-                                        onChange={(e) => setPaymentMethod(e.target.value as any)}
-                                        className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
-                                    >
-                                        <option value="cash">Cash (Register Drawer)</option>
-                                        <option value="mpesa">M-Pesa Till / Paybill</option>
-                                        <option value="bank">Bank Transfer</option>
-                                        <option value="credit">Supplier Credit / Payable</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-semibold text-zinc-700 mb-1">
-                                        Invoice / Receipt #
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={invoiceNumber}
-                                        onChange={(e) => setInvoiceNumber(e.target.value)}
-                                        placeholder="e.g. INV-9842"
-                                        className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                                    />
-                                </div>
+                            {/* Low Stock Alert Level */}
+                            <div>
+                                <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                                    Low Stock Alert Level {unit ? `(${unit})` : ""}
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.001"
+                                    min="0"
+                                    value={minThreshold}
+                                    onChange={(e) => setMinThreshold(e.target.value)}
+                                    placeholder="Enter alert threshold (leave blank if none)"
+                                    className="w-full text-xs px-3 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                />
                             </div>
 
                             {/* Notes */}

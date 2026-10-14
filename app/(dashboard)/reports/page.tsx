@@ -69,6 +69,7 @@ export default function ReportsPage() {
   const [categoryPage, setCategoryPage] = useState(1);
   const [cashierPage, setCashierPage] = useState(1);
   const [wastagePage, setWastagePage] = useState(1);
+  const [creditLedgerPage, setCreditLedgerPage] = useState(1);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const CATEGORIES_PER_PAGE = 5;
@@ -143,6 +144,7 @@ export default function ReportsPage() {
     setCategoryPage(1);
     setCashierPage(1);
     setWastagePage(1);
+    setCreditLedgerPage(1);
   }, [startDate, endDate, paymentMethod, categoryId, cashierId]);
 
 
@@ -923,6 +925,147 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
           </div>
         </div>
       )}
+
+      {/* ── PAY LATER / CREDIT SALES — compact paginated ── */}
+      {(analytics?.pending_credit?.count ?? 0) > 0 && (() => {
+        const CREDIT_PER_PAGE = 5;
+        const allSales = analytics?.pending_credit?.sales ?? [];
+        const totalCreditPages = Math.max(1, Math.ceil(allSales.length / CREDIT_PER_PAGE));
+        const pagedSales = allSales.slice(
+          (creditLedgerPage - 1) * CREDIT_PER_PAGE,
+          creditLedgerPage * CREDIT_PER_PAGE
+        );
+        const allProducts = analytics?.pending_credit?.products ?? [];
+        const PRODUCT_CHIPS_MAX = 6;
+        return (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/40 overflow-hidden shadow-xs">
+            {/* ── Compact Header Row ── */}
+            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 border-b border-amber-100 bg-amber-50">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center shrink-0">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-amber-950">Pay Later / Credit</span>
+                  <span className="hidden sm:inline text-xs text-amber-700 ml-1.5">
+                    — stock taken, payment pending
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                  {analytics?.pending_credit?.count} unsettled
+                </span>
+                <span className="text-sm font-black text-amber-950">
+                  {formatCurrency(analytics?.pending_credit?.total ?? 0)}
+                </span>
+                <Link
+                  href="/sales?payment_status=pending"
+                  className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 underline underline-offset-2"
+                >
+                  View all →
+                </Link>
+              </div>
+            </div>
+
+            <div className="px-3.5 py-2.5 space-y-2.5">
+              {/* Product chips — what was given out */}
+              {allProducts.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider shrink-0">
+                    Given out:
+                  </span>
+                  {allProducts.slice(0, PRODUCT_CHIPS_MAX).map((prod: any, i: number) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[10px] font-semibold text-amber-900"
+                    >
+                      {prod.name}
+                      <span className="text-amber-500 font-bold">
+                        {(prod.unit || "KG").toUpperCase() === "KG"
+                          ? formatWeight(prod.qty)
+                          : `${prod.qty} ${prod.unit}`}
+                      </span>
+                    </span>
+                  ))}
+                  {allProducts.length > PRODUCT_CHIPS_MAX && (
+                    <span className="text-[10px] font-bold text-amber-600">
+                      +{allProducts.length - PRODUCT_CHIPS_MAX} more
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Paginated ledger rows */}
+              {pagedSales.length > 0 && (
+                <div className="space-y-1">
+                  {pagedSales.map((sale: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 px-2.5 py-1.5 bg-white border border-amber-100 rounded-xl"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-zinc-900">{sale.customer_name}</span>
+                        <span className="text-[10px] text-zinc-400 ml-1.5">
+                          {sale.sale_number} · {sale.date?.slice(0, 10)}
+                          {sale.table_number && ` · T${sale.table_number}`}
+                        </span>
+                        {sale.items?.length > 0 && (
+                          <span className="ml-1.5 text-[10px] text-amber-700 font-semibold">
+                            ({sale.items.map((it: any) => it.name).join(", ")})
+                          </span>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className="text-xs font-black text-amber-900">{formatCurrency(sale.total)}</span>
+                        <span className="block text-[9px] font-bold text-amber-500">0 KSh paid</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination row — only when > 5 records */}
+              {totalCreditPages > 1 && (
+                <div className="flex items-center justify-between pt-1 border-t border-amber-100">
+                  <span className="text-[10px] text-amber-700">
+                    {(creditLedgerPage - 1) * CREDIT_PER_PAGE + 1}–
+                    {Math.min(creditLedgerPage * CREDIT_PER_PAGE, allSales.length)} of {allSales.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setCreditLedgerPage((p) => Math.max(1, p - 1))}
+                      disabled={creditLedgerPage <= 1}
+                      className="p-1 rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <span className="text-[10px] font-bold text-amber-800 px-1">
+                      {creditLedgerPage}/{totalCreditPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCreditLedgerPage((p) => Math.min(totalCreditPages, p + 1))}
+                      disabled={creditLedgerPage >= totalCreditPages}
+                      className="p-1 rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                    <Link
+                      href="/sales?payment_status=pending"
+                      className="ml-1 text-[10px] font-bold text-amber-700 hover:text-amber-900 underline underline-offset-2"
+                    >
+                      View all
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
 
       {/* ── SALES TREND CHART & PAYMENT METHOD SPLIT ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">

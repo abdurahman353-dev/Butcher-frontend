@@ -19,6 +19,27 @@ export interface ReportAnalyticsData {
   pending_credit?: {
     total: number;
     count: number;
+    products?: Array<{
+      name: string;
+      unit: string;
+      qty: number;
+      amount: number;
+    }>;
+    sales?: Array<{
+      sale_id: number;
+      sale_number: string;
+      customer_name: string;
+      customer_phone?: string | null;
+      total: number;
+      date: string | null;
+      table_number?: string | null;
+      items: Array<{
+        name: string;
+        unit: string;
+        qty: number;
+        amount: number;
+      }>;
+    }>;
   };
   gross_profit: number;
   estimated_profit: number;
