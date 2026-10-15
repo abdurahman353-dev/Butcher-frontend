@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useShift } from "@/hooks/useShift";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useOutOfStock } from "@/hooks/useOutOfStock";
+import { useRestaurantLowStock } from "@/hooks/useRestaurantLowStock";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 interface NavItem {
@@ -45,6 +46,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
   const { isShiftOpen } = useShift();
   const { confirm } = useSystemDialog();
   const outOfStockCount = useOutOfStock();
+  const restaurantLowStockCount = useRestaurantLowStock();
   const { settings } = useShopSettings();
 
   const handleLogout = async () => {
@@ -120,7 +122,9 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
           const isActive = pathname === item.href;
           const Icon = item.icon;
           const isInventory = item.href === "/inventory";
-          const hasAlert = isInventory && outOfStockCount > 0;
+          const isStock = item.href === "/stock";
+          const hasAlert = (isInventory && outOfStockCount > 0) || (isStock && restaurantLowStockCount > 0);
+          const alertCount = isInventory ? outOfStockCount : isStock ? restaurantLowStockCount : 0;
 
           return (
             <Link
@@ -161,7 +165,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
                   <span className={`truncate ${hasAlert ? "font-semibold" : ""}`}>{item.name}</span>
                   {hasAlert && (
                     <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">
-                      {outOfStockCount > 99 ? "99+" : outOfStockCount}
+                      {alertCount > 99 ? "99+" : alertCount}
                     </span>
                   )}
                 </>

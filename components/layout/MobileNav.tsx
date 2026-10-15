@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { X, LayoutDashboard, ShoppingCart, Receipt, Package, Boxes, Users, BarChart3, Settings, Clock, LogOut, UtensilsCrossed } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOutOfStock } from "@/hooks/useOutOfStock";
+import { useRestaurantLowStock } from "@/hooks/useRestaurantLowStock";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 
 interface MobileNavProps {
@@ -17,6 +18,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const { user, isAdmin, isWaiter, logout } = useAuth();
   const outOfStockCount = useOutOfStock();
+  const restaurantLowStockCount = useRestaurantLowStock();
   const { settings } = useShopSettings();
 
   if (!isOpen) return null;
@@ -68,7 +70,9 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             const isInventory = item.href === "/inventory";
-            const hasAlert = isInventory && outOfStockCount > 0;
+            const isStock = item.href === "/stock";
+            const hasAlert = (isInventory && outOfStockCount > 0) || (isStock && restaurantLowStockCount > 0);
+            const alertCount = isInventory ? outOfStockCount : isStock ? restaurantLowStockCount : 0;
 
             return (
               <Link
@@ -94,7 +98,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 <span className={hasAlert ? "font-semibold" : ""}>{item.name}</span>
                 {hasAlert && (
                   <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold animate-pulse">
-                    {outOfStockCount > 99 ? "99+" : outOfStockCount}
+                    {alertCount > 99 ? "99+" : alertCount}
                   </span>
                 )}
               </Link>
