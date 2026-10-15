@@ -30,6 +30,7 @@ interface SplitBillModalProps {
 }
 
 interface SplitItemState {
+  item_key: string;
   product_id: number;
   product_name: string;
   original_weight: number;
@@ -54,7 +55,8 @@ export function SplitBillModal({
 
   useEffect(() => {
     if (bill && isOpen) {
-      const initial: SplitItemState[] = (bill.items || []).map((it) => ({
+      const initial: SplitItemState[] = (bill.items || []).map((it, idx) => ({
+        item_key: `${it.product_id}-${idx}`,
         product_id: it.product_id,
         product_name: it.product_name,
         original_weight: Number(it.weight) || 1,
@@ -72,20 +74,20 @@ export function SplitBillModal({
 
   if (!isOpen || !bill) return null;
 
-  const handleSetMovedWeight = (productId: number, val: number) => {
+  const handleSetMovedWeight = (itemKey: string, val: number) => {
     setSplitItems((prev) =>
       prev.map((it) => {
-        if (it.product_id !== productId) return it;
+        if (it.item_key !== itemKey) return it;
         const clamped = Math.max(0, Math.min(it.original_weight, Number(val) || 0));
         return { ...it, moved_weight: clamped };
       })
     );
   };
 
-  const handleAdjustStep = (productId: number, delta: number) => {
+  const handleAdjustStep = (itemKey: string, delta: number) => {
     setSplitItems((prev) =>
       prev.map((it) => {
-        if (it.product_id !== productId) return it;
+        if (it.item_key !== itemKey) return it;
         const isKg = it.unit?.toLowerCase().includes("kg");
         const step = isKg ? 0.25 : 1;
         const newVal = Math.round((it.moved_weight + delta * step) * 100) / 100;
@@ -95,15 +97,15 @@ export function SplitBillModal({
     );
   };
 
-  const handleMoveAll = (productId: number) => {
+  const handleMoveAll = (itemKey: string) => {
     setSplitItems((prev) =>
-      prev.map((it) => (it.product_id === productId ? { ...it, moved_weight: it.original_weight } : it))
+      prev.map((it) => (it.item_key === itemKey ? { ...it, moved_weight: it.original_weight } : it))
     );
   };
 
-  const handleKeepAll = (productId: number) => {
+  const handleKeepAll = (itemKey: string) => {
     setSplitItems((prev) =>
-      prev.map((it) => (it.product_id === productId ? { ...it, moved_weight: 0 } : it))
+      prev.map((it) => (it.item_key === itemKey ? { ...it, moved_weight: 0 } : it))
     );
   };
 
@@ -247,7 +249,7 @@ export function SplitBillModal({
 
                   return (
                     <div
-                      key={item.product_id}
+                      key={item.item_key}
                       className={`p-3.5 rounded-xl border-2 transition-all ${
                         item.moved_weight > 0
                           ? "bg-indigo-50/40 border-indigo-300 shadow-xs"
@@ -286,7 +288,7 @@ export function SplitBillModal({
                         <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
                           <button
                             type="button"
-                            onClick={() => handleAdjustStep(item.product_id, -1)}
+                            onClick={() => handleAdjustStep(item.item_key, -1)}
                             disabled={item.moved_weight <= 0}
                             className="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all shadow-xs cursor-pointer"
                             title="Decrease portion"
@@ -300,13 +302,13 @@ export function SplitBillModal({
                             min="0"
                             max={item.original_weight}
                             value={item.moved_weight}
-                            onChange={(e) => handleSetMovedWeight(item.product_id, Number(e.target.value))}
+                            onChange={(e) => handleSetMovedWeight(item.item_key, Number(e.target.value))}
                             className="w-16 h-8 text-center font-black font-mono text-sm bg-white border-2 border-zinc-300 focus:border-zinc-900 rounded-lg outline-none shadow-inner"
                           />
 
                           <button
                             type="button"
-                            onClick={() => handleAdjustStep(item.product_id, 1)}
+                            onClick={() => handleAdjustStep(item.item_key, 1)}
                             disabled={item.moved_weight >= item.original_weight}
                             className="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed flex items-center justify-center text-white transition-all shadow-xs cursor-pointer"
                             title="Increase portion"
@@ -318,8 +320,8 @@ export function SplitBillModal({
                             type="button"
                             onClick={() =>
                               item.moved_weight === item.original_weight
-                                ? handleKeepAll(item.product_id)
-                                : handleMoveAll(item.product_id)
+                                ? handleKeepAll(item.item_key)
+                                : handleMoveAll(item.item_key)
                             }
                             className={`h-8 px-3 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer ${
                               item.moved_weight === item.original_weight
@@ -408,7 +410,7 @@ export function SplitBillModal({
 
                     return (
                       <div
-                        key={it.product_id}
+                        key={it.item_key}
                         className="p-3 rounded-xl bg-indigo-50/70 border-2 border-indigo-200 flex items-center justify-between shadow-xs transition-all"
                       >
                         <div className="min-w-0 pr-2">
@@ -425,7 +427,7 @@ export function SplitBillModal({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleKeepAll(it.product_id)}
+                            onClick={() => handleKeepAll(it.item_key)}
                             className="w-7 h-7 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 flex items-center justify-center transition-all cursor-pointer active:scale-95"
                             title="Remove from Bill 2"
                           >
