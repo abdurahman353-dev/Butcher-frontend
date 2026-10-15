@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { RestaurantStockItem, CreateStockPayload } from "@/types";
 import { formatCurrency, formatDateTime } from "@/lib/formatters";
 import {
@@ -18,6 +18,9 @@ import {
     ChevronRight,
     ArrowUp,
     ArrowDown,
+    Plus,
+    Minus,
+    CheckCircle2,
     SlidersHorizontal,
     ChevronDown,
 } from "lucide-react";
@@ -79,26 +82,56 @@ export function StoreInventoryTab({
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 10;
 
-    // Inline quick-adjust (increment / dispense)
-    const [adjustTarget, setAdjustTarget] = useState<{ id: number; mode: "increment" | "dispense" } | null>(null);
+    // Quick-adjust modal state (fixed overlay — never clips table)
+    const [adjustTarget, setAdjustTarget] = useState<{ stock: RestaurantStockItem; mode: "increment" | "dispense" } | null>(null);
     const [adjustQty, setAdjustQty] = useState("");
     const [isAdjusting, setIsAdjusting] = useState(false);
+    const [flashSuccess, setFlashSuccess] = useState<number | null>(null);
+    const [optimisticQty, setOptimisticQty] = useState<Record<number, number>>({});
+    const adjustInputRef = useRef<HTMLInputElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
 
-    const handleQuickAdjust = async (stock: RestaurantStockItem) => {
-        const delta = parseFloat(adjustQty);
-        if (isNaN(delta) || delta <= 0) return;
-        const newQty = adjustTarget?.mode === "increment"
+    const openAdjust = (stock: RestaurantStockItem, mode: "increment" | "dispense") => {
+        setAdjustTarget({ stock, mode });
+        setAdjustQty("");
+        setTimeout(() => adjustInputRef.current?.focus(), 80);
+    };
+    const closeAdjust = () => { setAdjustTarget(null); setAdjustQty(""); };
+
+    // Close on Escape key
+    useEffect(() => {
+        if (!adjustTarget) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeAdjust(); };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+    }, [adjustTarget]);
+
+    const applyAdjust = async (stock: RestaurantStockItem, delta: number, mode: "increment" | "dispense") => {
+        if (delta <= 0) return;
+        const newQty = mode === "increment"
             ? stock.current_quantity + delta
             : Math.max(0, stock.current_quantity - delta);
+        setOptimisticQty((prev) => ({ ...prev, [stock.id]: newQty }));
+        closeAdjust();
         try {
             setIsAdjusting(true);
             await onUpdateStock(stock.id, { current_quantity: newQty });
-            setAdjustTarget(null);
-            setAdjustQty("");
+            setFlashSuccess(stock.id);
+            setTimeout(() => setFlashSuccess(null), 1500);
+        } catch {
+            setOptimisticQty((prev) => { const next = { ...prev }; delete next[stock.id]; return next; });
         } finally {
             setIsAdjusting(false);
         }
     };
+
+    const handleQuickAdjust = async () => {
+        if (!adjustTarget) return;
+        const delta = parseFloat(adjustQty);
+        if (isNaN(delta) || delta <= 0) return;
+        await applyAdjust(adjustTarget.stock, delta, adjustTarget.mode);
+    };
+
 
     // Form State for Add / Edit — strictly NO hardcodes, no autofilling
     const [itemName, setItemName] = useState("");
@@ -517,57 +550,27 @@ export function StoreInventoryTab({
                                         <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-100">
                                             <button
                                                 onClick={() => onIssueQuick(stock.id)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                                             >
                                                 <UtensilsCrossed className="w-3.5 h-3.5" />
                                                 Issue
                                             </button>
 
-                                            <div className="flex items-center gap-1.5">
-                                                {/* Inline adjust row */}
-                                                {adjustTarget?.id === stock.id ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <input
-                                                            autoFocus
-                                                            type="number"
-                                                            min="0.001"
-                                                            step="0.001"
-                                                            value={adjustQty}
-                                                            onChange={(e) => setAdjustQty(e.target.value)}
-                                                            placeholder="qty"
-                                                            className="w-16 text-xs px-2 py-1 border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-400"
-                                                        />
-                                                        <button
-                                                            onClick={() => handleQuickAdjust(stock)}
-                                                            disabled={isAdjusting}
-                                                            className={`px-2 py-1 text-white text-xs font-bold rounded-md transition-colors disabled:opacity-50 ${
-                                                                adjustTarget.mode === "increment" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
-                                                            }`}
-                                                        >
-                                                            {isAdjusting ? "..." : "OK"}
-                                                        </button>
-                                                        <button onClick={() => { setAdjustTarget(null); setAdjustQty(""); }} className="text-zinc-400 hover:text-zinc-600">
-                                                            <X className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <button
-                                                            onClick={() => { setAdjustTarget({ id: stock.id, mode: "increment" }); setAdjustQty(""); }}
-                                                            className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-md transition-colors"
-                                                            title="Add / Increment stock"
-                                                        >
-                                                            <ArrowUp className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { setAdjustTarget({ id: stock.id, mode: "dispense" }); setAdjustQty(""); }}
-                                                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-colors"
-                                                            title="Dispense / Reduce stock"
-                                                        >
-                                                            <ArrowDown className="w-4 h-4" />
-                                                        </button>
-                                                    </>
-                                                )}
+                                            <div className="relative flex items-center gap-1.5">
+                                                 {/* Add / Reduce buttons — modal opens fixed above table */}
+                                                <button
+                                                    onClick={() => openAdjust(stock, "increment")}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition-all active:scale-95"
+                                                >
+                                                    <Plus className="w-3 h-3" /> Add
+                                                </button>
+                                                <button
+                                                    onClick={() => openAdjust(stock, "dispense")}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 transition-all active:scale-95"
+                                                >
+                                                    <Minus className="w-3 h-3" /> Reduce
+                                                </button>
+
                                                 <button
                                                     onClick={() => handleOpenEditModal(stock)}
                                                     className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
@@ -606,11 +609,15 @@ export function StoreInventoryTab({
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100">
                                     {pagedStocks.map((stock) => {
-                                        const isLow = stock.current_quantity <= stock.min_threshold;
-                                        const valuation = stock.current_quantity * stock.unit_cost;
+                                        const displayQty = optimisticQty[stock.id] ?? stock.current_quantity;
+                                        const isLow = displayQty <= stock.min_threshold && stock.min_threshold > 0;
+                                        const valuation = displayQty * stock.unit_cost;
+                                        const isFlashing = flashSuccess === stock.id;
 
                                         return (
-                                            <tr key={stock.id} className="hover:bg-zinc-50/70">
+                                            <tr key={stock.id} className={`transition-colors duration-300 ${
+                                                isFlashing ? "bg-emerald-50" : "hover:bg-zinc-50/70"
+                                            }`}>
                                                 <td className="py-3 px-3 font-bold text-zinc-900 flex items-center gap-2">
                                                     <span
                                                         className={`w-2 h-2 rounded-full ${isLow ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
@@ -621,10 +628,12 @@ export function StoreInventoryTab({
                                                 <td className="py-3 px-3 text-zinc-600">{stock.category}</td>
                                                 <td className="py-3 px-3">
                                                     <span
-                                                        className={`font-bold ${isLow ? "text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full" : "text-zinc-900"
-                                                            }`}
+                                                        className={`font-bold transition-colors duration-300 ${
+                                                            isFlashing ? "text-emerald-700" : isLow ? "text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full" : "text-zinc-900"
+                                                        }`}
                                                     >
-                                                        {stock.current_quantity} {stock.unit}
+                                                        {isFlashing && <CheckCircle2 className="w-3 h-3 inline mr-1 text-emerald-500" />}
+                                                        {displayQty} {stock.unit}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-3 text-zinc-700 font-medium">
@@ -648,51 +657,23 @@ export function StoreInventoryTab({
                                                         Issue
                                                     </button>
 
-                                                    {/* Inline adjust */}
-                                                    {adjustTarget?.id === stock.id ? (
-                                                        <span className="inline-flex items-center gap-1 mr-1">
-                                                            <input
-                                                                autoFocus
-                                                                type="number"
-                                                                min="0.001"
-                                                                step="0.001"
-                                                                value={adjustQty}
-                                                                onChange={(e) => setAdjustQty(e.target.value)}
-                                                                onKeyDown={(e) => { if (e.key === "Enter") handleQuickAdjust(stock); if (e.key === "Escape") { setAdjustTarget(null); setAdjustQty(""); } }}
-                                                                placeholder="qty"
-                                                                className="w-14 text-xs px-1.5 py-0.5 border border-zinc-300 rounded focus:outline-none focus:ring-1 focus:ring-amber-400"
-                                                            />
-                                                            <button
-                                                                onClick={() => handleQuickAdjust(stock)}
-                                                                disabled={isAdjusting}
-                                                                className={`px-2 py-0.5 text-white text-xs font-bold rounded transition-colors disabled:opacity-50 ${
-                                                                    adjustTarget.mode === "increment" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
-                                                                }`}
-                                                            >
-                                                                {isAdjusting ? "..." : "OK"}
-                                                            </button>
-                                                            <button onClick={() => { setAdjustTarget(null); setAdjustQty(""); }} className="text-zinc-400 hover:text-zinc-600">
-                                                                <X className="w-3 h-3" />
-                                                            </button>
-                                                        </span>
-                                                    ) : (
-                                                        <>
-                                                            <button
-                                                                onClick={() => { setAdjustTarget({ id: stock.id, mode: "increment" }); setAdjustQty(""); }}
-                                                                className="text-emerald-600 hover:text-emerald-800 p-1 transition-colors"
-                                                                title="Add / Increment quantity"
-                                                            >
-                                                                <ArrowUp className="w-3.5 h-3.5 inline" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => { setAdjustTarget({ id: stock.id, mode: "dispense" }); setAdjustQty(""); }}
-                                                                className="text-rose-600 hover:text-rose-800 p-1 mr-1 transition-colors"
-                                                                title="Dispense / Reduce quantity"
-                                                            >
-                                                                <ArrowDown className="w-3.5 h-3.5 inline" />
-                                                            </button>
-                                                        </>
-                                                    )}
+                                                    {/* Quick-adjust — opens fixed modal */}
+                                                    <div className="inline-flex items-center gap-0.5 mr-1">
+                                                        <button
+                                                            onClick={() => openAdjust(stock, "increment")}
+                                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded text-[11px] font-semibold border border-emerald-200 transition-all active:scale-90"
+                                                            title="Add stock"
+                                                        >
+                                                            <Plus className="w-3 h-3" />Add
+                                                        </button>
+                                                        <button
+                                                            onClick={() => openAdjust(stock, "dispense")}
+                                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded text-[11px] font-semibold border border-rose-200 transition-all active:scale-90"
+                                                            title="Reduce / Dispense"
+                                                        >
+                                                            <Minus className="w-3 h-3" />Reduce
+                                                        </button>
+                                                    </div>
 
                                                     <button
                                                         onClick={() => handleOpenEditModal(stock)}
@@ -943,6 +924,66 @@ export function StoreInventoryTab({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* ── Fixed Adjust Modal ── never clips table */}
+            {adjustTarget && (
+                <div
+                    className="fixed inset-0 z-[999] flex items-center justify-center p-4"
+                    style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+                    onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdjust(); }}
+                >
+                    <div
+                        ref={popoverRef}
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-5"
+                        style={{ animation: "fadeSlideDown 0.18s ease-out" }}
+                    >
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-4">
+                            <div>
+                                <div className="font-bold text-zinc-900 text-sm">{adjustTarget.stock.item_name}</div>
+                                <div className="text-xs text-zinc-500 mt-0.5">
+                                    Current stock: <span className="font-semibold text-zinc-700">
+                                        {optimisticQty[adjustTarget.stock.id] ?? adjustTarget.stock.current_quantity} {adjustTarget.stock.unit}
+                                    </span>
+                                </div>
+                            </div>
+                            <button onClick={closeAdjust} className="text-zinc-400 hover:text-zinc-600 ml-3 mt-0.5">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Mode label */}
+                        <div className={`text-[11px] font-bold uppercase tracking-wider mb-3 ${
+                            adjustTarget.mode === "increment" ? "text-emerald-600" : "text-rose-600"
+                        }`}>
+                            {adjustTarget.mode === "increment" ? "+ Add Quantity" : "− Reduce / Dispense"}
+                        </div>
+
+                        {/* Input row */}
+                        <div className="flex gap-2">
+                            <input
+                                ref={adjustInputRef}
+                                type="number"
+                                min="0.001"
+                                step="0.001"
+                                value={adjustQty}
+                                onChange={(e) => setAdjustQty(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleQuickAdjust(); }}
+                                placeholder={`Enter ${adjustTarget.stock.unit}`}
+                                className="flex-1 text-sm px-3 py-2 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                            <button
+                                onClick={handleQuickAdjust}
+                                disabled={isAdjusting || !adjustQty}
+                                className={`px-4 py-2 text-white text-sm font-bold rounded-xl transition-all disabled:opacity-40 active:scale-95 ${
+                                    adjustTarget.mode === "increment" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+                                }`}
+                            >
+                                {isAdjusting ? "..." : "✓"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
