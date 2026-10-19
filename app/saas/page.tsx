@@ -731,13 +731,7 @@ export default function SaasPortalPage() {
               </p>
             </div>
 
-            <button
-              onClick={() => handleEnterCompany(openMenu.company)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
-            >
-              <Activity className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Enter Organisation POS</span>
-            </button>
+
 
             <button
               onClick={() => handleToggleBlock(openMenu.company)}
@@ -1377,24 +1371,7 @@ export default function SaasPortalPage() {
 
                           <td className="py-3 pr-4 pl-3 text-right">
                             <div className="inline-flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleEnterCompany(company)}
-                                disabled={isEntering || !company.is_active}
-                                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs active:scale-95 ${
-                                  !company.is_active
-                                    ? "bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200"
-                                    : "bg-green-600 hover:bg-green-700 text-white"
-                                }`}
-                                title={!company.is_active ? "Organisation is suspended/blocked" : `Directly enter ${company.name} POS`}
-                              >
-                                {isEntering ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Activity className="w-3.5 h-3.5" />
-                                )}
-                                <span>Enter POS</span>
-                              </button>
+
 
                               <button
                                 type="button"
@@ -1625,53 +1602,13 @@ export default function SaasPortalPage() {
                   Save these credentials for the business owner — the password will not be shown again.
                 </p>
 
-                {/* Direct Action: Direct user to the specific saved organisation */}
-                <div className="space-y-2 pt-1">
-                  <button
-                    onClick={async () => {
-                      const cid = successInfo.companyId;
-                      closeCreate();
-                      try {
-                        await saasService.enterCompany(cid);
-                        await refresh();
-                        showToast(`Switched into "${successInfo.company}"! Launching POS...`, "success");
-                        router.push("/pos");
-                      } catch (err: any) {
-                        showToast(err?.message || "Failed to switch context", "error");
-                      }
-                    }}
-                    className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2 active:scale-95"
-                  >
-                    <Activity className="w-4 h-4" />
-                    <span>Launch & Enter {successInfo.company} POS Now</span>
-                  </button>
+                <button
+                  onClick={closeCreate}
+                  className="w-full py-1.5 text-zinc-500 hover:text-zinc-800 text-xs font-semibold text-center"
+                >
+                  Done (Stay in SaaS Control Center)
+                </button>
 
-                  <button
-                    onClick={async () => {
-                      const cid = successInfo.companyId;
-                      closeCreate();
-                      try {
-                        await saasService.enterCompany(cid);
-                        await refresh();
-                        showToast(`Switched into "${successInfo.company}"! Loading Dashboard...`, "success");
-                        router.push("/");
-                      } catch (err: any) {
-                        showToast(err?.message || "Failed to switch context", "error");
-                      }
-                    }}
-                    className="w-full py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 border border-zinc-200"
-                  >
-                    <Building2 className="w-3.5 h-3.5 text-zinc-600" />
-                    <span>Enter Organisation Dashboard</span>
-                  </button>
-
-                  <button
-                    onClick={closeCreate}
-                    className="w-full py-1.5 text-zinc-500 hover:text-zinc-800 text-xs font-semibold text-center"
-                  >
-                    Done (Stay in SaaS Control Center)
-                  </button>
-                </div>
               </div>
             ) : (
               <form onSubmit={handleCreate} className="p-4 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto">
