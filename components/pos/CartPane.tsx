@@ -139,13 +139,13 @@ export function CartPane({
   return (
     <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none w-full max-w-full min-w-0 overflow-x-hidden">
       {/* Header with Hold Order & Parked Bills */}
-      <div className="px-4 py-3 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
+      <div className="px-3.5 py-2 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
         <div>
-          <h2 className="text-sm font-bold text-zinc-900 flex items-center gap-1.5">
-            <ShoppingBag className="w-4 h-4 text-green-600" />
+          <h2 className="text-sm sm:text-base font-black text-zinc-950 flex items-center gap-1.5">
+            <ShoppingBag className="w-4 h-4 text-emerald-600" />
             {isRestaurant ? "Table Order" : "Current Order"}
           </h2>
-          <span className="text-[11px] text-zinc-500">
+          <span className="text-[11px] font-bold text-zinc-600">
             {items.length} {isRestaurant
               ? `item${items.length !== 1 ? "s" : ""}`
               : `cut${items.length !== 1 ? "s" : ""}`}
@@ -155,29 +155,28 @@ export function CartPane({
           </span>
         </div>
 
-        {/* Action badges: Held Orders, Hold Current, Clear — hidden when order is saved/locked */}
+        {/* Action badges: Held Orders, Hold Current, Clear */}
         <div className="flex items-center gap-1.5">
           {onOpenHeldOrders && (
             <button
               type="button"
               onClick={onOpenHeldOrders}
               title="View held & parked bills"
-              className={`h-7 px-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${heldCount > 0
-                  ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold"
-                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-600 border border-zinc-200"
+              className={`h-7 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-2xs ${heldCount > 0
+                  ? "bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200"
                 }`}
             >
-              <Clock className="w-3 h-3 text-amber-700" />
+              <Clock className="w-3.5 h-3.5 text-amber-700" />
               <span>Held</span>
               {heldCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-bold">
+                <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[10px] flex items-center justify-center font-black">
                   {heldCount}
                 </span>
               )}
             </button>
           )}
 
-          {/* Hide Hold / New / Clear when order is saved — items are locked */}
           {!(activeBill && !hasUnsavedOrder) && (
             <>
               {items.length > 0 && onHoldOrder && (
@@ -185,9 +184,9 @@ export function CartPane({
                   type="button"
                   onClick={onHoldOrder}
                   title="Save/Hold this order and create a new bill"
-                  className="h-7 px-2 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-amber-100 text-zinc-700 hover:text-amber-800 border border-zinc-200 flex items-center gap-1 transition-colors"
+                  className="h-7 px-2 rounded-lg text-xs font-bold bg-zinc-100 hover:bg-amber-100 text-zinc-700 hover:text-amber-900 border border-zinc-200 flex items-center gap-1 transition-colors"
                 >
-                  <PauseCircle className="w-3 h-3 text-amber-600" />
+                  <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
                   <span>Hold</span>
                 </button>
               )}
@@ -197,9 +196,9 @@ export function CartPane({
                   type="button"
                   onClick={onNewBill}
                   title="Start a new blank bill"
-                  className="h-7 px-2 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center gap-1 transition-colors"
+                  className="h-7 px-2 rounded-lg text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 flex items-center gap-1 transition-colors"
                 >
-                  <PlusCircle className="w-3 h-3" />
+                  <PlusCircle className="w-3.5 h-3.5 text-zinc-600" />
                   <span>New</span>
                 </button>
               )}
@@ -209,9 +208,9 @@ export function CartPane({
                   type="button"
                   onClick={handleClearClick}
                   title="Clear cart"
-                  className="h-7 px-1.5 text-xs text-zinc-400 hover:text-red-600 transition-colors rounded hover:bg-red-50"
+                  className="h-7 px-1.5 text-zinc-400 hover:text-red-600 transition-colors rounded hover:bg-red-50"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}
             </>
@@ -220,51 +219,46 @@ export function CartPane({
       </div>
 
       {/* Customer Selector & Unpaid Bills Pill */}
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-zinc-50 border-b border-zinc-100 shrink-0 space-y-2 w-full min-w-0 overflow-visible relative z-20">
+      <div className="px-3 py-2 bg-zinc-50 border-b border-zinc-200 shrink-0 space-y-1.5 w-full min-w-0 overflow-visible relative z-20">
         {activeBill && (
-          <div className="p-2 sm:p-2.5 bg-white border border-zinc-200 rounded-xl flex items-center justify-between gap-1.5 shadow-xs w-full min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {/* Table number badge \u2014 same green pill as image 1 */}
-              <div className="w-9 h-9 rounded-xl bg-zinc-900 text-white font-mono font-black text-base flex items-center justify-center shrink-0">
-                {activeBill.table_number}
-              </div>
-              <div className="min-w-0 leading-tight">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-black text-xs text-zinc-900">Table {activeBill.table_number}</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-zinc-100 border border-zinc-300 text-zinc-950 font-mono font-black tracking-tight shadow-2xs">
+          <div className="p-2.5 bg-white border border-zinc-200 rounded-xl space-y-2 shadow-2xs w-full">
+            {/* Row 1: Table & Waiter Info (never crowded, never overlaps) */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-zinc-950 text-white font-mono font-black text-xs flex items-center justify-center shrink-0">
+                  {activeBill.table_number}
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-black text-xs sm:text-sm text-zinc-950 whitespace-nowrap">Table {activeBill.table_number}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-zinc-900 font-mono font-bold whitespace-nowrap">
                     {activeBill.id === 0 ? "New Bill" : activeBill.bill_number}
                   </span>
                 </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5 truncate">
-                  Waiter: <span className="font-semibold text-zinc-700">{activeBill.waiter_name || "Staff"}{activeBill.waiter_pin ? ` (#${activeBill.waiter_pin})` : ""}</span>
-                  {activeBill.customer_name && (
-                    <span className="font-bold text-emerald-800 ml-1">{" \u2022 "}{activeBill.customer_name}</span>
-                  )}
-                </div>
+              </div>
+
+              <div className="text-[11px] text-zinc-600 font-semibold truncate text-right">
+                <span className="font-bold text-zinc-900">{activeBill.waiter_name || "Staff"}{activeBill.waiter_pin ? ` (#${activeBill.waiter_pin})` : ""}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            {/* Row 2: Generous Long & Thick Touch Buttons — No Text Overlap */}
+            <div className="grid grid-cols-3 gap-2">
               {onManageTableBills && (
                 <button
                   type="button"
                   onClick={onManageTableBills}
                   disabled={isSavingOrder}
-                  className={`shrink-0 h-7 px-3 rounded-lg text-[11px] font-bold text-white transition-all shadow-sm flex items-center gap-1 ${
+                  className={`col-span-2 h-9 sm:h-10 px-3 rounded-xl text-xs sm:text-sm font-black text-white transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95 ${
                     isSavingOrder
                       ? "bg-zinc-400 cursor-not-allowed opacity-60 pointer-events-none"
-                      : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95"
+                      : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800"
                   }`}
-                  title={
-                    isSavingOrder
-                      ? "Saving order in progress..."
-                      : `View all bills or create a new bill on Table ${activeBill.table_number}`
-                  }
+                  title={`View all bills or create a new bill on Table ${activeBill.table_number}`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4 shrink-0" strokeWidth={3} />
                   <span>New Bill</span>
                   {activeTable?.active_bills && activeTable.active_bills.length > 1 && (
-                    <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-emerald-800 text-white text-[9px] font-black">
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-800 text-white text-[10px] font-black">
                       {activeTable.active_bills.length}
                     </span>
                   )}
@@ -276,14 +270,14 @@ export function CartPane({
                   type="button"
                   onClick={handleExitSession}
                   disabled={isSavingOrder}
-                  className={`shrink-0 h-7 px-3 rounded-lg text-[11px] font-bold text-white transition-all shadow-sm ${
+                  className={`col-span-1 h-9 sm:h-10 px-3 rounded-xl text-xs sm:text-sm font-black text-white transition-all shadow-xs active:scale-95 flex items-center justify-center ${
                     isSavingOrder
                       ? "bg-zinc-400 cursor-not-allowed opacity-60 pointer-events-none"
-                      : "bg-red-600 hover:bg-red-700 active:bg-red-800 active:scale-95"
+                      : "bg-red-600 hover:bg-red-700 active:bg-red-800"
                   }`}
-                  title={isSavingOrder ? "Saving order in progress..." : "Exit Table Session"}
+                  title="Exit Table Session"
                 >
-                  {isSavingOrder ? "Saving..." : "Exit"}
+                  Exit
                 </button>
               )}
             </div>
@@ -292,33 +286,29 @@ export function CartPane({
 
         {/* Customer row + floating dropdown */}
         <div className="relative min-w-0 w-full">
-          <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0 w-full">
-            <span className="text-xs sm:text-sm text-zinc-500 shrink-0 font-semibold">Customer:</span>
-            <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end flex-wrap">
+          <div className="flex items-center justify-between gap-1.5 min-w-0 w-full">
+            <span className="text-xs text-zinc-800 shrink-0 font-bold">Customer:</span>
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
               {selectedCustomer ? (
-                <div className="flex items-center gap-1 min-w-0 max-w-[160px] xs:max-w-[200px] sm:max-w-xs bg-white border border-green-300 px-2 py-0.5 rounded-lg text-xs">
-                  <span className="font-bold text-green-800 truncate" title={selectedCustomer.name}>
+                <div className="flex items-center gap-1 min-w-0 max-w-[140px] xs:max-w-[180px] bg-white border border-emerald-400 px-2 py-0.5 rounded-lg text-xs shadow-2xs">
+                  <span className="font-bold text-emerald-900 truncate" title={selectedCustomer.name}>
                     {selectedCustomer.name}
                   </span>
-                  {selectedCustomer.phone && (
-                    <span className="text-[10px] text-zinc-400 font-mono hidden md:inline">({selectedCustomer.phone})</span>
-                  )}
                   {onEditCustomer && (
                     <button
                       type="button"
                       onClick={() => onEditCustomer(selectedCustomer)}
                       title="Edit customer details"
-                      className="px-1.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[9px] font-black shrink-0 flex items-center gap-0.5 transition-all cursor-pointer"
+                      className="px-1 py-0.2 rounded bg-emerald-600 text-white text-[9px] font-black shrink-0"
                     >
                       <Pencil className="w-2.5 h-2.5" />
-                      <span>Edit</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => onSelectCustomer(null)}
-                    title="Remove customer (switch to Walk-in)"
-                    className="text-zinc-400 hover:text-red-600 p-0.5 shrink-0 transition-colors cursor-pointer"
+                    title="Remove customer"
+                    className="text-zinc-400 hover:text-red-600 p-0.5 shrink-0"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -327,10 +317,10 @@ export function CartPane({
               <button
                 type="button"
                 onClick={() => setShowCustomerSelect(!showCustomerSelect)}
-                className="text-xs font-bold text-white bg-green-600 hover:bg-green-700 flex items-center gap-1 transition-colors px-2.5 py-1 rounded-lg border border-green-700 active:scale-95 shrink-0 cursor-pointer"
+                className="h-7 px-2.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1 shadow-2xs active:scale-95 shrink-0"
               >
-                <span>{selectedCustomer ? "Change" : "Walk-in Customer"}</span>
-                <UserPlus className="w-3.5 h-3.5" />
+                <span>{selectedCustomer ? "Change" : "Walk-in"}</span>
+                <UserPlus className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -491,7 +481,7 @@ export function CartPane({
       </div>{/* end Customer Selector & Unpaid Bills Pill */}
 
       {/* Cart Items */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-50/50">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-zinc-50/50">
         {items.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400">
             <span className="text-3xl mb-2 opacity-40">{isRestaurant ? "🍽️" : "🥩"}</span>
@@ -522,15 +512,16 @@ export function CartPane({
               onUpdateDiscount={onUpdateDiscount}
               onRemove={onRemoveItem}
               readOnly={isSavingOrder || Boolean(item.is_saved)}
+              canDiscount={!isWaiter}
             />
           ))
         )}
       </div>
 
       {/* Totals + Actions */}
-      <div className="p-4 border-t border-zinc-200 bg-white shrink-0 space-y-3">
-        <div className="space-y-1.5 text-sm">
-          <div className="flex justify-between text-zinc-500">
+      <div className="px-3.5 py-2.5 border-t border-zinc-200 bg-white shrink-0 space-y-2 shadow-2xs">
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between text-zinc-700 font-bold text-sm sm:text-base">
             <span>
               Subtotal
               {isRestaurant
@@ -538,19 +529,19 @@ export function CartPane({
                 : ` (${formatWeight(totalWeight)})`}
               :
             </span>
-            <span className="font-medium text-zinc-800 tabular-nums">{formatCurrency(subtotal)}</span>
+            <span className="font-black text-zinc-950 tabular-nums text-base sm:text-lg">{formatCurrency(subtotal)}</span>
           </div>
 
           {totalDiscount > 0 && (
-            <div className="flex justify-between text-amber-600 font-medium">
+            <div className="flex justify-between text-amber-700 font-bold text-sm">
               <span>Discount:</span>
-              <span className="tabular-nums">-{formatCurrency(totalDiscount)}</span>
+              <span className="tabular-nums font-black">-{formatCurrency(totalDiscount)}</span>
             </div>
           )}
 
-          <div className="pt-2 border-t border-zinc-100 flex items-baseline justify-between">
-            <span className="text-sm font-bold text-zinc-700 uppercase tracking-wide">Total</span>
-            <span className="text-2xl font-black text-zinc-900 tabular-nums">
+          <div className="pt-2.5 border-t-2 border-zinc-200 flex items-baseline justify-between">
+            <span className="text-base sm:text-lg font-black text-zinc-900 uppercase tracking-wide">Total</span>
+            <span className="text-2xl sm:text-3xl font-black text-emerald-700 tabular-nums">
               {formatCurrency(total)}
             </span>
           </div>

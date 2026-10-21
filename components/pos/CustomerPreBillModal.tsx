@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { RestaurantBill, RestaurantBillItem } from "@/types";
-import { formatCurrency, formatDateTime } from "@/lib/formatters";
+import { formatCurrency, formatDateTime, formatUnitLabel } from "@/lib/formatters";
 import { Printer, X, Receipt, Loader2 } from "lucide-react";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { useSystemDialog } from "@/contexts/DialogContext";
@@ -187,7 +187,7 @@ export function CustomerPreBillModal({
                   </div>
                   <div className="flex justify-between text-[11px] text-zinc-700">
                     <span>
-                      {item.weight} {item.unit || "Pc"} x {formatCurrency(item.price_per_kg)}/{item.unit || "Pc"}
+                      {item.weight} {formatUnitLabel(item.unit)} x {formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}
                     </span>
                     {itemDiscount > 0 && (
                       <span className="text-zinc-600 font-bold">

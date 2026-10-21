@@ -298,6 +298,7 @@ export default function PosPage() {
   };
 
   const handleUpdateDiscount = (id: string, discount: number) => {
+    if (user?.role === "waiter") return;
     updateDiscount(id, discount);
     if (activeBill) {
       setHasUnsavedOrder(true);

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Sale } from "@/types";
-import { formatCurrency, formatWeight } from "@/lib/formatters";
+import { formatCurrency, formatWeight, formatUnitLabel } from "@/lib/formatters";
 import {
   X,
   Clock,
@@ -209,9 +209,9 @@ export function UnpaidOrdersPickerModal({
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-bold text-zinc-900 truncate">{item.product_name}</div>
                             <div className="text-xs text-zinc-500 flex items-center gap-2 mt-0.5">
-                              <span>{formatWeight(Number(item.weight))}</span>
+                              <span>{formatWeight(Number(item.weight), item.unit)}</span>
                               <span className="text-zinc-300">•</span>
-                              <span>{formatCurrency(Number(item.price_per_kg))}/kg</span>
+                              <span>{formatCurrency(Number(item.price_per_kg))}/{formatUnitLabel(item.unit)}</span>
                               {item.discount && Number(item.discount) > 0 && (
                                 <>
                                   <span className="text-zinc-300">•</span>
