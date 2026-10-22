@@ -41,6 +41,7 @@ export function CartItemRow({
     "GLASS",
     "UNIT",
     "BOX",
+    "TRIP",
   ].includes((item.unit || "").toUpperCase());
 
   const stepDelta = isCountable ? 1 : 0.25;

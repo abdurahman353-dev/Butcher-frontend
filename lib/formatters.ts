@@ -24,7 +24,7 @@ export function formatWeight(weight: number | string | null | undefined, unit: s
     return `0 ${formatUnitLabel(u)}`;
   }
 
-  const isWholeUnit = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS", "UNIT", "BOX"].includes(u);
+  const isWholeUnit = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS", "UNIT", "BOX", "TRIP"].includes(u);
   if (isWholeUnit) {
     const formatted = Number.isInteger(num) ? num.toString() : num.toFixed(2);
     if (u === "PACK") return `${formatted} ${num === 1 ? "Pack" : "Packs"}`;
@@ -36,6 +36,7 @@ export function formatWeight(weight: number | string | null | undefined, unit: s
     if (u === "BOWL") return `${formatted} ${num === 1 ? "Bowl" : "Bowls"}`;
     if (u === "GLASS") return `${formatted} ${num === 1 ? "Glass" : "Glasses"}`;
     if (u === "BOX") return `${formatted} ${num === 1 ? "Box" : "Boxes"}`;
+    if (u === "TRIP") return `${formatted} ${num === 1 ? "Trip" : "Trips"}`;
     return `${formatted} ${u}`;
   }
 
@@ -58,6 +59,7 @@ export function formatUnitLabel(unit: string = "KG"): string {
   if (u === "BOWL") return "Bowl";
   if (u === "GLASS") return "Glass";
   if (u === "BOX") return "Box";
+  if (u === "TRIP") return "Trip";
   return "KG";
 }
 

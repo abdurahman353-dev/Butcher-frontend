@@ -853,6 +853,7 @@ export default function ProductsPage() {
                     <option value="SHOT">SHOT</option>
                     <option value="BOWL">BOWL</option>
                     <option value="BOX">BOX</option>
+                    <option value="TRIP">TRIP</option>
                     <option value="PCS">PCS (Pieces)</option>
                     <option value="PACK">PACK (Package)</option>
                     <option value="KG">KG (Weight)</option>
@@ -1191,6 +1192,7 @@ export default function ProductsPage() {
                                     <option value="SHOT">SHOT</option>
                                     <option value="BOWL">BOWL</option>
                                     <option value="BOX">BOX</option>
+                                    <option value="TRIP">TRIP</option>
                                     <option value="PACK">PACK</option>
                                     <option value="PCS">PCS</option>
                                     <option value="KG">KG</option>

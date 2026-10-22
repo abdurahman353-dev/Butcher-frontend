@@ -31,6 +31,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
       BOWL: "/ bowl",
       GLASS: "/ glass",
       BOX: "/ box",
+      TRIP: "/ trip",
     };
     return map[u] || `/${u.toLowerCase()}`;
   })();
