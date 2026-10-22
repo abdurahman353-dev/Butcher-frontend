@@ -29,14 +29,14 @@ export function WeightInput({
   const { user } = useAuth();
   const isRestaurant = (user?.company?.business_type ?? "") === "restaurant";
 
-  const COUNTABLE_UNITS = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS"];
+  const COUNTABLE_UNITS = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS", "BOX"];
   const unitUp = (unit || "KG").toUpperCase();
   const isCountable = COUNTABLE_UNITS.includes(unitUp);
   const unitLabel = (() => {
     const labels: Record<string, string> = {
       KG: "KG", PACK: "Pack", PCS: "Pc",
       PLATE: "Plate", PORTION: "Portion", BOTTLE: "Bottle",
-      CUP: "Cup", BOWL: "Bowl", GLASS: "Glass",
+      CUP: "Cup", BOWL: "Bowl", GLASS: "Glass", BOX: "Box",
     };
     return labels[unitUp] ?? unitUp;
   })();
@@ -44,7 +44,7 @@ export function WeightInput({
     const labels: Record<string, string> = {
       KG: "KG", PACK: "Packs", PCS: "Pcs",
       PLATE: "Plates", PORTION: "Portions", BOTTLE: "Bottles",
-      CUP: "Cups", BOWL: "Bowls", GLASS: "Glasses",
+      CUP: "Cups", BOWL: "Bowls", GLASS: "Glasses", BOX: "Boxes",
     };
     return labels[unitUp] ?? `${unitUp}s`;
   })();

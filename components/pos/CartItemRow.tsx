@@ -40,6 +40,7 @@ export function CartItemRow({
     "BOWL",
     "GLASS",
     "UNIT",
+    "BOX",
   ].includes((item.unit || "").toUpperCase());
 
   const stepDelta = isCountable ? 1 : 0.25;

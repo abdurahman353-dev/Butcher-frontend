@@ -91,7 +91,7 @@ export interface Product {
   buying_cost_per_kg?: number;
   image?: string;
   is_active: boolean;
-  unit: "KG" | "PACK" | "PCS" | "PLATE" | "PORTION" | "BOTTLE" | "CUP" | "BOWL" | "GLASS" | string;
+  unit: "KG" | "PACK" | "PCS" | "PLATE" | "PORTION" | "BOTTLE" | "CUP" | "BOWL" | "GLASS" | "BOX" | string;
   created_at?: string;
   updated_at?: string;
 }

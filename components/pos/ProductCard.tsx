@@ -30,6 +30,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
       CUP: "/ cup",
       BOWL: "/ bowl",
       GLASS: "/ glass",
+      BOX: "/ box",
     };
     return map[u] || `/${u.toLowerCase()}`;
   })();
