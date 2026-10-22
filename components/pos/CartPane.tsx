@@ -6,6 +6,7 @@ import { formatCurrency, formatWeight } from "@/lib/formatters";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { useAuth } from "@/hooks/useAuth";
 import { CartItemRow } from "./CartItemRow";
+import { CustomerPickerModal } from "./CustomerPickerModal";
 import {
   ShoppingBag,
   Trash2,
@@ -102,6 +103,7 @@ export function CartPane({
   const { user } = useAuth();
   const isWaiter = user?.role === "waiter";
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
 
   const filteredCustomers = customers.filter((c) => {
@@ -137,6 +139,7 @@ export function CartPane({
   const totalWeighedKg = weighedItems.reduce((acc, it) => acc + it.weight, 0);
 
   return (
+    <>
     <div className="flex flex-col h-full bg-white border-l border-zinc-200 select-none w-full max-w-full min-w-0 overflow-x-hidden">
       {/* Header with Hold Order & Parked Bills */}
       <div className="px-3.5 py-2 border-b border-zinc-200 flex items-center justify-between bg-white shrink-0">
@@ -316,7 +319,7 @@ export function CartPane({
               ) : null}
               <button
                 type="button"
-                onClick={() => setShowCustomerSelect(!showCustomerSelect)}
+                onClick={() => setShowCustomerModal(true)}
                 className="h-7 px-2.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1 shadow-2xs active:scale-95 shrink-0"
               >
                 <span>{selectedCustomer ? "Change" : "Walk-in"}</span>
@@ -646,5 +649,18 @@ export function CartPane({
         )}
       </div>
     </div>
+
+    {/* Full-screen customer picker — opens when Walk-in button clicked */}
+    {showCustomerModal && (
+      <CustomerPickerModal
+        customers={customers}
+        selectedCustomer={selectedCustomer}
+        onSelect={onSelectCustomer}
+        onClose={() => setShowCustomerModal(false)}
+        onOpenAddCustomer={onOpenAddCustomer}
+        isWaiter={isWaiter}
+      />
+    )}
+    </>
   );
 }

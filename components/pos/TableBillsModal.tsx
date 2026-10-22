@@ -109,6 +109,7 @@ export function TableBillsModal({
   const [customerUpdateMessage, setCustomerUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const handleStartEditCustomer = (bill: RestaurantBill) => {
+    if (isWaiter) return;
     setEditingCustomerBill(bill);
     setEditCustName(bill.customer_name || "");
     setEditCustPhone(bill.customer_phone || "");
@@ -918,18 +919,20 @@ export function TableBillsModal({
                       <div>
                         <div className="flex items-center justify-between gap-1 mb-1">
                           <span className="text-zinc-700 block text-[10px] font-extrabold uppercase tracking-wider">Customer</span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEditCustomer(bill);
-                            }}
-                            className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black flex items-center gap-0.5 shadow-xs cursor-pointer"
-                            title="Edit or select new customer"
-                          >
-                            <Edit className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
+                          {!isWaiter && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEditCustomer(bill);
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black flex items-center gap-0.5 shadow-xs cursor-pointer"
+                              title="Edit or select new customer"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          )}
                         </div>
                         <strong className="text-zinc-950 font-black truncate block text-xs">
                           {bill.customer_name || "Walk-in Guest"}
@@ -1316,7 +1319,7 @@ export function TableBillsModal({
       )}
 
       {/* ── Change / Edit Customer Modal ── */}
-      {editingCustomerBill && (
+      {!isWaiter && editingCustomerBill && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-md flex flex-col overflow-hidden max-h-[90vh]">
             {/* Modal Header */}
