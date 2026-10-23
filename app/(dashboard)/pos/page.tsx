@@ -315,7 +315,9 @@ export default function PosPage() {
   const handleRemoveItem = (id: string) => {
     removeItem(id);
     if (activeBill) {
-      setHasUnsavedOrder(true);
+      const remaining = items.filter((it) => it.id !== id);
+      const hasUnsavedRemaining = remaining.some((it) => !it.is_saved);
+      setHasUnsavedOrder(hasUnsavedRemaining);
     }
   };
 
@@ -817,8 +819,9 @@ export default function PosPage() {
       return;
     }
 
-    // Block exiting if there are unsaved items: saving must be successful!
-    if (hasUnsavedOrder) {
+    // Block exiting if there are actually unsaved items in the cart
+    const unsavedItemsExist = items.length > 0 && (hasUnsavedOrder || items.some((it) => !it.is_saved));
+    if (unsavedItemsExist) {
       const confirmed = await confirm({
         title: "Unsaved Order Items",
         message: `You have unsaved items on Table ${activeBill.table_number}. Please save the order before exiting.`,
@@ -851,7 +854,8 @@ export default function PosPage() {
 
     if (!activeTable) return;
 
-    if (hasUnsavedOrder) {
+    const unsavedItemsExist = items.length > 0 && (hasUnsavedOrder || items.some((it) => !it.is_saved));
+    if (unsavedItemsExist) {
       const proceed = await confirm({
         title: "Unsaved Order on Current Bill",
         message: "You have unsaved items on this bill. Please save the order before managing or adding bills.",
