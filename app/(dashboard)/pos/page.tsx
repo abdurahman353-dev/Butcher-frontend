@@ -456,8 +456,7 @@ export default function PosPage() {
     });
   };
 
-  // Restaurant: Create a new bill on a table (instant, unique, and clean cart)
-  // Restaurant: Create a new bill on a table (creates in DB immediately so bill ID is guaranteed)
+  // Restaurant: Create a new bill on a table (instant 0ms transition, background creation)
   const handleCreateNewBill = async (
     table: RestaurantTable,
     payload: {
@@ -471,9 +470,55 @@ export default function PosPage() {
       notes?: string;
     }
   ) => {
-    try {
-      const createdBill = await restaurantService.createBill(table.id, {
-        waiter_name: payload.waiter_name || user?.name || "Staff",
+    const waiterNameToUse = payload.waiter_name || user?.name || "Staff";
+    const tempBill: RestaurantBill = {
+      id: 0,
+      table_id: table.id,
+      table_number: table.table_number,
+      bill_number: `B-${table.table_number}-...`,
+      waiter_name: waiterNameToUse,
+      waiter_pin: payload.waiter_pin,
+      cashier_name: user?.name || "Staff",
+      guest_count: payload.guest_count || 1,
+      customer_id: payload.customer_id,
+      customer_name: payload.customer_name,
+      customer_phone: payload.customer_phone,
+      customer_address: payload.customer_address,
+      notes: payload.notes,
+      status: "open",
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      discount: 0,
+      total: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // 1. 0ms INSTANT SWITCH TO MENU & DISHES
+    setIsTableModalOpen(false);
+    setSelectedTableForModal(null);
+    clearCart();
+    setSelectedCustomer(
+      payload.customer_name
+        ? {
+            id: payload.customer_id || 0,
+            name: payload.customer_name,
+            phone: payload.customer_phone || "",
+            address: payload.customer_address || "",
+            orders_count: 1,
+            total_spent: 0,
+            created_at: new Date().toISOString(),
+          }
+        : null
+    );
+    setHasUnsavedOrder(false);
+    handleOpenBillForOrdering(table, tempBill);
+
+    // 2. CREATE REAL BILL IN BACKGROUND
+    restaurantService
+      .createBill(table.id, {
+        waiter_name: waiterNameToUse,
         waiter_pin: payload.waiter_pin,
         guest_count: payload.guest_count || 1,
         customer_id: payload.customer_id,
@@ -481,60 +526,36 @@ export default function PosPage() {
         customer_phone: payload.customer_phone,
         customer_address: payload.customer_address,
         notes: payload.notes,
+      })
+      .then((createdBill) => {
+        // If user is currently on this table session, assign official bill ID and number seamlessly
+        if (activeTableRef.current?.id === table.id && (!activeBillRef.current || activeBillRef.current.id === 0)) {
+          activeBillRef.current = createdBill;
+          setActiveBill(createdBill);
+        }
+
+        setRestaurantTables((prev) =>
+          prev.map((t) =>
+            t.id === table.id
+              ? {
+                  ...t,
+                  status: "red" as const,
+                  active_bills: [createdBill, ...(t.active_bills?.filter((b) => b.id !== createdBill.id) || [])],
+                  active_bills_count: (t.active_bills_count || 0) + 1,
+                }
+              : t
+          )
+        );
+        fetchRestaurantTables(true);
+      })
+      .catch((e: any) => {
+        console.error("Create bill error:", e);
+        alert({
+          title: "Could Not Create Bill",
+          message: e?.response?.data?.message || e?.message || "Failed to create a new bill on this table.",
+          type: "danger",
+        });
       });
-
-      // Update local state with the newly created real bill
-      setRestaurantTables((prev) =>
-        prev.map((t) =>
-          t.id === table.id
-            ? {
-                ...t,
-                status: "red" as const,
-                active_bills: [createdBill, ...(t.active_bills?.filter((b) => b.id !== createdBill.id) || [])],
-                active_bills_count: (t.active_bills_count || 0) + 1,
-              }
-            : t
-        )
-      );
-
-      setSelectedTableForModal((prev) =>
-        prev && prev.id === table.id
-          ? {
-              ...prev,
-              status: "red" as const,
-              active_bills: [createdBill, ...(prev.active_bills?.filter((b) => b.id !== createdBill.id) || [])],
-              active_bills_count: (prev.active_bills_count || 0) + 1,
-            }
-          : prev
-      );
-
-      clearCart();
-      setSelectedCustomer(
-        payload.customer_name
-          ? {
-              id: payload.customer_id || 0,
-              name: payload.customer_name,
-              phone: payload.customer_phone || "",
-              address: payload.customer_address || "",
-              orders_count: 1,
-              total_spent: 0,
-              created_at: new Date().toISOString(),
-            }
-          : null
-      );
-      setHasUnsavedOrder(false);
-
-      handleOpenBillForOrdering(table, createdBill);
-      setIsTableModalOpen(false);
-      fetchRestaurantTables(true);
-    } catch (e: any) {
-      console.error("Create bill error:", e);
-      alert({
-        title: "Could Not Create Bill",
-        message: e?.response?.data?.message || e?.message || "Failed to create a new bill on this table.",
-        type: "danger",
-      });
-    }
   };
 
   // Restaurant: Update active bill when customer or bill details change
@@ -836,6 +857,32 @@ export default function PosPage() {
         // Saving failed or could not be completed; keep the user safely on the bill
         return;
       }
+    }
+
+    // Auto-cancel empty bill (0 items, KSh 0) so the table returns to empty instead of showing a ghost bill
+    const billIsEmpty =
+      activeBill.id > 0 &&
+      (!activeBill.items || activeBill.items.length === 0) &&
+      (activeBill.total === 0 || activeBill.total === undefined);
+
+    if (billIsEmpty) {
+      const emptyBillId = activeBill.id;
+      const emptyTableId = activeBill.table_id;
+      // Optimistically strip it from tables state NOW — before the screen renders the floor view
+      setRestaurantTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== emptyTableId) return t;
+          const remaining = (t.active_bills || []).filter((b) => b.id !== emptyBillId);
+          return {
+            ...t,
+            active_bills: remaining,
+            active_bills_count: remaining.length,
+            status: remaining.length === 0 ? ("grey" as const) : t.status,
+          };
+        })
+      );
+      // Cancel in background (no await — user never sees a spinner)
+      restaurantService.cancelBill(emptyBillId).catch(() => {});
     }
 
     handleCloseActiveBillSession();

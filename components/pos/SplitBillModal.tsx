@@ -8,7 +8,6 @@ import {
   Minus,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   User,
   Phone,
   RotateCcw,
@@ -51,7 +50,6 @@ export function SplitBillModal({
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [splitNotes, setSplitNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (bill && isOpen) {
@@ -134,7 +132,7 @@ export function SplitBillModal({
   const hasAnyRemaining = splitItems.some((it) => it.original_weight - it.moved_weight > 0.0001);
   const isValidSplit = hasAnyMoved && hasAnyRemaining;
 
-  const handleSubmitSplit = async (e: React.FormEvent) => {
+  const handleSubmitSplit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!hasAnyMoved) {
@@ -155,32 +153,37 @@ export function SplitBillModal({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const payloadItems = movedItemsList.map((it) => ({
-        product_id: it.product_id,
-        quantity: it.moved_weight,
-      }));
+    const payloadItems = movedItemsList.map((it) => ({
+      product_id: it.product_id,
+      quantity: it.moved_weight,
+    }));
 
-      const res = await restaurantService.splitBill(bill.id, {
+    const capturedBill = bill;
+    const capturedName = newCustomerName.trim();
+    const capturedPhone = newCustomerPhone.trim();
+    const capturedNotes = splitNotes.trim();
+
+    // 0ms instant: close modal immediately, run API in background
+    onClose();
+
+    restaurantService
+      .splitBill(capturedBill.id, {
         items: payloadItems,
-        customer_name: newCustomerName.trim() || undefined,
-        customer_phone: newCustomerPhone.trim() || undefined,
-        notes: splitNotes.trim() || undefined,
+        customer_name: capturedName || undefined,
+        customer_phone: capturedPhone || undefined,
+        notes: capturedNotes || undefined,
+      })
+      .then((res) => {
+        onSplitSuccess(res.source_bill, res.target_bill);
+      })
+      .catch((err: any) => {
+        console.error("Split bill error:", err);
+        alert({
+          title: "Failed to Divide Bill",
+          message: err?.response?.data?.message || err?.message || "An error occurred while splitting the bill.",
+          type: "danger",
+        });
       });
-
-      onSplitSuccess(res.source_bill, res.target_bill);
-      onClose();
-    } catch (err: any) {
-      console.error("Split bill error:", err);
-      alert({
-        title: "Failed to Divide Bill",
-        message: err?.response?.data?.message || err?.message || "An error occurred while splitting the bill.",
-        type: "danger",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (
@@ -468,24 +471,15 @@ export function SplitBillModal({
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !isValidSplit}
+                disabled={!isValidSplit}
                 className={`flex-1 sm:flex-none h-11 px-7 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 cursor-pointer ${
-                  isValidSplit && !isSubmitting
+                  isValidSplit
                     ? "bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-indigo-600/30"
                     : "bg-zinc-200 text-zinc-400 border border-zinc-300 cursor-not-allowed shadow-none"
                 }`}
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Dividing Bill...</span>
-                  </>
-                ) : (
-                  <>
-                    <Split className="w-4 h-4 stroke-[2.5]" />
-                    <span>Confirm Divide Bill</span>
-                  </>
-                )}
+                <Split className="w-4 h-4 stroke-[2.5]" />
+                <span>Confirm Divide Bill</span>
               </button>
             </div>
           </div>

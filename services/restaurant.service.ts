@@ -64,6 +64,14 @@ export const restaurantService = {
     return res.data;
   },
 
+  /** Fetch all active waiters (with PINs) for instant local PIN verification. */
+  async getWaiters(): Promise<{ id: number; name: string; pin: string; phone?: string; role: string }[]> {
+    const res = await apiClient.get<{ data: { id: number; name: string; pin: string; phone?: string; role: string }[] }>(
+      "/waiters?per_page=500"
+    );
+    return res.data.data ?? [];
+  },
+
   async saveOrder(
     billId: number,
     payload: {

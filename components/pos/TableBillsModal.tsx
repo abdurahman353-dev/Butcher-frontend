@@ -77,16 +77,17 @@ export function TableBillsModal({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [waiterPin, setWaiterPin] = useState("");
   const [showPin, setShowPin] = useState(false);
-  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
   const [verifiedStaff, setVerifiedStaff] = useState<{ id: number; name: string; role: string } | null>(null);
   const [pinFeedback, setPinFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [showNumpad, setShowNumpad] = useState(false);
   const [showOptionalPin, setShowOptionalPin] = useState(false);
 
+  // Local waiter PIN cache — loaded once on modal open for instant verification
+  const [waiterCache, setWaiterCache] = useState<Map<string, { id: number; name: string; role: string }>>(new Map());
+
   // On-screen Waiter PIN Numpad Modal state (for opening bills)
   const [pinPromptBill, setPinPromptBill] = useState<RestaurantBill | null>(null);
   const [openBillPin, setOpenBillPin] = useState("");
-  const [isOpenBillVerifying, setIsOpenBillVerifying] = useState(false);
   const [openBillFeedback, setOpenBillFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [guestCount, setGuestCount] = useState(2);
@@ -212,6 +213,20 @@ export function TableBillsModal({
     }
   };
 
+  // Pre-load all waiter PINs into local cache when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    restaurantService.getWaiters().then((waiters) => {
+      const map = new Map<string, { id: number; name: string; role: string }>();
+      waiters.forEach((w) => {
+        if (w.pin) map.set(w.pin.trim(), { id: w.id, name: w.name, role: w.role || "waiter" });
+      });
+      setWaiterCache(map);
+    }).catch(() => {
+      // Silently ignore — falls back gracefully
+    });
+  }, [isOpen]);
+
   useEffect(() => {
     setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
   }, [table?.active_bills, table?.id]);
@@ -232,7 +247,8 @@ export function TableBillsModal({
     );
   });
 
-  const handlePinInput = async (val: string) => {
+  // Instant local PIN verification — no network call, no spinner
+  const handlePinInput = (val: string) => {
     const clean = val.replace(/\D/g, "").slice(0, 4);
     setWaiterPin(clean);
 
@@ -242,33 +258,14 @@ export function TableBillsModal({
       return;
     }
 
-    if (clean.length === 4) {
-      setIsVerifyingPin(true);
-      setPinFeedback(null);
-      try {
-        const res = await restaurantService.verifyWaiterPin(clean);
-        if (res.verified && res.user) {
-          setVerifiedStaff(res.user);
-          setPinFeedback({
-            type: "success",
-            text: `Identified Server: ${res.user.name}`,
-          });
-        } else {
-          setVerifiedStaff(null);
-          setPinFeedback({
-            type: "error",
-            text: res.message || `No waiter found matching PIN ${clean}`,
-          });
-        }
-      } catch {
-        setVerifiedStaff(null);
-        setPinFeedback({
-          type: "error",
-          text: `Could not verify PIN ${clean}. Please try again.`,
-        });
-      } finally {
-        setIsVerifyingPin(false);
-      }
+    // Instant local lookup
+    const matched = waiterCache.get(clean);
+    if (matched) {
+      setVerifiedStaff(matched);
+      setPinFeedback({ type: "success", text: `Identified Server: ${matched.name}` });
+    } else {
+      setVerifiedStaff(null);
+      setPinFeedback({ type: "error", text: `No waiter found matching PIN ${clean}` });
     }
   };
 
@@ -296,30 +293,30 @@ export function TableBillsModal({
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-      const waiterNameToUse = verifiedStaff?.name || (waiterPin ? `Server #${waiterPin}` : user?.name || "Staff");
-      await onCreateNewBill(table, {
-        waiter_pin: waiterPin || undefined,
-        waiter_name: waiterNameToUse,
-        guest_count: Number(guestCount) || 1,
-        customer_name: customerName.trim() || undefined,
-        customer_phone: customerPhone.trim() || undefined,
-        customer_address: customerAddress.trim() || undefined,
-        notes: billNotes.trim() || undefined,
-      });
-      setIsCreatingNew(false);
-      setWaiterPin("");
-      setVerifiedStaff(null);
-      setPinFeedback(null);
-      setShowNumpad(false);
-      setShowOptionalPin(false);
-      setCustomerName("");
-      setCustomerPhone("");
-      setBillNotes("");
-    } finally {
-      setIsSubmitting(false);
-    }
+    const waiterNameToUse = verifiedStaff?.name || (waiterPin ? `Server #${waiterPin}` : user?.name || "Staff");
+    const payload = {
+      waiter_pin: waiterPin || undefined,
+      waiter_name: waiterNameToUse,
+      guest_count: Number(guestCount) || 1,
+      customer_name: customerName.trim() || undefined,
+      customer_phone: customerPhone.trim() || undefined,
+      customer_address: customerAddress.trim() || undefined,
+      notes: billNotes.trim() || undefined,
+    };
+
+    // 0ms instant transition: close modal and reset fields immediately
+    onClose();
+    setIsCreatingNew(false);
+    setWaiterPin("");
+    setVerifiedStaff(null);
+    setPinFeedback(null);
+    setShowNumpad(false);
+    setShowOptionalPin(false);
+    setCustomerName("");
+    setCustomerPhone("");
+    setBillNotes("");
+
+    onCreateNewBill(table, payload);
   };
 
   const handleCancelCreate = () => {
@@ -363,68 +360,51 @@ export function TableBillsModal({
     return "blocked";
   };
 
-  // ── On-Screen Numpad PIN Verification for Opening Bill ──────────────
-  const handleOpenBillPinInput = async (pinValue: string, targetBill: RestaurantBill) => {
+  // ── Instant local PIN verification for Opening Bill (no network call) ──
+  const handleOpenBillPinInput = (pinValue: string, targetBill: RestaurantBill) => {
     const clean = pinValue.replace(/\D/g, "").slice(0, 4);
     setOpenBillPin(clean);
     setOpenBillFeedback(null);
 
     if (clean.length < 4) return;
 
-    setIsOpenBillVerifying(true);
-    try {
-      const res = await restaurantService.verifyWaiterPin(clean);
-      if (res.verified && res.user) {
-        // Verify that the person entering the PIN is the exact waiter who posted this bill
-        const billOwner = (targetBill.waiter_name || "").trim().toLowerCase();
-        const verifiedName = (res.user.name || "").trim().toLowerCase();
-        const isOwner = Boolean(billOwner && (verifiedName === billOwner || (targetBill.waiter_id && res.user.id === targetBill.waiter_id)));
+    // Instant local lookup
+    const matched = waiterCache.get(clean);
+    if (matched) {
+      const billOwner = (targetBill.waiter_name || "").trim().toLowerCase();
+      const verifiedName = matched.name.trim().toLowerCase();
+      const isOwner = Boolean(billOwner && (verifiedName === billOwner || (targetBill.waiter_id && matched.id === targetBill.waiter_id)));
 
-        if (isOwner) {
-          setOpenBillFeedback({ type: "success", text: `✓ Verified: ${res.user.name}` });
-          setTimeout(() => {
-            if (!table) return;
-            const b = targetBill;
-            setPinPromptBill(null);
-            setOpenBillPin("");
-            setOpenBillFeedback(null);
-            onOpenBillForOrdering(table, b);
-            onClose();
-          }, 300);
-        } else {
-          setOpenBillFeedback({
-            type: "error",
-            text: `Not your bill! This bill belongs to ${targetBill.waiter_name || "another waiter"}.`,
-          });
-          setOpenBillPin("");
-        }
+      if (isOwner) {
+        // 0ms instant: open bill immediately
+        if (!table) return;
+        setPinPromptBill(null);
+        setOpenBillPin("");
+        setOpenBillFeedback(null);
+        onOpenBillForOrdering(table, targetBill);
+        onClose();
       } else {
         setOpenBillFeedback({
           type: "error",
-          text: "Incorrect PIN. Please try again.",
+          text: `Not your bill! This bill belongs to ${targetBill.waiter_name || "another waiter"}.`,
         });
         setOpenBillPin("");
       }
-    } catch {
-      setOpenBillFeedback({
-        type: "error",
-        text: "Could not verify PIN. Please try again.",
-      });
+    } else {
+      setOpenBillFeedback({ type: "error", text: "Incorrect PIN. Please try again." });
       setOpenBillPin("");
-    } finally {
-      setIsOpenBillVerifying(false);
     }
   };
 
   const handleOpenBillNumpadPress = (digit: string) => {
-    if (!pinPromptBill || isOpenBillVerifying) return;
+    if (!pinPromptBill) return;
     if (openBillPin.length < 4) {
       handleOpenBillPinInput(openBillPin + digit, pinPromptBill);
     }
   };
 
   const handleOpenBillNumpadBackspace = () => {
-    if (!pinPromptBill || isOpenBillVerifying) return;
+    if (!pinPromptBill) return;
     if (openBillPin.length > 0) {
       const updated = openBillPin.slice(0, -1);
       setOpenBillPin(updated);
@@ -433,7 +413,7 @@ export function TableBillsModal({
   };
 
   const handleOpenBillNumpadClear = () => {
-    if (!pinPromptBill || isOpenBillVerifying) return;
+    if (!pinPromptBill) return;
     setOpenBillPin("");
     setOpenBillFeedback(null);
   };
@@ -454,7 +434,7 @@ export function TableBillsModal({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pinPromptBill, openBillPin, isOpenBillVerifying]);
+  }, [pinPromptBill, openBillPin]);
 
   if (!isOpen || !table) return null;
 
@@ -668,12 +648,7 @@ export function TableBillsModal({
                       </div>
 
                       <div className="flex-1 min-w-0 w-full sm:w-auto">
-                        {isVerifyingPin ? (
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                            <span>Checking PIN...</span>
-                          </div>
-                        ) : pinFeedback ? (
+                        {pinFeedback ? (
                           <div
                             className={`flex items-start gap-1.5 p-2 rounded-lg text-xs font-medium ${
                               pinFeedback.type === "success"
@@ -1227,7 +1202,7 @@ export function TableBillsModal({
               <div className="flex items-center justify-center gap-3">
                 {[0, 1, 2, 3].map((idx) => {
                   const isFilled = idx < openBillPin.length;
-                  const isCurrent = idx === openBillPin.length && !isOpenBillVerifying;
+                  const isCurrent = idx === openBillPin.length;
                   return (
                     <div
                       key={idx}
@@ -1247,12 +1222,7 @@ export function TableBillsModal({
 
               {/* Feedback message */}
               <div className="min-h-6 flex items-center justify-center text-center px-2">
-                {isOpenBillVerifying ? (
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Verifying PIN...</span>
-                  </div>
-                ) : openBillFeedback ? (
+                {openBillFeedback ? (
                   <div
                     className={`text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 ${
                       openBillFeedback.type === "success"
@@ -1280,7 +1250,6 @@ export function TableBillsModal({
                   <button
                     key={num}
                     type="button"
-                    disabled={isOpenBillVerifying}
                     onClick={() => handleOpenBillNumpadPress(num)}
                     className="h-14 sm:h-16 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                   >
@@ -1289,7 +1258,6 @@ export function TableBillsModal({
                 ))}
                 <button
                   type="button"
-                  disabled={isOpenBillVerifying}
                   onClick={handleOpenBillNumpadClear}
                   className="h-14 sm:h-16 rounded-2xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 active:scale-95 text-rose-700 font-black text-xs sm:text-sm uppercase tracking-wider transition-all flex items-center justify-center cursor-pointer select-none border border-rose-200"
                 >
@@ -1297,7 +1265,6 @@ export function TableBillsModal({
                 </button>
                 <button
                   type="button"
-                  disabled={isOpenBillVerifying}
                   onClick={() => handleOpenBillNumpadPress("0")}
                   className="h-14 sm:h-16 rounded-2xl bg-zinc-100 hover:bg-zinc-200 active:bg-zinc-900 active:text-white active:scale-95 font-mono text-2xl font-black text-zinc-800 transition-all shadow-xs flex items-center justify-center cursor-pointer select-none border border-zinc-200/80"
                 >
@@ -1305,7 +1272,6 @@ export function TableBillsModal({
                 </button>
                 <button
                   type="button"
-                  disabled={isOpenBillVerifying}
                   onClick={handleOpenBillNumpadBackspace}
                   className="h-14 sm:h-16 rounded-2xl bg-zinc-200/80 hover:bg-zinc-300 active:bg-zinc-400 active:scale-95 text-zinc-700 font-bold transition-all flex items-center justify-center cursor-pointer select-none border border-zinc-300"
                   title="Backspace"
