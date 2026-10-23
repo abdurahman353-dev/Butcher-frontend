@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Pagination } from "@/components/shared/Pagination";
 import { ReceiptModal } from "@/components/pos/ReceiptModal";
 import { SettlePaymentModal } from "@/components/pos/SettlePaymentModal";
+import { SalesSummaryPdfModal } from "@/components/sales/SalesSummaryPdfModal";
 import { usePolling } from "@/hooks/usePolling";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import {
@@ -104,6 +105,7 @@ function SalesLedger() {
   const [saleToSettle, setSaleToSettle] = useState<Sale | null>(null);
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
   const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
+  const [isSalesSummaryPdfOpen, setIsSalesSummaryPdfOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMountRef = useRef(true);
@@ -604,11 +606,12 @@ function SalesLedger() {
 
           <button
             type="button"
-            onClick={handleDownloadDayPDF}
-            className="h-10 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+            onClick={() => setIsSalesSummaryPdfOpen(true)}
+            className="h-10 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+            title="Open Sales Report PDF & Share"
           >
             <FileText className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Day Sales PDF</span>
+            <span className="hidden sm:inline">Sales PDF</span>
           </button>
 
           <button
@@ -1479,34 +1482,46 @@ function SalesLedger() {
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">
                       <div className="flex flex-col items-center gap-1">
                         <StatusBadge
-                          status={sale.payment_status === "pending" ? "pending" : sale.sale_status}
+                          status={
+                            sale.sale_status === "refunded" || sale.sale_status === "cancelled"
+                              ? sale.sale_status
+                              : sale.payment_status === "pending"
+                              ? "pending"
+                              : sale.sale_status
+                          }
                           type="sale"
                         />
-                        {sale.payment_status === "pending" && (
-                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            Pay Later (Due)
-                          </span>
-                        )}
+                        {sale.payment_status === "pending" &&
+                          sale.sale_status !== "refunded" &&
+                          sale.sale_status !== "cancelled" &&
+                          Number(sale.refunded_amount || 0) < Number(sale.total || 0) && (
+                            <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                              Pay Later (Due)
+                            </span>
+                          )}
                       </div>
                     </td>
 
                     {/* Actions */}
                     <td className="py-3.5 pr-4 text-center whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
-                        {sale.payment_status === "pending" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSaleToSettle(sale);
-                              setIsSettleModalOpen(true);
-                            }}
-                            className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all active:scale-95"
-                            title="Collect payment on this bill"
-                          >
-                            <DollarSign className="w-3.5 h-3.5" />
-                            <span>Settle</span>
-                          </button>
-                        )}
+                        {sale.payment_status === "pending" &&
+                          sale.sale_status !== "refunded" &&
+                          sale.sale_status !== "cancelled" &&
+                          Number(sale.refunded_amount || 0) < Number(sale.total || 0) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSaleToSettle(sale);
+                                setIsSettleModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer"
+                              title="Collect payment on this bill"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              <span>Settle</span>
+                            </button>
+                          )}
                         <Link
                           href={`/sales/${sale.id}`}
                           className="p-1.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 transition-all shadow-2xs active:scale-90"
@@ -1590,6 +1605,19 @@ function SalesLedger() {
           setAutoPrintReceipt(true);
           setViewingReceiptSale(s);
         }}
+      />
+
+      {/* Exact Image 2 Sales Summary PDF Modal with sharing */}
+      <SalesSummaryPdfModal
+        isOpen={isSalesSummaryPdfOpen}
+        onClose={() => setIsSalesSummaryPdfOpen(false)}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        paymentMethod={paymentFilter}
+        paymentStatus={paymentStatusFilter}
+        cashierId={cashierFilter}
+        tableNumber={tableFilter}
+        initialSales={paginated.data}
       />
     </div>
   );

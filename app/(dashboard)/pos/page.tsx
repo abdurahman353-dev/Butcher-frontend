@@ -221,8 +221,15 @@ export default function PosPage() {
     try {
       const res = await salesService.getSales({ payment_status: "pending", per_page: 50 });
       if (res && Array.isArray(res.data)) {
-        setUnpaidSales(res.data);
-        setUnpaidCount(res.total || res.data.length);
+        // Strictly exclude refunded or cancelled sales
+        const validUnpaid = res.data.filter(
+          (s) =>
+            s.sale_status !== "refunded" &&
+            s.sale_status !== "cancelled" &&
+            Number(s.refunded_amount || 0) < Number(s.total || 0)
+        );
+        setUnpaidSales(validUnpaid);
+        setUnpaidCount(validUnpaid.length);
       }
     } catch (e) {
       console.error("Failed to load unpaid sales:", e);

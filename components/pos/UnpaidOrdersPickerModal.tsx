@@ -48,7 +48,14 @@ export function UnpaidOrdersPickerModal({
 
   if (!isOpen) return null;
 
-  const filtered = unpaidSales.filter((s) => {
+  // Strictly exclude refunded or cancelled sales that have nothing to collect
+  const validUnpaidSales = unpaidSales.filter((s) => {
+    const isRefunded = s.sale_status === "refunded" || s.sale_status === "cancelled";
+    const owesMoney = Number(s.refunded_amount || 0) < Number(s.total || 0);
+    return !isRefunded && owesMoney;
+  });
+
+  const filtered = validUnpaidSales.filter((s) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -76,7 +83,7 @@ export function UnpaidOrdersPickerModal({
             <div>
               <h2 className="text-base font-bold text-zinc-900 leading-tight">Collect Payment</h2>
               <p className="text-[11px] text-amber-700 font-semibold leading-tight mt-0.5">
-                {unpaidSales.length} Pay Later Bill{unpaidSales.length !== 1 ? "s" : ""} — Select one to collect
+                {validUnpaidSales.length} Pay Later Bill{validUnpaidSales.length !== 1 ? "s" : ""} — Select one to collect
               </p>
             </div>
           </div>
