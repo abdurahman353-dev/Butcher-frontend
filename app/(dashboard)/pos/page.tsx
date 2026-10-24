@@ -539,25 +539,22 @@ export default function PosPage() {
     handleOpenBillForOrdering(table, tempBill);
 
     // 2. CREATE REAL BILL IN BACKGROUND
-    restaurantService
-      .createBill(table.id, {
-        waiter_name: waiterNameToUse,
-        waiter_pin: payload.waiter_pin,
-        guest_count: payload.guest_count || 1,
-        customer_id: payload.customer_id,
-        customer_name: payload.customer_name,
-        customer_phone: payload.customer_phone,
-        customer_address: payload.customer_address,
-        notes: payload.notes,
-      })
+    const billPromise = restaurantService.createBill(table.id, {
+      waiter_name: waiterNameToUse,
+      waiter_pin: payload.waiter_pin,
+      guest_count: payload.guest_count || 1,
+      customer_id: payload.customer_id,
+      customer_name: payload.customer_name,
+      customer_phone: payload.customer_phone,
+      customer_address: payload.customer_address,
+      notes: payload.notes,
+    });
+
+    pendingBillRef.current = billPromise;
+
+    billPromise
       .then((createdBill) => {
         const stillOnThisSession = activeTableRef.current?.id === table.id;
-
-        // If user is currently on this table session, assign official bill ID and number seamlessly
-        if (stillOnThisSession && (!activeBillRef.current || activeBillRef.current.id === 0)) {
-          activeBillRef.current = createdBill;
-          setActiveBill(createdBill);
-        }
 
         // User exited before API responded — cancel the empty ghost bill silently, don't add to UI
         if (!stillOnThisSession) {
@@ -565,17 +562,31 @@ export default function PosPage() {
           return;
         }
 
+        // If user is currently on this table session, assign official bill ID and number seamlessly
+        if (!activeBillRef.current || activeBillRef.current.id === 0) {
+          activeBillRef.current = createdBill;
+          setActiveBill((curr) => {
+            if (!curr || curr.id === 0) {
+              return { ...createdBill, items: curr?.items || [] };
+            }
+            return curr;
+          });
+        }
+
         setRestaurantTables((prev) =>
-          prev.map((t) =>
-            t.id === table.id
-              ? {
-                  ...t,
-                  status: "red" as const,
-                  active_bills: [createdBill, ...(t.active_bills?.filter((b) => b.id !== createdBill.id) || [])],
-                  active_bills_count: (t.active_bills_count || 0) + 1,
-                }
-              : t
-          )
+          prev.map((t) => {
+            if (t.id !== table.id) return t;
+            const remaining = (t.active_bills || []).filter(
+              (b) => b.id !== createdBill.id && b.id !== 0
+            );
+            const nextBills = [createdBill, ...remaining];
+            return {
+              ...t,
+              status: "red" as const,
+              active_bills: nextBills,
+              active_bills_count: nextBills.length,
+            };
+          })
         );
         fetchRestaurantTables(true);
       })
@@ -586,6 +597,11 @@ export default function PosPage() {
           message: e?.response?.data?.message || e?.message || "Failed to create a new bill on this table.",
           type: "danger",
         });
+      })
+      .finally(() => {
+        if (pendingBillRef.current === billPromise) {
+          pendingBillRef.current = null;
+        }
       });
   };
 
@@ -716,7 +732,45 @@ export default function PosPage() {
       restoreItems(allSavedCartItems);
 
       setActiveBill(res.data);
+      activeBillRef.current = res.data;
       setHasUnsavedOrder(false);
+
+      // Clean up any empty 0-item ghost bills that might exist on this table
+      const tableIdForClean = targetBill.table_id || activeTable?.id;
+      if (tableIdForClean) {
+        setRestaurantTables((prev) =>
+          prev.map((t) => {
+            if (t.id !== tableIdForClean) return t;
+            const validBills = (t.active_bills || []).filter(
+              (b) => b.id === res.data.id || ((b.items?.length || 0) > 0 && (b.total || 0) > 0)
+            );
+            const hasSavedBill = validBills.some((b) => b.id === res.data.id);
+            const finalBills = hasSavedBill
+              ? validBills.map((b) => (b.id === res.data.id ? res.data : b))
+              : [res.data, ...validBills];
+            return {
+              ...t,
+              status: "red" as const,
+              active_bills: finalBills,
+              active_bills_count: finalBills.length,
+            };
+          })
+        );
+        // Silently cancel empty ghost bills on this table in background
+        const currentTableObj = restaurantTables.find((t) => t.id === tableIdForClean);
+        if (currentTableObj?.active_bills) {
+          const emptyBillsToCancel = currentTableObj.active_bills.filter(
+            (b) =>
+              b.id > 0 &&
+              b.id !== res.data.id &&
+              (!b.items || b.items.length === 0) &&
+              (b.total === 0 || b.total === undefined)
+          );
+          emptyBillsToCancel.forEach((b) => {
+            restaurantService.cancelBill(b.id).catch(() => {});
+          });
+        }
+      }
 
       // Only print newly posted items on this round's KOT slip
       const itemsForSlip: RestaurantBillItem[] = (newItems.length > 0 ? newItems : items).map((it) => ({
@@ -901,20 +955,32 @@ export default function PosPage() {
       }
     }
 
-    // Auto-cancel empty bill (0 items, KSh 0) so the table returns to empty instead of showing a ghost bill
-    const billIsEmpty =
-      activeBill.id > 0 &&
-      (!activeBill.items || activeBill.items.length === 0) &&
-      (activeBill.total === 0 || activeBill.total === undefined);
+    // Auto-cancel empty bills (0 items, KSh 0) so the table never shows ghost bills
+    const currentTableId = activeTable?.id || activeBill.table_id;
+    const tableObj = restaurantTables.find((t) => t.id === currentTableId);
+    const billsOnTable = [
+      ...(tableObj?.active_bills || []),
+      ...(activeBill.id > 0 ? [activeBill] : []),
+    ];
 
-    if (billIsEmpty) {
-      const emptyBillId = activeBill.id;
-      const emptyTableId = activeBill.table_id;
-      // Optimistically strip it from tables state NOW — before the screen renders the floor view
+    // Collect all unique empty bills on this table
+    const emptyBillIds = new Set<number>();
+    for (const b of billsOnTable) {
+      if (
+        b.id > 0 &&
+        (!b.items || b.items.length === 0) &&
+        (b.total === 0 || b.total === undefined)
+      ) {
+        emptyBillIds.add(b.id);
+      }
+    }
+
+    if (emptyBillIds.size > 0 && currentTableId) {
+      // Optimistically strip all empty bills from tables state NOW before floor view renders
       setRestaurantTables((prev) =>
         prev.map((t) => {
-          if (t.id !== emptyTableId) return t;
-          const remaining = (t.active_bills || []).filter((b) => b.id !== emptyBillId);
+          if (t.id !== currentTableId) return t;
+          const remaining = (t.active_bills || []).filter((b) => !emptyBillIds.has(b.id));
           return {
             ...t,
             active_bills: remaining,
@@ -923,8 +989,10 @@ export default function PosPage() {
           };
         })
       );
-      // Cancel in background (no await — user never sees a spinner)
-      restaurantService.cancelBill(emptyBillId).catch(() => {});
+      // Cancel each empty ghost bill in background
+      emptyBillIds.forEach((id) => {
+        restaurantService.cancelBill(id).catch(() => {});
+      });
     }
 
     handleCloseActiveBillSession();

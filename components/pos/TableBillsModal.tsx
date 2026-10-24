@@ -231,9 +231,12 @@ export function TableBillsModal({
     setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
   }, [table?.active_bills, table?.id]);
 
-  // Strictly ensure ONLY bills belonging to this specific table are shown
+  // Strictly ensure ONLY real bills belonging to this specific table are shown (filter out 0-item ghost bills)
   const activeBills = (billsList || []).filter(
-    (b) => b.table_id === table?.id && (b.status === "open" || b.status === "printed")
+    (b) =>
+      b.table_id === table?.id &&
+      (b.status === "open" || b.status === "printed") &&
+      !((!b.items || b.items.length === 0) && (b.total === 0 || b.total === undefined))
   );
 
   const filteredBills = activeBills.filter((bill) => {
