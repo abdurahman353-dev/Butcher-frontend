@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Sale } from "@/types";
 import { salesService } from "@/services/sales.service";
 import { useShopSettings } from "@/contexts/ShopSettingsContext";
@@ -31,8 +33,8 @@ interface DailyRow {
   dateKey: string; // YYYY-MM-DD
   dateDisplay: string; // DD/MM/YYYY
   salesAmountTotal: number;
-  finalVat: number; // 16%
-  finalServiceCharge: number; // 2%
+  finalVat: number;
+  finalServiceCharge: number;
   finalDiscounts: number;
   finalTotal: number;
 }
@@ -178,11 +180,16 @@ export function SalesSummaryPdfModal({
       const key = fmtYMD(current);
       const dayData = salesByDay[key] || { total: 0, discount: 0 };
 
-      const salesAmountTotal = dayData.total;
-      const finalVat = salesAmountTotal * 0.16; // Final VAT 16%
-      const finalServiceCharge = salesAmountTotal * 0.02; // Final Service Charge 2%
-      const finalDiscounts = dayData.discount;
-      const finalTotal = salesAmountTotal - finalDiscounts + finalVat + finalServiceCharge;
+      // 1. The final sale is that day's actual total sale
+      const finalTotal = dayData.total;
+
+      // 2. Make VAT, service charge, and discounts 0s for now (percentages removed)
+      const finalVat = 0;
+      const finalServiceCharge = 0;
+      const finalDiscounts = 0;
+
+      // 3. Sales Amount Total is the remaining sale amount after VAT and discounts
+      const salesAmountTotal = Math.max(0, finalTotal - finalVat - finalServiceCharge + finalDiscounts);
 
       rows.push({
         dateKey: key,
@@ -293,24 +300,26 @@ export function SalesSummaryPdfModal({
       text-align: center;
       line-height: 1.2;
     }
-    table.sales-table th.col-date { text-align: left; padding-left: 8px; width: 13%; }
-    table.sales-table th.col-sales { width: 18%; }
-    table.sales-table th.col-vat { width: 15%; }
-    table.sales-table th.col-service { width: 18%; }
-    table.sales-table th.col-discount { width: 18%; }
+    table.sales-table th.col-date { text-align: left; padding-left: 8px; width: 17%; }
+    table.sales-table th.col-sales { width: 17%; }
+    table.sales-table th.col-vat { width: 14%; }
+    table.sales-table th.col-service { width: 17%; }
+    table.sales-table th.col-discount { width: 17%; }
     table.sales-table th.col-final { width: 18%; }
 
     table.sales-table td {
-      padding: 3.5px 8px;
+      padding: 4px 6px;
       color: #000;
-      font-size: 10.5px;
+      font-size: 10px;
       border-bottom: 1px solid #e5e7eb;
       border-left: 1.5px solid #000;
       border-right: 1.5px solid #000;
       text-align: center;
+      white-space: nowrap;
     }
     table.sales-table td.col-date {
       text-align: left;
+      padding-left: 8px;
     }
     table.sales-table tfoot td {
       border: 1.5px solid #000;
@@ -365,9 +374,9 @@ export function SalesSummaryPdfModal({
           (r) => `<tr>
         <td class="col-date">${r.dateDisplay}</td>
         <td>${r.salesAmountTotal.toFixed(2)}</td>
-        <td>${r.finalVat.toFixed(3)}</td>
+        <td>${r.finalVat.toFixed(2)}</td>
         <td>${r.finalServiceCharge.toFixed(2)}</td>
-        <td>${r.finalDiscounts.toFixed(3)}</td>
+        <td>${r.finalDiscounts.toFixed(2)}</td>
         <td>${r.finalTotal.toFixed(2)}</td>
       </tr>`
         )
@@ -377,9 +386,9 @@ export function SalesSummaryPdfModal({
       <tr>
         <td class="empty-corner"></td>
         <td>${totals.salesAmountTotal.toFixed(2)}</td>
-        <td>${totals.finalVat.toFixed(3)}</td>
+        <td>${totals.finalVat.toFixed(2)}</td>
         <td>${totals.finalServiceCharge.toFixed(2)}</td>
-        <td>${totals.finalDiscounts.toFixed(3)}</td>
+        <td>${totals.finalDiscounts.toFixed(2)}</td>
         <td>${totals.finalTotal.toFixed(2)}</td>
       </tr>
     </tfoot>
@@ -403,6 +412,137 @@ export function SalesSummaryPdfModal({
     }
   };
 
+  // Generate binary PDF document matching the report layout
+  const generatePdfBlob = (): Blob => {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "a4",
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 28;
+    const contentWidth = pageWidth - margin * 2;
+
+    // 1. Company Header Box
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(1.2);
+    doc.rect(margin, 24, contentWidth, 42);
+
+    // Header left
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text(companyName.toUpperCase(), margin + 10, 48);
+
+    // Header right
+    doc.text(companyName.toUpperCase(), margin + contentWidth - 10, 42, { align: "right" });
+    doc.setFontSize(9.5);
+    doc.text(companyPhone, margin + contentWidth - 10, 56, { align: "right" });
+
+    // 2. Double Line
+    doc.setLineWidth(2.2);
+    doc.line(margin, 74, margin + contentWidth, 74);
+    doc.setLineWidth(0.8);
+    doc.line(margin, 78, margin + contentWidth, 78);
+
+    // 3. Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.text(dateRangeDisplay, pageWidth / 2, 94, { align: "center" });
+
+    // 4. Table using autoTable
+    const head = [
+      [
+        "Date",
+        "Sales Amount\nTotal",
+        "Final\nVAT",
+        "Final service\ncharge",
+        "Final\ndiscounts",
+        "Final\nTotal",
+      ],
+    ];
+
+    const body = dailyRows.map((r) => [
+      r.dateDisplay,
+      r.salesAmountTotal.toFixed(2),
+      r.finalVat.toFixed(2),
+      r.finalServiceCharge.toFixed(2),
+      r.finalDiscounts.toFixed(2),
+      r.finalTotal.toFixed(2),
+    ]);
+
+    const foot = [
+      [
+        "",
+        totals.salesAmountTotal.toFixed(2),
+        totals.finalVat.toFixed(2),
+        totals.finalServiceCharge.toFixed(2),
+        totals.finalDiscounts.toFixed(2),
+        totals.finalTotal.toFixed(2),
+      ],
+    ];
+
+    autoTable(doc, {
+      startY: 104,
+      margin: { left: margin, right: margin, bottom: 28 },
+      head,
+      body,
+      foot,
+      theme: "plain",
+      styles: {
+        fontSize: 8,
+        cellPadding: 3.5,
+        textColor: [0, 0, 0],
+        lineColor: [0, 0, 0],
+        lineWidth: 0.5,
+        halign: "center",
+      },
+      headStyles: {
+        fillColor: [229, 231, 235],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        lineWidth: 0.8,
+        halign: "center",
+      },
+      footStyles: {
+        fillColor: [254, 215, 170],
+        textColor: [0, 0, 0],
+        fontStyle: "bold",
+        lineWidth: 0.8,
+        halign: "center",
+      },
+      columnStyles: {
+        0: { halign: "left", cellWidth: contentWidth * 0.17 },
+        1: { cellWidth: contentWidth * 0.17 },
+        2: { cellWidth: contentWidth * 0.14 },
+        3: { cellWidth: contentWidth * 0.17 },
+        4: { cellWidth: contentWidth * 0.17 },
+        5: { cellWidth: contentWidth * 0.18 },
+      },
+    });
+
+    return doc.output("blob");
+  };
+
+  const handleDownloadPdf = () => {
+    try {
+      const blob = generatePdfBlob();
+      const fileName = `Sales-Report-${dateRangeDisplay.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShareFeedback("PDF downloaded successfully!");
+      setTimeout(() => setShareFeedback(null), 3000);
+    } catch (e) {
+      console.error(e);
+      setShareFeedback("Failed to download PDF.");
+      setTimeout(() => setShareFeedback(null), 3000);
+    }
+  };
+
   // Prepare text summary for WhatsApp / Email
   const summaryText = useMemo(() => {
     return (
@@ -411,11 +551,11 @@ export function SalesSummaryPdfModal({
       `*SALES SUMMARY REPORT*\n` +
       `Period: ${dateRangeDisplay}\n` +
       `────────────────────────\n` +
-      `• Gross Sales Total: KSh ${totals.salesAmountTotal.toFixed(2)}\n` +
-      `• Final VAT (16%): KSh ${totals.finalVat.toFixed(3)}\n` +
-      `• Final Service Charge (2%): KSh ${totals.finalServiceCharge.toFixed(2)}\n` +
-      `• Total Discounts: KSh ${totals.finalDiscounts.toFixed(3)}\n` +
-      `• Final Net Total: KSh ${totals.finalTotal.toFixed(2)}\n` +
+      `• Sales Amount Total: KSh ${totals.salesAmountTotal.toFixed(2)}\n` +
+      `• Final VAT: KSh ${totals.finalVat.toFixed(2)}\n` +
+      `• Final Service Charge: KSh ${totals.finalServiceCharge.toFixed(2)}\n` +
+      `• Final Discounts: KSh ${totals.finalDiscounts.toFixed(2)}\n` +
+      `• Final Total: KSh ${totals.finalTotal.toFixed(2)}\n` +
       `• Days Audited: ${dailyRows.length} days\n` +
       `────────────────────────`
     );
@@ -441,23 +581,39 @@ export function SalesSummaryPdfModal({
     setTimeout(() => setShareFeedback(null), 3000);
   };
 
-  // Native Device Share (WhatsApp, Google Drive, Gmail, etc.)
+  // Native Device Share — shares the actual PDF form document, not text
   const handleNativeShare = async () => {
-    if (typeof navigator !== "undefined" && navigator.share) {
-      try {
+    try {
+      setShareFeedback("Preparing PDF form to share...");
+      const blob = generatePdfBlob();
+      const fileName = `Sales-Report-${dateRangeDisplay.replace(/[^a-zA-Z0-9-]/g, "_")}.pdf`;
+      const pdfFile = new File([blob], fileName, { type: "application/pdf" });
+
+      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
         await navigator.share({
-          title: `Sales Report ${dateRangeDisplay}`,
-          text: summaryText,
+          files: [pdfFile],
+          title: `Sales Report PDF (${dateRangeDisplay})`,
+          text: `Sales Report PDF for ${companyName} (${dateRangeDisplay})`,
         });
-        setShareFeedback("Shared successfully!");
+        setShareFeedback("PDF shared successfully!");
         setTimeout(() => setShareFeedback(null), 3000);
-      } catch (err: any) {
-        if (err.name !== "AbortError") {
-          handleShareWhatsApp();
-        }
+        return;
       }
-    } else {
-      handleShareWhatsApp();
+
+      // Fallback for browsers that don't support file sharing directly: download the PDF
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShareFeedback("PDF file generated & downloaded!");
+      setTimeout(() => setShareFeedback(null), 3000);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("PDF share failed:", err);
+        handleDownloadPdf();
+      }
     }
   };
 
@@ -503,15 +659,26 @@ export function SalesSummaryPdfModal({
               <span className="hidden sm:inline">Gmail / Mail</span>
             </button>
 
-            {/* Device Native Apps Share */}
+            {/* Device Native Apps Share — Shares actual PDF Form */}
             <button
               type="button"
               onClick={handleNativeShare}
               className="h-9 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-              title="Share to other apps (Google, WhatsApp, etc.)"
+              title="Share PDF Form Document"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Share Apps</span>
+              <span>Share PDF</span>
+            </button>
+
+            {/* Direct Save / Download PDF */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="h-9 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              title="Download PDF Document"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Save PDF</span>
             </button>
 
             {/* Print / Save as PDF */}
@@ -587,31 +754,31 @@ export function SalesSummaryPdfModal({
                 </div>
 
                 {/* 3. The Table */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto w-full">
                   <table
-                    className="w-full border-collapse text-[11px] font-sans text-black"
+                    className="w-full min-w-[620px] border-collapse text-[11px] font-sans text-black"
                     style={{ tableLayout: "fixed" }}
                   >
                     <thead>
                       <tr className="bg-[#e5e7eb] border-y-[1.5px] border-black">
-                        <th className="border-[1.5px] border-black p-1.5 text-left font-bold text-[10.5px] w-[13%]">
+                        <th className="border-[1.5px] border-black p-1.5 text-left font-bold text-[10.5px] w-[17%] min-w-[90px] whitespace-nowrap pl-2">
                           Date
                         </th>
-                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[18%]">
+                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[17%] whitespace-nowrap">
                           Sales Amount Total
                         </th>
-                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[15%]">
+                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[14%] whitespace-nowrap">
                           Final VAT
                         </th>
-                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[18%] leading-tight">
+                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[17%] leading-tight whitespace-nowrap">
                           Final service
                           <br />
                           charge
                         </th>
-                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[18%]">
+                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[17%] whitespace-nowrap">
                           Final discounts
                         </th>
-                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[18%]">
+                        <th className="border-[1.5px] border-black p-1.5 text-center font-bold text-[10.5px] w-[18%] whitespace-nowrap">
                           Final Total
                         </th>
                       </tr>
@@ -622,22 +789,22 @@ export function SalesSummaryPdfModal({
                           key={row.dateKey}
                           className="border-b border-[#e5e7eb] hover:bg-zinc-50"
                         >
-                          <td className="p-1 sm:p-1.5 border-x-[1.5px] border-black text-left font-normal">
+                          <td className="p-1 sm:p-1.5 border-x-[1.5px] border-black text-left font-normal whitespace-nowrap pl-2">
                             {row.dateDisplay}
                           </td>
-                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal">
+                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal whitespace-nowrap">
                             {row.salesAmountTotal.toFixed(2)}
                           </td>
-                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal">
-                            {row.finalVat.toFixed(3)}
+                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal whitespace-nowrap">
+                            {row.finalVat.toFixed(2)}
                           </td>
-                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal">
+                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal whitespace-nowrap">
                             {row.finalServiceCharge.toFixed(2)}
                           </td>
-                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal">
-                            {row.finalDiscounts.toFixed(3)}
+                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal whitespace-nowrap">
+                            {row.finalDiscounts.toFixed(2)}
                           </td>
-                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal">
+                          <td className="p-1 sm:p-1.5 border-r-[1.5px] border-black text-center font-normal whitespace-nowrap">
                             {row.finalTotal.toFixed(2)}
                           </td>
                         </tr>
@@ -646,19 +813,19 @@ export function SalesSummaryPdfModal({
                     <tfoot>
                       <tr className="border-y-[1.5px] border-black">
                         <td className="border-none bg-transparent" />
-                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px]">
+                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px] whitespace-nowrap">
                           {totals.salesAmountTotal.toFixed(2)}
                         </td>
-                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px]">
-                          {totals.finalVat.toFixed(3)}
+                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px] whitespace-nowrap">
+                          {totals.finalVat.toFixed(2)}
                         </td>
-                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px]">
+                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px] whitespace-nowrap">
                           {totals.finalServiceCharge.toFixed(2)}
                         </td>
-                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px]">
-                          {totals.finalDiscounts.toFixed(3)}
+                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px] whitespace-nowrap">
+                          {totals.finalDiscounts.toFixed(2)}
                         </td>
-                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px]">
+                        <td className="bg-[#fed7aa] border-[1.5px] border-black p-1.5 text-center font-bold text-[11px] whitespace-nowrap">
                           {totals.finalTotal.toFixed(2)}
                         </td>
                       </tr>
