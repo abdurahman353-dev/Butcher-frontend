@@ -528,10 +528,18 @@ export default function PosPage() {
         notes: payload.notes,
       })
       .then((createdBill) => {
+        const stillOnThisSession = activeTableRef.current?.id === table.id;
+
         // If user is currently on this table session, assign official bill ID and number seamlessly
-        if (activeTableRef.current?.id === table.id && (!activeBillRef.current || activeBillRef.current.id === 0)) {
+        if (stillOnThisSession && (!activeBillRef.current || activeBillRef.current.id === 0)) {
           activeBillRef.current = createdBill;
           setActiveBill(createdBill);
+        }
+
+        // User exited before API responded — cancel the empty ghost bill silently, don't add to UI
+        if (!stillOnThisSession) {
+          restaurantService.cancelBill(createdBill.id).catch(() => {});
+          return;
         }
 
         setRestaurantTables((prev) =>
