@@ -300,6 +300,16 @@ export default function PosPage() {
   }, [loadData]);
 
   const handleSelectProduct = (product: Product) => {
+    if (isRestaurant) {
+      // In restaurant mode only: clicking the item directly adds it or increments quantity by 1 each click (no modal popup)
+      addItem(product, 1.0);
+      if (activeBill) {
+        setHasUnsavedOrder(true);
+      }
+      return;
+    }
+
+    // In butcher/retail mode: show the weight/quantity numpad modal (Image 1)
     setSelectedProductForWeight(product);
   };
 
@@ -1554,6 +1564,12 @@ export default function PosPage() {
               categories={categories}
               onSelectProduct={handleSelectProduct}
               isLoading={isLoading}
+              isRestaurant={isRestaurant}
+              onUpdateProduct={(productId, patch) => {
+                setProducts((prev) =>
+                  prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
+                );
+              }}
             />
           </div>
         )}

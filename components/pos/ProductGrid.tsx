@@ -13,14 +13,42 @@ interface ProductGridProps {
   onSelectProduct: (product: Product) => void;
   isLoading?: boolean;
   isRestaurant?: boolean;
+  onUpdateProduct?: (productId: number, patch: Partial<Product>) => void;
 }
 
-export function ProductGrid({ products, categories, onSelectProduct, isLoading = false, isRestaurant = false }: ProductGridProps) {
+export function ProductGrid({
+  products,
+  categories,
+  onSelectProduct,
+  isLoading = false,
+  isRestaurant = false,
+  onUpdateProduct,
+}: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
+  // Drag-and-drop state for products
+  const [draggedProductId, setDraggedProductId] = useState<number | null>(null);
+  const [dragOverProductId, setDragOverProductId] = useState<number | null>(null);
+
+  // Custom product order from localStorage
+  const [customOrderIds, setCustomOrderIds] = useState<number[]>([]);
+
+  React.useEffect(() => {
+    if (!isRestaurant) return;
+    try {
+      const saved = localStorage.getItem("pos_restaurant_product_order");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCustomOrderIds(parsed);
+        }
+      }
+    } catch (_) {}
+  }, [isRestaurant]);
+
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
+    const list = products.filter((p) => {
       if (!p.is_active) return false;
 
       if (selectedCategory !== "all" && p.category_id.toString() !== selectedCategory) {
@@ -38,7 +66,22 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
 
       return true;
     });
-  }, [products, selectedCategory, searchQuery]);
+
+    if (!isRestaurant || customOrderIds.length === 0) {
+      return list;
+    }
+
+    // Sort by custom order
+    const orderMap = new Map<number, number>();
+    customOrderIds.forEach((id, idx) => orderMap.set(id, idx));
+
+    return [...list].sort((a, b) => {
+      const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999;
+      const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999;
+      if (idxA !== idxB) return idxA - idxB;
+      return 0;
+    });
+  }, [products, selectedCategory, searchQuery, isRestaurant, customOrderIds]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -54,6 +97,60 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
     }
     return { counts, total };
   }, [products]);
+
+  // Handle direct swap between product at position A and product at position F (vice versa)
+  const handleDropOnProduct = (targetProduct: Product) => {
+    if (!draggedProductId || draggedProductId === targetProduct.id) {
+      setDraggedProductId(null);
+      setDragOverProductId(null);
+      return;
+    }
+
+    // Build the master list of product IDs reflecting current visual order
+    let masterIds = [...customOrderIds];
+    if (masterIds.length === 0) {
+      masterIds = products.map((p) => p.id);
+    } else {
+      for (const p of products) {
+        if (!masterIds.includes(p.id)) {
+          masterIds.push(p.id);
+        }
+      }
+    }
+
+    const idxA = masterIds.indexOf(draggedProductId);
+    const idxF = masterIds.indexOf(targetProduct.id);
+
+    if (idxA !== -1 && idxF !== -1) {
+      const swapped = [...masterIds];
+      const temp = swapped[idxA];
+      swapped[idxA] = swapped[idxF];
+      swapped[idxF] = temp;
+
+      setCustomOrderIds(swapped);
+      try {
+        localStorage.setItem("pos_restaurant_product_order", JSON.stringify(swapped));
+      } catch (_) {}
+    }
+
+    setDraggedProductId(null);
+    setDragOverProductId(null);
+  };
+
+  // Handle dropping product onto a category pill to move it to that category
+  const handleDropItemOnCategory = async (productId: number, categoryId: number) => {
+    const targetCat = categories.find((c) => c.id === categoryId);
+    try {
+      const { productsService } = await import("@/services/products.service");
+      await productsService.updateProduct(productId, { category_id: categoryId });
+      onUpdateProduct?.(productId, {
+        category_id: categoryId,
+        category_name: targetCat?.name || "",
+      });
+    } catch (err) {
+      console.error("Failed to move product to category:", err);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-zinc-50">
@@ -86,6 +183,7 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
           productCounts={categoryCounts.counts}
           totalCount={categoryCounts.total}
           isRestaurant={isRestaurant}
+          onDropItemOnCategory={handleDropItemOnCategory}
         />
       </div>
 
@@ -122,7 +220,26 @@ export function ProductGrid({ products, categories, onSelectProduct, isLoading =
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-2">
             {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} onSelect={onSelectProduct} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onSelect={onSelectProduct}
+                isRestaurant={isRestaurant}
+                isBeingDragged={draggedProductId === product.id}
+                isDragOver={dragOverProductId === product.id}
+                onDragStartItem={() => setDraggedProductId(product.id)}
+                onDragOverItem={() => {
+                  if (draggedProductId && draggedProductId !== product.id) {
+                    setDragOverProductId(product.id);
+                  }
+                }}
+                onDragLeaveItem={() => {
+                  if (dragOverProductId === product.id) {
+                    setDragOverProductId(null);
+                  }
+                }}
+                onDropOnItem={handleDropOnProduct}
+              />
             ))}
           </div>
         )}

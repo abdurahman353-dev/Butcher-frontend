@@ -8,9 +8,29 @@ import { AlertTriangle, Infinity as InfinityIcon } from "lucide-react";
 interface ProductCardProps {
   product: Product;
   onSelect: (product: Product) => void;
+  isRestaurant?: boolean;
+  onDragStartItem?: (product: Product) => void;
+  onDragOverItem?: (product: Product) => void;
+  onDragLeaveItem?: (product: Product) => void;
+  onDropOnItem?: (targetProduct: Product) => void;
+  isDragOver?: boolean;
+  isBeingDragged?: boolean;
 }
 
-export function ProductCard({ product, onSelect }: ProductCardProps) {
+export function ProductCard({
+  product,
+  onSelect,
+  isRestaurant = false,
+  onDragStartItem,
+  onDragOverItem,
+  onDragLeaveItem,
+  onDropOnItem,
+  isDragOver = false,
+  isBeingDragged = false,
+}: ProductCardProps) {
+  const isDraggingRef = React.useRef(false);
+  const dragStartTimeRef = React.useRef(0);
+
   const isInfinite = product.current_stock >= 9999;
   const isOutOfStock = !isInfinite && product.current_stock <= 0;
   const isLowStock =
@@ -38,14 +58,50 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
   return (
     <div
+      draggable={isRestaurant}
+      onDragStart={(e) => {
+        if (!isRestaurant) return;
+        isDraggingRef.current = true;
+        dragStartTimeRef.current = Date.now();
+        e.dataTransfer.setData("application/pos-product-id", product.id.toString());
+        e.dataTransfer.effectAllowed = "move";
+        onDragStartItem?.(product);
+      }}
+      onDragEnd={() => {
+        setTimeout(() => {
+          isDraggingRef.current = false;
+        }, 150);
+      }}
+      onDragOver={(e) => {
+        if (!isRestaurant) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOverItem?.(product);
+      }}
+      onDragLeave={() => {
+        if (!isRestaurant) return;
+        onDragLeaveItem?.(product);
+      }}
+      onDrop={(e) => {
+        if (!isRestaurant) return;
+        e.preventDefault();
+        onDropOnItem?.(product);
+      }}
       onClick={() => {
+        if (isDraggingRef.current) return;
+        if (Date.now() - dragStartTimeRef.current < 250 && dragStartTimeRef.current > 0) return;
         if (!isOutOfStock) onSelect(product);
       }}
+      title={isRestaurant ? "Click to add/increment, or drag to reposition / drop into category" : undefined}
       className={`group relative rounded-xl bg-white shadow-2xs flex flex-col justify-between transition-all duration-150 select-none overflow-hidden p-2.5 sm:p-3 ${
-        isOutOfStock
+        isBeingDragged
+          ? "opacity-30 scale-95 border-2 border-dashed border-zinc-400"
+          : isDragOver
+          ? "border-2 border-dashed border-emerald-600 bg-emerald-50 scale-105 shadow-lg ring-2 ring-emerald-500/50"
+          : isOutOfStock
           ? "border border-zinc-200 opacity-50 cursor-not-allowed bg-zinc-50/80"
           : "border-2 border-emerald-500 hover:border-emerald-600 hover:shadow-md hover:-translate-y-0.5 cursor-pointer active:scale-[0.97] active:bg-emerald-50/20"
-      }`}
+      } ${isRestaurant ? "cursor-grab active:cursor-grabbing" : ""}`}
       style={{ minHeight: "92px" }}
     >
       {/* Top Header Row: Product Name + High-Visibility Stock Badge */}
