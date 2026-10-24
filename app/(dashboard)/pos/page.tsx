@@ -471,6 +471,27 @@ export default function PosPage() {
     }
   ) => {
     const waiterNameToUse = payload.waiter_name || user?.name || "Staff";
+
+    // Auto-cancel the previous bill on this table if it has 0 items (ghost bill prevention)
+    const prevBill = activeBillRef.current;
+    if (
+      prevBill &&
+      prevBill.id > 0 &&
+      prevBill.table_id === table.id &&
+      (!prevBill.items || prevBill.items.length === 0) &&
+      (prevBill.total === 0 || prevBill.total === undefined)
+    ) {
+      restaurantService.cancelBill(prevBill.id).catch(() => {});
+      // Optimistically remove it from tables state so it never shows on the floor
+      setRestaurantTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== table.id) return t;
+          const remaining = (t.active_bills || []).filter((b) => b.id !== prevBill.id);
+          return { ...t, active_bills: remaining, active_bills_count: remaining.length };
+        })
+      );
+    }
+
     const tempBill: RestaurantBill = {
       id: 0,
       table_id: table.id,
