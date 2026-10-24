@@ -35,6 +35,9 @@ import {
 } from "lucide-react";
 import { SplitBillModal } from "./SplitBillModal";
 
+// Shared module-level cache for 0ms instant PIN verification across modal opens
+const globalWaiterCache = new Map<string, { id: number; name: string; role: string }>();
+
 interface TableBillsModalProps {
   table: RestaurantTable | null;
   isOpen: boolean;
@@ -79,11 +82,13 @@ export function TableBillsModal({
   const [showPin, setShowPin] = useState(false);
   const [verifiedStaff, setVerifiedStaff] = useState<{ id: number; name: string; role: string } | null>(null);
   const [pinFeedback, setPinFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
-  const [showNumpad, setShowNumpad] = useState(true);
-  const [showOptionalPin, setShowOptionalPin] = useState(true);
+  const [showNumpad, setShowNumpad] = useState(isWaiter);
+  const [showOptionalPin, setShowOptionalPin] = useState(isWaiter);
 
-  // Local waiter PIN cache — loaded once on modal open for instant verification
-  const [waiterCache, setWaiterCache] = useState<Map<string, { id: number; name: string; role: string }>>(new Map());
+  // Local waiter PIN cache — backed by global cache for instant 0ms verification
+  const [waiterCache, setWaiterCache] = useState<Map<string, { id: number; name: string; role: string }>>(
+    () => new Map(globalWaiterCache)
+  );
 
   // On-screen Waiter PIN Numpad Modal state (for opening bills)
   const [pinPromptBill, setPinPromptBill] = useState<RestaurantBill | null>(null);
@@ -213,19 +218,23 @@ export function TableBillsModal({
     }
   };
 
-  // Pre-load all waiter PINs into local cache when modal opens
+  // Pre-load all waiter PINs into local & global cache when modal opens or table changes
   useEffect(() => {
     if (!isOpen) return;
     restaurantService.getWaiters().then((waiters) => {
       const map = new Map<string, { id: number; name: string; role: string }>();
       waiters.forEach((w) => {
-        if (w.pin) map.set(w.pin.trim(), { id: w.id, name: w.name, role: w.role || "waiter" });
+        if (w.pin) {
+          const entry = { id: w.id, name: w.name, role: w.role || "waiter" };
+          map.set(w.pin.trim(), entry);
+          globalWaiterCache.set(w.pin.trim(), entry);
+        }
       });
       setWaiterCache(map);
     }).catch(() => {
-      // Silently ignore — falls back gracefully
+      // Silently ignore — falls back gracefully to live verify endpoint
     });
-  }, [isOpen]);
+  }, [isOpen, table?.id]);
 
   useEffect(() => {
     setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
@@ -250,8 +259,8 @@ export function TableBillsModal({
     );
   });
 
-  // Instant local PIN verification — no network call, no spinner
-  const handlePinInput = (val: string) => {
+  // Instant local PIN verification with live backend fallback (never fails valid PINs)
+  const handlePinInput = async (val: string) => {
     const clean = val.replace(/\D/g, "").slice(0, 4);
     setWaiterPin(clean);
 
@@ -261,12 +270,28 @@ export function TableBillsModal({
       return;
     }
 
-    // Instant local lookup
-    const matched = waiterCache.get(clean);
+    // 1. Instant local lookup (0ms)
+    const matched = waiterCache.get(clean) || globalWaiterCache.get(clean);
     if (matched) {
       setVerifiedStaff(matched);
       setPinFeedback({ type: "success", text: `Identified Server: ${matched.name}` });
-    } else {
+      return;
+    }
+
+    // 2. Direct live fallback to backend verification so no valid PIN is ever rejected
+    try {
+      const res = await restaurantService.verifyWaiterPin(clean);
+      if (res.verified && res.user) {
+        const staff = { id: res.user.id, name: res.user.name, role: res.user.role || "waiter" };
+        globalWaiterCache.set(clean, staff);
+        setWaiterCache((prev) => new Map(prev).set(clean, staff));
+        setVerifiedStaff(staff);
+        setPinFeedback({ type: "success", text: `Identified Server: ${staff.name}` });
+      } else {
+        setVerifiedStaff(null);
+        setPinFeedback({ type: "error", text: res.message || `No waiter found matching PIN ${clean}` });
+      }
+    } catch {
       setVerifiedStaff(null);
       setPinFeedback({ type: "error", text: `No waiter found matching PIN ${clean}` });
     }
@@ -291,14 +316,20 @@ export function TableBillsModal({
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!table) return;
+
     // Waiters are required to enter their 4-digit PIN
     if (isWaiter && (!verifiedStaff || waiterPin.length !== 4)) {
       return;
     }
 
+    // Admin/Cashier who opted into assigning a PIN must enter a valid 4-digit PIN if one was started
+    if (!isWaiter && showOptionalPin && waiterPin.length > 0 && (!verifiedStaff || waiterPin.length !== 4)) {
+      return;
+    }
+
     const waiterNameToUse = verifiedStaff?.name || (waiterPin ? `Server #${waiterPin}` : user?.name || "Staff");
     const payload = {
-      waiter_pin: waiterPin || undefined,
+      waiter_pin: (isWaiter || (showOptionalPin && waiterPin.length === 4)) ? (waiterPin || undefined) : undefined,
       waiter_name: waiterNameToUse,
       guest_count: Number(guestCount) || 1,
       customer_name: customerName.trim() || undefined,
@@ -324,8 +355,9 @@ export function TableBillsModal({
 
   const handleStartCreateNew = () => {
     setIsCreatingNew(true);
-    setShowOptionalPin(true);
-    setShowNumpad(true);
+    // Superadmin and cashiers create bills without PIN by default
+    setShowOptionalPin(isWaiter ? true : false);
+    setShowNumpad(isWaiter ? true : false);
     setWaiterPin("");
     setVerifiedStaff(null);
     setPinFeedback(null);
@@ -337,7 +369,7 @@ export function TableBillsModal({
     setWaiterPin("");
     setVerifiedStaff(null);
     setPinFeedback(null);
-    setShowNumpad(true);
+    setShowNumpad(isWaiter ? true : false);
   };
 
   // Helper to determine if a bill was posted by a waiter (not by cashier or superadmin)
@@ -372,16 +404,29 @@ export function TableBillsModal({
     return "blocked";
   };
 
-  // ── Instant local PIN verification for Opening Bill (no network call) ──
-  const handleOpenBillPinInput = (pinValue: string, targetBill: RestaurantBill) => {
+  // ── Instant local PIN verification for Opening Bill with backend fallback ──
+  const handleOpenBillPinInput = async (pinValue: string, targetBill: RestaurantBill) => {
     const clean = pinValue.replace(/\D/g, "").slice(0, 4);
     setOpenBillPin(clean);
     setOpenBillFeedback(null);
 
     if (clean.length < 4) return;
 
-    // Instant local lookup
-    const matched = waiterCache.get(clean);
+    // Instant local lookup or backend fallback
+    let matched = waiterCache.get(clean) || globalWaiterCache.get(clean);
+    if (!matched) {
+      try {
+        const res = await restaurantService.verifyWaiterPin(clean);
+        if (res.verified && res.user) {
+          matched = { id: res.user.id, name: res.user.name, role: res.user.role || "waiter" };
+          globalWaiterCache.set(clean, matched);
+          setWaiterCache((prev) => new Map(prev).set(clean, matched!));
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (matched) {
       const billOwner = (targetBill.waiter_name || "").trim().toLowerCase();
       const verifiedName = matched.name.trim().toLowerCase();
@@ -430,7 +475,7 @@ export function TableBillsModal({
     setOpenBillFeedback(null);
   };
 
-  // Keyboard listener for on-screen PIN numpad modal
+  // Keyboard listener for on-screen PIN numpad modal (opening existing bill)
   useEffect(() => {
     if (!pinPromptBill) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -447,6 +492,24 @@ export function TableBillsModal({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pinPromptBill, openBillPin]);
+
+  // Physical keyboard listener for New Bill Waiter PIN (no DOM password input = zero password manager popups)
+  useEffect(() => {
+    if (!isOpen || !isCreatingNew || (!isWaiter && !showOptionalPin)) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA") return;
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        handleNumpadPress(e.key);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        handleNumpadBackspace();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isCreatingNew, isWaiter, showOptionalPin, waiterPin]);
 
   if (!isOpen || !table) return null;
 
@@ -548,7 +611,13 @@ export function TableBillsModal({
 
           {/* ── New Bill Form — styled like a bill card (matches image 1) ── */}
           {isCreatingNew && (
-            <form onSubmit={handleCreateSubmit} className="bg-white border-2 border-emerald-400 rounded-2xl overflow-hidden shadow-sm">
+            <form
+              onSubmit={handleCreateSubmit}
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
+              className="bg-white border-2 border-emerald-400 rounded-2xl overflow-hidden shadow-sm"
+            >
 
               {/* ── Card Header row (matches bill card top bar) ── */}
               <div className="px-4 pt-3.5 pb-3 flex items-center justify-between gap-3 border-b border-zinc-100">
@@ -615,37 +684,16 @@ export function TableBillsModal({
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-3">
-                      <div className="relative w-full sm:w-44">
-                        <input
-                          type={showPin ? "text" : "password"}
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          maxLength={4}
-                          autoFocus
-                          placeholder="••••"
-                          value={waiterPin}
-                          onChange={(e) => handlePinInput(e.target.value)}
-                          className="w-full h-11 px-3 text-center font-mono text-xl tracking-[0.4em] font-black bg-white border-2 border-zinc-200 focus:border-emerald-500 focus:bg-white rounded-xl focus:outline-none transition-all shadow-inner"
-                        />
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          onClick={() => setShowPin(!showPin)}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-zinc-400 hover:text-zinc-700 uppercase"
-                        >
-                          {showPin ? "Hide" : "Show"}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-center justify-center gap-2.5 py-1">
+                      {/* 4-digit PIN indicator boxes (Centered & Masked, no password input = zero autofill prompts) */}
+                      <div className="flex items-center justify-center gap-2.5">
                         {[0, 1, 2, 3].map((idx) => {
                           const isFilled = waiterPin.length > idx;
                           const isCurrent = waiterPin.length === idx;
                           return (
                             <div
                               key={idx}
-                              className={`w-11 h-13 rounded-xl border-2 flex items-center justify-center font-mono text-lg font-black transition-all ${
+                              className={`w-12 h-14 rounded-xl border-2 flex items-center justify-center transition-all ${
                                 isFilled
                                   ? "border-emerald-600 bg-emerald-600 text-white shadow-2xs scale-105"
                                   : isCurrent
@@ -653,16 +701,19 @@ export function TableBillsModal({
                                   : "border-zinc-200 bg-zinc-50 text-zinc-300"
                               }`}
                             >
-                              {isFilled ? (showPin ? waiterPin[idx] : "●") : ""}
+                              {isFilled ? (
+                                <span className="w-3.5 h-3.5 rounded-full bg-white inline-block shadow-2xs" />
+                              ) : null}
                             </div>
                           );
                         })}
                       </div>
 
-                      <div className="flex-1 min-w-0 w-full sm:w-auto">
+                      {/* Feedback message (Centered) */}
+                      <div className="w-full max-w-sm flex items-center justify-center text-center">
                         {pinFeedback ? (
                           <div
-                            className={`flex items-start gap-1.5 p-2 rounded-lg text-xs font-medium ${
+                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${
                               pinFeedback.type === "success"
                                 ? "bg-emerald-50 text-emerald-900 border border-emerald-200"
                                 : pinFeedback.type === "error"
@@ -671,21 +722,21 @@ export function TableBillsModal({
                             }`}
                           >
                             {pinFeedback.type === "success" ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                             ) : (
-                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                             )}
                             <div className="leading-tight">
-                              <span className="font-semibold">{pinFeedback.text}</span>
+                              <span>{pinFeedback.text}</span>
                               {verifiedStaff && (
-                                <span className="block text-[10px] text-emerald-700 font-bold mt-0.5">
+                                <span className="block text-[10px] text-emerald-700 font-extrabold mt-0.5">
                                   ✓ Tagged to server: {verifiedStaff.name}
                                 </span>
                               )}
                             </div>
                           </div>
                         ) : (
-                          <div className="text-[11px] text-zinc-400 font-medium">
+                          <div className="text-[11px] text-zinc-400 font-semibold">
                             Enter your 4-digit PIN to post this order
                           </div>
                         )}
@@ -749,7 +800,10 @@ export function TableBillsModal({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setShowOptionalPin(true)}
+                      onClick={() => {
+                        setShowOptionalPin(true);
+                        setShowNumpad(true);
+                      }}
                       className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg transition-colors shrink-0"
                     >
                       Assign Waiter PIN
@@ -772,7 +826,8 @@ export function TableBillsModal({
                   type="submit"
                   disabled={
                     isSubmitting ||
-                    ((isWaiter || showOptionalPin) && (!verifiedStaff || waiterPin.length !== 4))
+                    (isWaiter && (!verifiedStaff || waiterPin.length !== 4)) ||
+                    (!isWaiter && showOptionalPin && waiterPin.length > 0 && (!verifiedStaff || waiterPin.length !== 4))
                   }
                   className="h-9 px-5 bg-zinc-900 hover:bg-zinc-800 active:bg-black active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 transition-all"
                 >
@@ -780,11 +835,11 @@ export function TableBillsModal({
                   <span>
                     {isSubmitting
                       ? "Opening Bill..."
-                      : (isWaiter || showOptionalPin) && (!verifiedStaff || waiterPin.length !== 4)
+                      : isWaiter && (!verifiedStaff || waiterPin.length !== 4)
                       ? "Enter Your Waiter PIN"
                       : verifiedStaff
                       ? `Open Bill (${verifiedStaff.name})`
-                      : "Open Bill"}
+                      : `Open Bill (${user?.name || "Staff"})`}
                   </span>
                   {!isSubmitting && <ChevronRight className="w-3.5 h-3.5" />}
                 </button>
