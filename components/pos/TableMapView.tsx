@@ -49,9 +49,18 @@ export function TableMapView({
     return matchesZone && matchesSearch;
   });
 
-  const emptyCount = tables.filter((t) => t.status === "grey").length;
-  const unprintedCount = tables.filter((t) => t.status === "red").length;
-  const printedCount = tables.filter((t) => t.status === "yellow").length;
+  const emptyCount = tables.filter((t) => {
+    const hasRealBills = (t.active_bills || []).some((b) => (b.items && b.items.length > 0) || (b.total && b.total > 0));
+    return !hasRealBills;
+  }).length;
+  const unprintedCount = tables.filter((t) => {
+    const hasRealBills = (t.active_bills || []).some((b) => (b.items && b.items.length > 0) || (b.total && b.total > 0));
+    return t.status === "red" && hasRealBills;
+  }).length;
+  const printedCount = tables.filter((t) => {
+    const hasRealBills = (t.active_bills || []).some((b) => (b.items && b.items.length > 0) || (b.total && b.total > 0));
+    return t.status === "yellow" && hasRealBills;
+  }).length;
 
   // Only show skeleton placeholders if there are NO tables loaded yet (initial boot).
   // During any subsequent refresh or background sync, keep the real tables on screen
@@ -226,6 +235,16 @@ export function TableMapView({
             {filteredTables.map((table) => {
               const isSelected = activeTableId === table.id;
 
+              // Filter out 0-item / 0-amount empty ghost bills
+              const realBills = (table.active_bills || []).filter(
+                (b) => (b.items && b.items.length > 0) || (b.total && b.total > 0)
+              );
+              const realBillsCount = realBills.length;
+              const realTotalAmount = realBills.reduce((sum, b) => sum + (b.total || 0), 0);
+              const isTrulyActive =
+                realBillsCount > 0 || (table.status === "red" && (table.total_active_amount || 0) > 0);
+              const isTrulyBilled = table.status === "yellow" && realBillsCount > 0;
+
               // Colour scheme per status
               let cardClasses =
                 "bg-white border-zinc-200 text-zinc-800 hover:border-zinc-300 hover:shadow-md";
@@ -234,14 +253,14 @@ export function TableMapView({
               let numberColor = "text-zinc-800";
               let bottomBorder = "border-zinc-100";
 
-              if (table.status === "red") {
+              if (isTrulyActive) {
                 cardClasses =
                   "bg-rose-50 border-rose-300 text-rose-950 hover:bg-rose-100/80 hover:shadow-md";
                 badgeClasses = "bg-rose-600 border-rose-600 text-white";
                 badgeText = "ACTIVE";
                 numberColor = "text-rose-800";
                 bottomBorder = "border-rose-200/70";
-              } else if (table.status === "yellow") {
+              } else if (isTrulyBilled) {
                 cardClasses =
                   "bg-amber-50 border-amber-300 text-amber-950 hover:bg-amber-100/80 hover:shadow-md";
                 badgeClasses = "bg-amber-400 border-amber-400 text-amber-950";
@@ -278,7 +297,7 @@ export function TableMapView({
                           {badgeText}
                         </span>
                         {/* Delete button (Only if empty with no orders & not waiter) — solid color always for mobile */}
-                        {!isWaiter && table.active_bills_count === 0 && onDeleteTable && (
+                        {!isWaiter && realBillsCount === 0 && onDeleteTable && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -314,25 +333,25 @@ export function TableMapView({
 
                   {/* ─ Bottom section ─ */}
                   <div className={`pt-2 mt-2 border-t ${bottomBorder} flex items-end justify-between gap-1`}>
-                    {table.active_bills_count > 0 ? (
+                    {realBillsCount > 0 ? (
                       <>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex-wrap">
                             <span className="flex items-center gap-1 shrink-0">
                               <Receipt className="w-3.5 h-3.5 text-zinc-400" />
-                              {table.active_bills_count}{" "}
-                              {table.active_bills_count === 1 ? "Bill" : "Bills"}
+                              {realBillsCount}{" "}
+                              {realBillsCount === 1 ? "Bill" : "Bills"}
                             </span>
                             {/* Breakdown of each bill when table has 2+ bills */}
-                            {table.active_bills && table.active_bills.length > 1 && (
+                            {realBills.length > 1 && (
                               <span className="text-[10px] font-bold text-zinc-500 normal-case tracking-normal truncate">
-                                ({table.active_bills.slice(0, 3).map((b) => `${Math.round(b.total)}`).join(" + ")}
-                                {table.active_bills.length > 3 ? "..." : ""})
+                                ({realBills.slice(0, 3).map((b) => `${Math.round(b.total)}`).join(" + ")}
+                                {realBills.length > 3 ? "..." : ""})
                               </span>
                             )}
                           </div>
                           <div className="text-base sm:text-lg font-black tracking-tight mt-0.5 truncate font-mono text-emerald-600">
-                            {formatCurrency(table.total_active_amount)}
+                            {formatCurrency(realTotalAmount || table.total_active_amount)}
                           </div>
                         </div>
                         <span className="text-[11px] font-bold text-zinc-400 group-hover:text-zinc-800 transition-colors shrink-0 mb-0.5">

@@ -88,17 +88,40 @@ export default function PosPage() {
   useEffect(() => { activeBillRef.current  = activeBill;  }, [activeBill]);
 
   /**
+   * Helper to sanitize table data: empty draft/ghost bills (0 items, KSh 0)
+   * are never treated as active orders on the floor.
+   */
+  const sanitizeTablesData = useCallback((rawTables: RestaurantTable[]): RestaurantTable[] => {
+    return rawTables.map((t) => {
+      const validBills = (t.active_bills || []).filter(
+        (b) =>
+          (activeBillRef.current?.id === b.id && activeTableRef.current?.id === t.id) ||
+          ((b.items && b.items.length > 0) || (b.total && b.total > 0))
+      );
+      const hasValid = validBills.length > 0;
+      return {
+        ...t,
+        active_bills: validBills,
+        active_bills_count: validBills.length,
+        total_active_amount: validBills.reduce((sum, b) => sum + (b.total || 0), 0),
+        status: hasValid ? t.status : ("grey" as const),
+      };
+    });
+  }, []);
+
+  /**
    * Live SSE update handler — merges fresh table data from the server without
    * disrupting an active ordering session.
    */
   const handleLiveTablesUpdate = useCallback((freshTables: RestaurantTable[]) => {
-    setRestaurantTables(freshTables);
+    const cleaned = sanitizeTablesData(freshTables);
+    setRestaurantTables(cleaned);
 
     // If the user is actively ordering on a bill, refresh their session refs too
     const curTable = activeTableRef.current;
     const curBill  = activeBillRef.current;
     if (curTable) {
-      const freshTable = freshTables.find((t) => t.id === curTable.id);
+      const freshTable = cleaned.find((t) => t.id === curTable.id);
       if (freshTable) {
         setActiveTable(freshTable);
         if (curBill) {
@@ -192,13 +215,14 @@ export default function PosPage() {
     try {
       if (!silent) setIsTablesLoading(true);
       const data = await restaurantService.getTables();
-      setRestaurantTables(data);
+      const cleaned = sanitizeTablesData(data);
+      setRestaurantTables(cleaned);
       // ONLY update activeTable/activeBill if user currently has an active table session.
       // Uses refs to avoid stale closures from resurrecting previously opened tables.
       const currentActiveTable = activeTableRef.current;
       const currentActiveBill = activeBillRef.current;
       if (currentActiveTable) {
-        const found = data.find((t) => t.id === currentActiveTable.id);
+        const found = cleaned.find((t) => t.id === currentActiveTable.id);
         if (found) {
           setActiveTable(found);
           activeTableRef.current = found;
@@ -216,7 +240,7 @@ export default function PosPage() {
     } finally {
       if (!silent) setIsTablesLoading(false);
     }
-  }, []);
+  }, [sanitizeTablesData]);
 
   // Load unpaid / pay-later sales
   const fetchUnpaidSales = useCallback(async () => {
