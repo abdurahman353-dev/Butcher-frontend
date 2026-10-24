@@ -81,6 +81,8 @@ export default function PosPage() {
   const activeTableRef = useRef<RestaurantTable | null>(null);
   const activeBillRef  = useRef<RestaurantBill | null>(null);
   const selectedTableForModalRef = useRef<RestaurantTable | null>(null);
+  // Tracks the in-flight createBill promise so handleSaveOrder can await it instead of creating a duplicate
+  const pendingBillRef = useRef<Promise<RestaurantBill> | null>(null);
 
   useEffect(() => { activeTableRef.current = activeTable; }, [activeTable]);
   useEffect(() => { activeBillRef.current  = activeBill;  }, [activeBill]);
@@ -643,25 +645,36 @@ export default function PosPage() {
 
       let targetBill = activeBill;
 
-      // If draft bill (id === 0 or missing id), create the official bill in the DB now!
+      // If bill is still a temp (id === 0), await the in-flight creation promise instead of creating a duplicate
       if (!targetBill || targetBill.id === 0) {
-        const tableId = targetBill?.table_id || activeTable?.id;
-        if (!tableId) {
-          throw new Error("No table selected to save this order to.");
+        if (pendingBillRef.current) {
+          // Await the already-in-flight createBill call — no duplicate API call
+          try {
+            const resolvedBill = await pendingBillRef.current;
+            targetBill = resolvedBill;
+            setActiveBill(resolvedBill);
+            activeBillRef.current = resolvedBill;
+          } catch {
+            throw new Error("Bill creation failed. Please try again.");
+          }
+        } else {
+          // Fallback: no pending promise — create the bill now
+          const tableId = targetBill?.table_id || activeTable?.id;
+          if (!tableId) throw new Error("No table selected to save this order to.");
+          const createdBill = await restaurantService.createBill(tableId, {
+            waiter_name: targetBill?.waiter_name || user?.name || "Server",
+            waiter_pin: targetBill?.waiter_pin || undefined,
+            guest_count: targetBill?.guest_count || 1,
+            customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
+            customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
+            customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
+            customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
+            notes: targetBill?.notes || undefined,
+          });
+          targetBill = createdBill;
+          setActiveBill(createdBill);
+          activeBillRef.current = createdBill;
         }
-        const createdBill = await restaurantService.createBill(tableId, {
-          waiter_name: targetBill?.waiter_name || user?.name || "Server",
-          waiter_pin: targetBill?.waiter_pin || undefined,
-          guest_count: targetBill?.guest_count || 1,
-          customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
-          customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
-          customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
-          customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
-          notes: targetBill?.notes || undefined,
-        });
-        targetBill = createdBill;
-        setActiveBill(createdBill);
-        activeBillRef.current = createdBill;
       }
 
       if (!targetBill || !targetBill.id) {
