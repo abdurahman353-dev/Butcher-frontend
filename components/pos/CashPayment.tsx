@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateChange } from "@/lib/math";
 import { Banknote, AlertCircle, HelpCircle } from "lucide-react";
@@ -12,185 +12,245 @@ interface CashPaymentProps {
 }
 
 export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaymentProps) {
-  // Do NOT pre-fill or auto-enter the amount — start empty so the cashier enters the amount received
   const [receivedStr, setReceivedStr] = useState<string>("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Auto-focus input on mount so the user can immediately type
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   const receivedNum = receivedStr === "" ? 0 : parseFloat(receivedStr) || 0;
-  const change = receivedNum >= total ? calculateChange(receivedNum, total) : 0;
   const isSufficient = receivedNum >= total;
   const hasEnteredAmount = receivedStr.trim().length > 0;
+  const change = isSufficient ? calculateChange(receivedNum, total) : 0;
+  const remaining = Math.max(0, total - receivedNum);
 
-  const denominations = [500, 1000, 2000, 5000];
-
-  const handleKeypadPress = (val: string) => {
-    if (val === "C") {
-      setReceivedStr("");
-      inputRef.current?.focus();
-      return;
-    }
-    if (val === "BACK") {
-      setReceivedStr((prev) => (prev.length <= 1 ? "" : prev.slice(0, -1)));
-      inputRef.current?.focus();
-      return;
-    }
-    if (val === ".") {
-      if (!receivedStr.includes(".")) {
-        setReceivedStr((prev) => (prev === "" ? "0." : prev + "."));
+  const handleKeypadPress = useCallback(
+    (val: string) => {
+      if (val === "C") { setReceivedStr(""); return; }
+      if (val === "BACK") { setReceivedStr((p) => (p.length <= 1 ? "" : p.slice(0, -1))); return; }
+      if (val === ".") {
+        if (!receivedStr.includes(".")) setReceivedStr((p) => (p === "" ? "0." : p + "."));
+        return;
       }
-      inputRef.current?.focus();
-      return;
-    }
-    setReceivedStr((prev) => (prev === "0" ? val : prev + val));
-    inputRef.current?.focus();
-  };
+      setReceivedStr((p) => {
+        if (p === "0") return val;
+        if (p.length >= 9) return p;
+        return p + val;
+      });
+    },
+    [receivedStr]
+  );
 
-  const setExact = () => {
-    setReceivedStr(total.toString());
-    inputRef.current?.focus();
-  };
+  const handleDenomination = useCallback(
+    (denom: number) => {
+      if (receivedNum === denom) {
+        setReceivedStr((denom * 2).toString());
+      } else if (receivedNum > 0 && receivedNum % denom === 0 && receivedNum < denom * 10) {
+        setReceivedStr((receivedNum + denom).toString());
+      } else {
+        setReceivedStr(denom.toString());
+      }
+    },
+    [receivedNum]
+  );
 
-  const setAmount = (amt: number) => {
-    setReceivedStr(amt.toString());
-    inputRef.current?.focus();
-  };
+  const setExact = useCallback(() => { setReceivedStr(total.toString()); }, [total]);
+
+  // Physical/USB keyboard support — does NOT focus any DOM input, so no OS virtual keyboard
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) return;
+      if (e.key >= "0" && e.key <= "9") { e.preventDefault(); handleKeypadPress(e.key); }
+      else if (e.key === ".") { e.preventDefault(); handleKeypadPress("."); }
+      else if (e.key === "Backspace") { e.preventDefault(); handleKeypadPress("BACK"); }
+      else if (e.key === "Delete" || e.key === "Escape" || e.key.toLowerCase() === "c") { e.preventDefault(); handleKeypadPress("C"); }
+      else if (e.key === "Enter" && isSufficient && !isProcessing) { e.preventDefault(); onConfirm(receivedNum, change); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleKeypadPress, isSufficient, isProcessing, receivedNum, change, onConfirm]);
 
   return (
     <div className="space-y-4 select-none">
-      {/* Received and Change Boxes */}
+      {/* ── Amount Received & Change/Remaining row — same layout as before ── */}
       <div className="grid grid-cols-2 gap-3">
-        {/* AMOUNT RECEIVED: Interactive editable input & keypad display */}
-        <div
-          onClick={() => inputRef.current?.focus()}
-          className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all cursor-text"
-        >
-          <label
-            htmlFor="cash-received-input"
-            className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider block"
-          >
-            Amount Received
-          </label>
-          <div className="flex items-center mt-0.5">
-            <span className="text-xl font-bold text-slate-400 mr-1 select-none">KSh</span>
-            <input
-              id="cash-received-input"
-              ref={inputRef}
-              type="text"
-              inputMode="decimal"
-              value={receivedStr}
-              onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9.]/g, "");
-                setReceivedStr(val);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && isSufficient && !isProcessing) {
-                  e.preventDefault();
-                  onConfirm(receivedNum, change);
-                }
-              }}
-              placeholder="0.00"
-              className="w-full bg-transparent text-xl font-bold text-slate-900 tabular-nums outline-none placeholder:text-slate-300"
-            />
+        {/* AMOUNT RECEIVED — display only, no DOM input so no virtual keyboard */}
+        <div className="p-3.5 bg-slate-50 border-2 border-emerald-500 rounded-xl shadow-xs">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider block">
+              Amount Received
+            </label>
+            {hasEnteredAmount && (
+              <button
+                type="button"
+                onClick={() => setReceivedStr("")}
+                className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold px-1 py-0.5 rounded transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="flex items-center mt-0.5 overflow-hidden">
+            <span className="text-xl font-bold text-slate-400 mr-1 select-none shrink-0">KSh</span>
+            <span className="text-xl font-bold text-slate-900 tabular-nums truncate">
+              {receivedStr || <span className="text-slate-300">0.00</span>}
+            </span>
+            <span className="w-0.5 h-5 bg-emerald-600 ml-1 inline-block animate-pulse shrink-0" />
           </div>
         </div>
 
-        {/* CHANGE DUE */}
+        {/* CHANGE DUE / REMAINING */}
         <div
           className={`p-3.5 border rounded-xl transition-colors ${
-            hasEnteredAmount && isSufficient
+            isSufficient && hasEnteredAmount
               ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : hasEnteredAmount
+              ? "bg-amber-50 border-amber-200 text-amber-800"
               : "bg-slate-50 border-slate-200 text-slate-400"
           }`}
         >
           <span className="text-[10px] uppercase font-semibold tracking-wider block opacity-80">
-            Change Due
+            {isSufficient && hasEnteredAmount ? "Change Due" : "Remaining Amount"}
           </span>
           <div
             className={`text-xl font-bold tabular-nums mt-0.5 ${
-              hasEnteredAmount && isSufficient ? "text-emerald-700" : "text-slate-400"
+              isSufficient && hasEnteredAmount
+                ? "text-emerald-700"
+                : hasEnteredAmount
+                ? "text-amber-700"
+                : "text-slate-400"
             }`}
           >
-            {formatCurrency(change)}
+            {isSufficient ? formatCurrency(change) : hasEnteredAmount ? formatCurrency(remaining) : formatCurrency(total)}
           </div>
         </div>
       </div>
 
-      {/* Guidance and Validation Banners */}
-      {!hasEnteredAmount ? (
-        <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100/70 border border-slate-200 p-2.5 rounded-lg">
-          <HelpCircle className="w-4 h-4 shrink-0 text-slate-500" />
-          <span>Please enter the cash amount handed by the customer.</span>
-        </div>
-      ) : !isSufficient ? (
-        <div className="flex items-center gap-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2.5 rounded-lg">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-          <span>
-            Amount is {formatCurrency(total - receivedNum)} short of total ({formatCurrency(total)}).
-          </span>
-        </div>
-      ) : null}
-
-      {/* Quick Denominations */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          type="button"
-          onClick={setExact}
-          className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold shrink-0 transition-colors active:scale-95"
-        >
-          Exact Total ({formatCurrency(total)})
-        </button>
-
-        {denominations.map((denom) => (
-          <button
-            key={denom}
-            type="button"
-            onClick={() => setAmount(denom)}
-            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold shrink-0 transition-colors active:scale-95"
-          >
-            {formatCurrency(denom)}
-          </button>
-        ))}
+      {/* ── Guidance / Error Banner ── */}
+      {/* Fixed-height banner — always occupies same space so keypad never shifts */}
+      <div className="h-10 flex items-center">
+        {!hasEnteredAmount ? (
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-100/70 border border-slate-200 px-2.5 py-1.5 rounded-lg w-full">
+            <HelpCircle className="w-4 h-4 shrink-0 text-slate-500" />
+            <span>Tap a denomination or use the numpad to enter cash received.</span>
+          </div>
+        ) : !isSufficient ? (
+          <div className="flex items-center gap-1.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg w-full">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            <span>{formatCurrency(remaining)} short of total ({formatCurrency(total)}).</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg w-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+            <span>Ready — confirm the cash amount to complete the sale.</span>
+          </div>
+        )}
       </div>
 
-      {/* Numeric Keypad */}
-      <div className="grid grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "BACK"].map((k) => (
+      {/* ── Dual-Column Keypad Layout ── */}
+      <div className="grid grid-cols-2 gap-3">
+
+        {/* LEFT: Numeric keypad — 7 8 9 on top (like a POS machine) */}
+        <div className="grid grid-cols-3 gap-2">
+          {["7", "8", "9", "4", "5", "6", "1", "2", "3", "C", "0", "BACK"].map((k) => {
+            const isClear = k === "C";
+            const isBack = k === "BACK";
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => handleKeypadPress(k)}
+                className={`h-14 rounded-xl text-lg font-bold transition-all flex items-center justify-center active:scale-95 cursor-pointer shadow-sm ${
+                  isClear
+                    ? "bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 text-rose-700 text-base"
+                    : isBack
+                    ? "bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 text-base"
+                    : "bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-900"
+                }`}
+              >
+                {isBack ? "⌫" : k}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* RIGHT: Denomination tender grid */}
+        <div className="grid grid-cols-3 gap-2 content-start">
+          {/* High denominations — KSh green tint */}
+          {[1000, 500, 200].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleDenomination(d)}
+              className="h-14 rounded-xl font-extrabold text-sm bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 text-emerald-900 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+            >
+              <span className="text-[9px] text-emerald-600 font-bold uppercase leading-none">KSh</span>
+              <span>{d}</span>
+            </button>
+          ))}
+          {/* Mid denominations */}
+          {[100, 50, 20].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleDenomination(d)}
+              className="h-14 rounded-xl font-extrabold text-sm bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+            >
+              <span className="text-[9px] text-slate-500 font-bold uppercase leading-none">KSh</span>
+              <span>{d}</span>
+            </button>
+          ))}
+          {/* Low denominations */}
+          {[10, 5].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => handleDenomination(d)}
+              className="h-14 rounded-xl font-extrabold text-sm bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+            >
+              <span className="text-[9px] text-slate-500 font-bold uppercase leading-none">KSh</span>
+              <span>{d}</span>
+            </button>
+          ))}
+          {/* Decimal point */}
           <button
-            key={k}
             type="button"
-            onClick={() => handleKeypadPress(k)}
-            className="h-11 rounded-xl text-sm font-bold bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 text-slate-800 transition-all flex items-center justify-center shadow-2xs cursor-pointer"
+            onClick={() => handleKeypadPress(".")}
+            className="h-14 rounded-xl text-xl font-black bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 transition-all flex items-center justify-center shadow-sm active:scale-95 cursor-pointer"
           >
-            {k === "BACK" ? "⌫" : k}
+            .
           </button>
-        ))}
+          {/* Exact Total — spans all 3 columns */}
+          <button
+            type="button"
+            onClick={setExact}
+            className="col-span-3 h-14 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm uppercase tracking-wide flex items-center justify-center shadow-sm transition-all active:scale-95 cursor-pointer"
+          >
+            <span className="truncate">Exact ({formatCurrency(total)})</span>
+          </button>
+        </div>
       </div>
 
-      {/* Submit Button */}
+      {/* ── Submit Button ── */}
       <button
         type="button"
         disabled={!isSufficient || isProcessing}
         onClick={() => onConfirm(receivedNum, change)}
-        className={`w-full py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all ${
+        className={`w-full py-4 rounded-xl font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-all ${
           !isSufficient || isProcessing
             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-            : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20 active:scale-98 cursor-pointer"
+            : "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-emerald-500/20 cursor-pointer"
         }`}
       >
-        <Banknote className="w-4 h-4" />
+        <Banknote className="w-5 h-5" />
         <span>
           {isProcessing
             ? "Completing Sale..."
             : !hasEnteredAmount
-            ? "Enter Cash Amount"
+            ? "ENTER CASH AMOUNT"
             : !isSufficient
-            ? "Insufficient Cash"
-            : `Complete Cash Sale (Change: ${formatCurrency(change)})`}
+            ? `Short by ${formatCurrency(remaining)}`
+            : `Complete Cash Sale — Change: ${formatCurrency(change)}`}
         </span>
       </button>
     </div>
