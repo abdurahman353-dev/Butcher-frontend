@@ -79,8 +79,8 @@ export function TableBillsModal({
   const [showPin, setShowPin] = useState(false);
   const [verifiedStaff, setVerifiedStaff] = useState<{ id: number; name: string; role: string } | null>(null);
   const [pinFeedback, setPinFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
-  const [showNumpad, setShowNumpad] = useState(false);
-  const [showOptionalPin, setShowOptionalPin] = useState(false);
+  const [showNumpad, setShowNumpad] = useState(true);
+  const [showOptionalPin, setShowOptionalPin] = useState(true);
 
   // Local waiter PIN cache — loaded once on modal open for instant verification
   const [waiterCache, setWaiterCache] = useState<Map<string, { id: number; name: string; role: string }>>(new Map());
@@ -322,13 +322,22 @@ export function TableBillsModal({
     onCreateNewBill(table, payload);
   };
 
+  const handleStartCreateNew = () => {
+    setIsCreatingNew(true);
+    setShowOptionalPin(true);
+    setShowNumpad(true);
+    setWaiterPin("");
+    setVerifiedStaff(null);
+    setPinFeedback(null);
+  };
+
   const handleCancelCreate = () => {
     if (isSubmitting) return;
     setIsCreatingNew(false);
     setWaiterPin("");
     setVerifiedStaff(null);
     setPinFeedback(null);
-    setShowNumpad(false);
+    setShowNumpad(true);
   };
 
   // Helper to determine if a bill was posted by a waiter (not by cashier or superadmin)
@@ -527,7 +536,7 @@ export function TableBillsModal({
               {!isCreatingNew && (
                 <button
                   type="button"
-                  onClick={() => setIsCreatingNew(true)}
+                  onClick={handleStartCreateNew}
                   className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -572,8 +581,8 @@ export function TableBillsModal({
                       <label className="text-[10px] font-black uppercase tracking-wider text-zinc-700 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-emerald-600" />
                         <span>
-                          {isWaiter ? "Enter Your 4-Digit Waiter PIN" : "Assign Waiter PIN (Optional)"}
-                          {isWaiter && <span className="text-rose-500 ml-1">*</span>}
+                          Enter Your 4-Digit Waiter PIN
+                          <span className="text-rose-500 ml-1">*</span>
                         </span>
                       </label>
                       <div className="flex items-center gap-2">
@@ -677,7 +686,7 @@ export function TableBillsModal({
                           </div>
                         ) : (
                           <div className="text-[11px] text-zinc-400 font-medium">
-                            {isWaiter ? "Enter your 4-digit PIN to post this order" : "Optional: Tag this order to a waiter"}
+                            Enter your 4-digit PIN to post this order
                           </div>
                         )}
                       </div>
@@ -761,14 +770,17 @@ export function TableBillsModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || (isWaiter && (!verifiedStaff || waiterPin.length !== 4))}
+                  disabled={
+                    isSubmitting ||
+                    ((isWaiter || showOptionalPin) && (!verifiedStaff || waiterPin.length !== 4))
+                  }
                   className="h-9 px-5 bg-zinc-900 hover:bg-zinc-800 active:bg-black active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 transition-all"
                 >
                   {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />}
                   <span>
                     {isSubmitting
                       ? "Opening Bill..."
-                      : isWaiter && (!verifiedStaff || waiterPin.length !== 4)
+                      : (isWaiter || showOptionalPin) && (!verifiedStaff || waiterPin.length !== 4)
                       ? "Enter Your Waiter PIN"
                       : verifiedStaff
                       ? `Open Bill (${verifiedStaff.name})`
@@ -792,7 +804,7 @@ export function TableBillsModal({
               </p>
               <button
                 type="button"
-                onClick={() => setIsCreatingNew(true)}
+                onClick={handleStartCreateNew}
                 className="mt-4 h-9 px-5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-all"
               >
                 <Plus className="w-4 h-4" />
