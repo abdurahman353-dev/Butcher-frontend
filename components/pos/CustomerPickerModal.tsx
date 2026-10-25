@@ -188,8 +188,8 @@ export function CustomerPickerModal({
             )}
           </button>
 
-          {/* Add New Customer button (hidden for waiters) */}
-          {!isWaiter && onOpenAddCustomer && (
+          {/* Add New Customer button */}
+          {onOpenAddCustomer && (
             <button
               type="button"
               onClick={() => {

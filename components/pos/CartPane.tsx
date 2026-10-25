@@ -297,7 +297,7 @@ export function CartPane({
                   <span className="font-bold text-emerald-900 truncate" title={selectedCustomer.name}>
                     {selectedCustomer.name}
                   </span>
-                  {onEditCustomer && (
+                  {onEditCustomer && !isWaiter && (
                     <button
                       type="button"
                       onClick={() => onEditCustomer(selectedCustomer)}
