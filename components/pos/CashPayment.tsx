@@ -148,10 +148,10 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
       </div>
 
       {/* ── Dual-Column Keypad Layout ── */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 xl:gap-5">
 
         {/* LEFT: Numeric keypad — 7 8 9 on top (like a POS machine) */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 xl:gap-3">
           {["7", "8", "9", "4", "5", "6", "1", "2", "3", "C", "0", "BACK"].map((k) => {
             const isClear = k === "C";
             const isBack = k === "BACK";
@@ -160,11 +160,11 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
                 key={k}
                 type="button"
                 onClick={() => handleKeypadPress(k)}
-                className={`h-14 rounded-xl text-lg font-bold transition-all flex items-center justify-center active:scale-95 cursor-pointer shadow-sm ${
+                className={`h-14 xl:h-16 rounded-xl text-lg xl:text-xl font-bold transition-all flex items-center justify-center active:scale-95 cursor-pointer shadow-sm ${
                   isClear
-                    ? "bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 text-rose-700 text-base"
+                    ? "bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-300 text-rose-700 text-base xl:text-lg"
                     : isBack
-                    ? "bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 text-base"
+                    ? "bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 text-base xl:text-lg"
                     : "bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 text-slate-900"
                 }`}
               >
@@ -175,16 +175,16 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
         </div>
 
         {/* RIGHT: Denomination tender grid */}
-        <div className="grid grid-cols-3 gap-2 content-start">
+        <div className="grid grid-cols-3 gap-2 xl:gap-3 content-start">
           {/* High denominations — KSh green tint */}
           {[1000, 500, 200].map((d) => (
             <button
               key={d}
               type="button"
               onClick={() => handleDenomination(d)}
-              className="h-14 rounded-xl font-extrabold text-sm bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 text-emerald-900 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+              className="h-14 xl:h-16 rounded-xl font-extrabold text-sm xl:text-base bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-300 text-emerald-900 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
             >
-              <span className="text-[9px] text-emerald-600 font-bold uppercase leading-none">KSh</span>
+              <span className="text-[9px] xl:text-[11px] text-emerald-600 font-bold uppercase leading-none">KSh</span>
               <span>{d}</span>
             </button>
           ))}
@@ -194,9 +194,9 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
               key={d}
               type="button"
               onClick={() => handleDenomination(d)}
-              className="h-14 rounded-xl font-extrabold text-sm bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+              className="h-14 xl:h-16 rounded-xl font-extrabold text-sm xl:text-base bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
             >
-              <span className="text-[9px] text-slate-500 font-bold uppercase leading-none">KSh</span>
+              <span className="text-[9px] xl:text-[11px] text-slate-500 font-bold uppercase leading-none">KSh</span>
               <span>{d}</span>
             </button>
           ))}
@@ -206,9 +206,9 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
               key={d}
               type="button"
               onClick={() => handleDenomination(d)}
-              className="h-14 rounded-xl font-extrabold text-sm bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
+              className="h-14 xl:h-16 rounded-xl font-extrabold text-sm xl:text-base bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-800 transition-all flex flex-col items-center justify-center shadow-sm active:scale-95 cursor-pointer leading-tight"
             >
-              <span className="text-[9px] text-slate-500 font-bold uppercase leading-none">KSh</span>
+              <span className="text-[9px] xl:text-[11px] text-slate-500 font-bold uppercase leading-none">KSh</span>
               <span>{d}</span>
             </button>
           ))}
@@ -216,7 +216,7 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
           <button
             type="button"
             onClick={() => handleKeypadPress(".")}
-            className="h-14 rounded-xl text-xl font-black bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 transition-all flex items-center justify-center shadow-sm active:scale-95 cursor-pointer"
+            className="h-14 xl:h-16 rounded-xl text-xl xl:text-2xl font-black bg-slate-100 hover:bg-slate-200 active:bg-slate-300 border border-slate-300 text-slate-700 transition-all flex items-center justify-center shadow-sm active:scale-95 cursor-pointer"
           >
             .
           </button>
@@ -224,7 +224,7 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
           <button
             type="button"
             onClick={setExact}
-            className="col-span-3 h-14 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm uppercase tracking-wide flex items-center justify-center shadow-sm transition-all active:scale-95 cursor-pointer"
+            className="col-span-3 h-14 xl:h-16 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-sm xl:text-base uppercase tracking-wide flex items-center justify-center shadow-sm transition-all active:scale-95 cursor-pointer"
           >
             <span className="truncate">Exact ({formatCurrency(total)})</span>
           </button>
