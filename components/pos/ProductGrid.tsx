@@ -13,6 +13,7 @@ interface ProductGridProps {
   onSelectProduct: (product: Product) => void;
   isLoading?: boolean;
   isRestaurant?: boolean;
+  canDrag?: boolean;
   onUpdateProduct?: (productId: number, patch: Partial<Product>) => void;
 }
 
@@ -22,6 +23,7 @@ export function ProductGrid({
   onSelectProduct,
   isLoading = false,
   isRestaurant = false,
+  canDrag = false,
   onUpdateProduct,
 }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -31,20 +33,28 @@ export function ProductGrid({
   const [draggedProductId, setDraggedProductId] = useState<number | null>(null);
   const [dragOverProductId, setDragOverProductId] = useState<number | null>(null);
 
-  // Custom product order from localStorage
-  const [customOrderIds, setCustomOrderIds] = useState<number[]>([]);
+  // Custom product order from localStorage + DB sync
+  const [customOrderIds, setCustomOrderIds] = React.useState<number[]>([]);
 
   React.useEffect(() => {
     if (!isRestaurant) return;
+    // 1) Instant: apply localStorage cache
     try {
       const saved = localStorage.getItem("pos_restaurant_product_order");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setCustomOrderIds(parsed);
-        }
+        if (Array.isArray(parsed)) setCustomOrderIds(parsed);
       }
     } catch (_) {}
+    // 2) Background: fetch authoritative order from DB
+    import("@/services/products.service").then(({ productsService }) => {
+      productsService.getDisplayOrder().then(({ product_order }) => {
+        if (Array.isArray(product_order) && product_order.length > 0) {
+          try { localStorage.setItem("pos_restaurant_product_order", JSON.stringify(product_order)); } catch (_) {}
+          setCustomOrderIds(product_order);
+        }
+      }).catch(() => {});
+    });
   }, [isRestaurant]);
 
   const filteredProducts = useMemo(() => {
@@ -128,9 +138,12 @@ export function ProductGrid({
       swapped[idxF] = temp;
 
       setCustomOrderIds(swapped);
-      try {
-        localStorage.setItem("pos_restaurant_product_order", JSON.stringify(swapped));
-      } catch (_) {}
+      // 1) Instant local cache
+      try { localStorage.setItem("pos_restaurant_product_order", JSON.stringify(swapped)); } catch (_) {}
+      // 2) Persist to DB in background so all accounts sync
+      import("@/services/products.service").then(({ productsService }) => {
+        productsService.updateDisplayOrder({ product_order: swapped }).catch(() => {});
+      });
     }
 
     setDraggedProductId(null);
@@ -183,7 +196,8 @@ export function ProductGrid({
           productCounts={categoryCounts.counts}
           totalCount={categoryCounts.total}
           isRestaurant={isRestaurant}
-          onDropItemOnCategory={handleDropItemOnCategory}
+          canDrag={canDrag}
+          onDropItemOnCategory={canDrag ? handleDropItemOnCategory : undefined}
         />
       </div>
 
@@ -225,20 +239,21 @@ export function ProductGrid({
                 product={product}
                 onSelect={onSelectProduct}
                 isRestaurant={isRestaurant}
+                canDrag={canDrag}
                 isBeingDragged={draggedProductId === product.id}
                 isDragOver={dragOverProductId === product.id}
-                onDragStartItem={() => setDraggedProductId(product.id)}
-                onDragOverItem={() => {
+                onDragStartItem={canDrag ? () => setDraggedProductId(product.id) : undefined}
+                onDragOverItem={canDrag ? () => {
                   if (draggedProductId && draggedProductId !== product.id) {
                     setDragOverProductId(product.id);
                   }
-                }}
-                onDragLeaveItem={() => {
+                } : undefined}
+                onDragLeaveItem={canDrag ? () => {
                   if (dragOverProductId === product.id) {
                     setDragOverProductId(null);
                   }
-                }}
-                onDropOnItem={handleDropOnProduct}
+                } : undefined}
+                onDropOnItem={canDrag ? handleDropOnProduct : undefined}
               />
             ))}
           </div>

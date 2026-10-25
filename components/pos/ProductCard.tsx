@@ -9,6 +9,7 @@ interface ProductCardProps {
   product: Product;
   onSelect: (product: Product) => void;
   isRestaurant?: boolean;
+  canDrag?: boolean;
   onDragStartItem?: (product: Product) => void;
   onDragOverItem?: (product: Product) => void;
   onDragLeaveItem?: (product: Product) => void;
@@ -21,6 +22,7 @@ export function ProductCard({
   product,
   onSelect,
   isRestaurant = false,
+  canDrag = false,
   onDragStartItem,
   onDragOverItem,
   onDragLeaveItem,
@@ -58,9 +60,9 @@ export function ProductCard({
 
   return (
     <div
-      draggable={isRestaurant}
+      draggable={canDrag}
       onDragStart={(e) => {
-        if (!isRestaurant) return;
+        if (!canDrag) return;
         isDraggingRef.current = true;
         dragStartTimeRef.current = Date.now();
         e.dataTransfer.setData("application/pos-product-id", product.id.toString());

@@ -90,4 +90,15 @@ export const productsService = {
       window.dispatchEvent(new CustomEvent("butcher:data-change"));
     }
   },
+
+  /** Fetch the server-persisted POS display order (shared across all logins). */
+  async getDisplayOrder(): Promise<{ category_order: number[]; product_order: number[] }> {
+    const res = await apiClient.get<{ category_order: number[]; product_order: number[] }>("/pos/display-order");
+    return res.data;
+  },
+
+  /** Persist a new POS display order to DB – fires in background after optimistic local update. */
+  async updateDisplayOrder(payload: { category_order?: number[]; product_order?: number[] }): Promise<void> {
+    await apiClient.post("/pos/display-order", payload);
+  },
 };

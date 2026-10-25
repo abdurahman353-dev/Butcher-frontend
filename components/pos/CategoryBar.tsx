@@ -11,6 +11,7 @@ interface CategoryBarProps {
   productCounts?: Record<string, number>;
   totalCount?: number;
   isRestaurant?: boolean;
+  canDrag?: boolean;
   onReorderCategories?: (reorderedCategories: Category[]) => void;
   onDropItemOnCategory?: (productId: number, categoryId: number) => void;
 }
@@ -59,6 +60,7 @@ export function CategoryBar({
   productCounts = {},
   totalCount,
   isRestaurant = false,
+  canDrag = false,
   onReorderCategories,
   onDropItemOnCategory,
 }: CategoryBarProps) {
@@ -74,34 +76,50 @@ export function CategoryBar({
   // Ordered categories respecting saved custom order in restaurant mode
   const [orderedCategories, setOrderedCategories] = useState<Category[]>(categories);
 
+  /** Apply a list of IDs to order categories, appending any not in list. */
+  const applyOrder = useCallback((ids: number[], cats: Category[]) => {
+    const map = new Map<number, Category>();
+    cats.forEach((c) => map.set(c.id, c));
+    const sorted: Category[] = [];
+    for (const id of ids) {
+      const found = map.get(id);
+      if (found) { sorted.push(found); map.delete(id); }
+    }
+    map.forEach((c) => sorted.push(c));
+    return sorted;
+  }, []);
+
   useEffect(() => {
     if (!isRestaurant) {
       setOrderedCategories(categories);
       return;
     }
+    // 1) Immediately apply localStorage cache (0 ms)
     try {
       const saved = localStorage.getItem("pos_restaurant_category_order");
       if (saved) {
-        const orderIds: number[] = JSON.parse(saved);
-        if (Array.isArray(orderIds) && orderIds.length > 0) {
-          const map = new Map<number, Category>();
-          categories.forEach((c) => map.set(c.id, c));
-          const sorted: Category[] = [];
-          for (const id of orderIds) {
-            const found = map.get(id);
-            if (found) {
-              sorted.push(found);
-              map.delete(id);
-            }
-          }
-          // append any newly added categories not yet in saved order
-          map.forEach((c) => sorted.push(c));
-          setOrderedCategories(sorted);
-          return;
+        const ids: number[] = JSON.parse(saved);
+        if (Array.isArray(ids) && ids.length > 0) {
+          setOrderedCategories(applyOrder(ids, categories));
+        } else {
+          setOrderedCategories(categories);
         }
+      } else {
+        setOrderedCategories(categories);
       }
-    } catch (_) {}
-    setOrderedCategories(categories);
+    } catch (_) {
+      setOrderedCategories(categories);
+    }
+    // 2) Fetch authoritative order from DB in background
+    import("@/services/products.service").then(({ productsService }) => {
+      productsService.getDisplayOrder().then(({ category_order }) => {
+        if (Array.isArray(category_order) && category_order.length > 0) {
+          try { localStorage.setItem("pos_restaurant_category_order", JSON.stringify(category_order)); } catch (_) {}
+          setOrderedCategories((prev) => applyOrder(category_order, prev.length > 0 ? prev : categories));
+        }
+      }).catch(() => {/* silently ignore network error */});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, isRestaurant]);
 
   const updateScrollState = useCallback(() => {
@@ -151,9 +169,13 @@ export function CategoryBar({
     next[toIndex] = temp;
     setOrderedCategories(next);
 
-    try {
-      localStorage.setItem("pos_restaurant_category_order", JSON.stringify(next.map((c) => c.id)));
-    } catch (_) {}
+    const newIds = next.map((c) => c.id);
+    // 1) Instant local cache
+    try { localStorage.setItem("pos_restaurant_category_order", JSON.stringify(newIds)); } catch (_) {}
+    // 2) Persist to DB in background so all accounts sync
+    import("@/services/products.service").then(({ productsService }) => {
+      productsService.updateDisplayOrder({ category_order: newIds }).catch(() => {});
+    });
 
     onReorderCategories?.(next);
   };
@@ -225,9 +247,9 @@ export function CategoryBar({
             <button
               key={cat.id}
               type="button"
-              draggable={isRestaurant}
+              draggable={canDrag}
               onDragStart={(e) => {
-                if (!isRestaurant) return;
+                if (!canDrag) return;
                 e.dataTransfer.setData("application/pos-category-id", cat.id.toString());
                 e.dataTransfer.effectAllowed = "move";
                 setDraggedCatId(cat.id);
@@ -238,10 +260,10 @@ export function CategoryBar({
                 setItemHoverCatId(null);
               }}
               onDragOver={(e) => {
-                if (!isRestaurant) return;
+                if (!canDrag && !onDropItemOnCategory) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                if (draggedCatId && draggedCatId !== cat.id) {
+                if (canDrag && draggedCatId && draggedCatId !== cat.id) {
                   setDragOverCatId(cat.id);
                 } else if (e.dataTransfer.types.includes("application/pos-product-id")) {
                   setItemHoverCatId(cat.id);
@@ -252,7 +274,7 @@ export function CategoryBar({
                 if (itemHoverCatId === cat.id) setItemHoverCatId(null);
               }}
               onDrop={(e) => {
-                if (!isRestaurant) return;
+                if (!canDrag && !onDropItemOnCategory) return;
                 e.preventDefault();
                 // Check if an item was dropped onto this category
                 const prodIdStr = e.dataTransfer.getData("application/pos-product-id");
@@ -264,19 +286,21 @@ export function CategoryBar({
                   setItemHoverCatId(null);
                   return;
                 }
-                // Check if another category was dropped here
-                const catIdStr = e.dataTransfer.getData("application/pos-category-id");
-                if (catIdStr) {
-                  handleCategoryDrop(cat.id);
+                // Check if another category was dropped here (superadmin only)
+                if (canDrag) {
+                  const catIdStr2 = e.dataTransfer.getData("application/pos-category-id");
+                  if (catIdStr2) {
+                    handleCategoryDrop(cat.id);
+                  }
                 }
                 setDraggedCatId(null);
                 setDragOverCatId(null);
                 setItemHoverCatId(null);
               }}
               onClick={() => onSelectCategory(catIdStr)}
-              title={isRestaurant ? "Click to filter, or drag to reposition / drop items here" : undefined}
+              title={canDrag ? "Drag to reposition / drop items here" : isRestaurant ? "Drop items here" : undefined}
               className={`group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-150 border shrink-0 ${
-                isRestaurant ? "cursor-grab active:cursor-grabbing" : ""
+                canDrag ? "cursor-grab active:cursor-grabbing" : ""
               } ${
                 isHoveredByItem
                   ? "bg-emerald-100 border-2 border-emerald-600 scale-105 ring-2 ring-emerald-500 shadow-lg text-emerald-900"
