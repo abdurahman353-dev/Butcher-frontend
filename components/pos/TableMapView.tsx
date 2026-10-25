@@ -12,6 +12,8 @@ import {
   Search,
   UtensilsCrossed,
   Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface TableMapViewProps {
@@ -22,6 +24,8 @@ interface TableMapViewProps {
   onOpenAddTableModal: () => void;
   onDeleteTable?: (table: RestaurantTable) => void;
   isLoading?: boolean;
+  isHeaderHidden?: boolean;
+  onToggleHideHeader?: () => void;
 }
 
 export function TableMapView({
@@ -32,6 +36,8 @@ export function TableMapView({
   onOpenAddTableModal,
   onDeleteTable,
   isLoading = false,
+  isHeaderHidden = false,
+  onToggleHideHeader,
 }: TableMapViewProps) {
   const { user } = useAuth();
   const isWaiter = user?.role === "waiter";
@@ -70,49 +76,114 @@ export function TableMapView({
   return (
     <div className="flex flex-col h-full bg-[#f8fafc]">
 
-      {/* ── Header ────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-zinc-200 shadow-2xs shrink-0">
-
-        {/* Title row */}
-        <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-black text-zinc-900 tracking-tight">
-              Floor Tables
-            </h2>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500">
-              {showSkeleton ? (
-                <span className="inline-block w-8 h-3 rounded bg-zinc-200 animate-pulse align-middle" />
-              ) : (
-                `${tables.length} Total`
-              )}
+      {/* ── Collapsed Compact Bar (when Hide is clicked) ── */}
+      {isHeaderHidden ? (
+        <div className="bg-white/95 backdrop-blur-xs border-b border-zinc-200 px-4 py-2 flex items-center justify-between shrink-0 shadow-2xs z-20 transition-all">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-black text-zinc-900 flex items-center gap-1.5">
+              <UtensilsCrossed className="w-3.5 h-3.5 text-zinc-700" />
+              <span>Floor Tables</span>
             </span>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
+              {tables.length} Total
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200">
+                Empty: {emptyCount}
+              </span>
+              {unprintedCount > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                  Unprinted: {unprintedCount}
+                </span>
+              )}
+              {printedCount > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Printed: {printedCount}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Refresh */}
             <button
               type="button"
               onClick={onRefresh}
               disabled={isLoading}
-              className="p-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 active:bg-emerald-700 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              className="p-1.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-all shadow-2xs cursor-pointer"
               title="Refresh Floor"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
             </button>
-
-            {/* Add Table — admin & cashier only */}
-            {!isWaiter && (
-              <button
-                type="button"
-                onClick={onOpenAddTableModal}
-                className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Table</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onToggleHideHeader}
+              className="h-8 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="Show controls & filters"
+            >
+              <Eye className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Show Controls</span>
+            </button>
           </div>
         </div>
+      ) : (
+        /* ── Full Header ────────────────────────────────────────────── */
+        <div className="bg-white border-b border-zinc-200 shadow-2xs shrink-0">
+
+          {/* Title row */}
+          <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-black text-zinc-900 tracking-tight">
+                Floor Tables
+              </h2>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 border border-zinc-200 text-zinc-500">
+                {showSkeleton ? (
+                  <span className="inline-block w-8 h-3 rounded bg-zinc-200 animate-pulse align-middle" />
+                ) : (
+                  `${tables.length} Total`
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Hide Controls Button */}
+              {onToggleHideHeader && (
+                <button
+                  type="button"
+                  onClick={onToggleHideHeader}
+                  className="h-8 px-3 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 active:bg-zinc-200 text-zinc-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer"
+                  title="Hide controls so tables can fully be seen on screen"
+                >
+                  <EyeOff className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Hide</span>
+                </button>
+              )}
+
+              {/* Refresh */}
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="p-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 active:bg-emerald-700 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                title="Refresh Floor"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+              </button>
+
+              {/* Add Table — admin & cashier only */}
+              {!isWaiter && (
+                <button
+                  type="button"
+                  onClick={onOpenAddTableModal}
+                  className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Table</span>
+                </button>
+              )}
+            </div>
+          </div>
 
         {/* Status Legend pills */}
         <div className="px-4 pb-2.5 flex flex-wrap items-center gap-2">
@@ -191,6 +262,7 @@ export function TableMapView({
           </div>
         )}
       </div>
+      )}
 
       {/* ── Table Grid ────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-5">

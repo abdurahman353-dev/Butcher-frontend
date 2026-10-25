@@ -156,6 +156,23 @@ export default function PosPage() {
 
   const [hasUnsavedOrder, setHasUnsavedOrder] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [isFloorHeaderHidden, setIsFloorHeaderHidden] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pos_hide_floor_header") === "true";
+    }
+    return false;
+  });
+
+  const handleToggleHideFloorHeader = useCallback(() => {
+    setIsFloorHeaderHidden((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pos_hide_floor_header", String(next));
+      }
+      return next;
+    });
+  }, []);
+
   const [selectedTableForModal, setSelectedTableForModal] = useState<RestaurantTable | null>(null);
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
   const [isAddTableModalOpen, setIsAddTableModalOpen] = useState(false);
@@ -1460,101 +1477,103 @@ export default function PosPage() {
       {/* Left Column: Product Selection Grid or Floor Tables */}
       <div className="flex-1 h-full overflow-hidden flex flex-col min-w-0">
         {/* Top Tab Bar: Products/Menu vs Floor Tables (restaurant only) */}
-        <div className="px-4 py-2.5 bg-white border-b border-zinc-200 flex items-center justify-between shrink-0 shadow-2xs">
-          <div className="flex items-center gap-1.5 p-1 bg-zinc-100 rounded-xl">
-            <button
-              type="button"
-              onClick={() => {
-                if (isRestaurant && !activeBill) {
-                  alert({
-                    title: "Open a Table Bill First",
-                    message: "Please select a table and open or create a bill from Floor Tables to view the menu and order dishes.",
-                    type: "warning",
-                  });
-                  return;
-                }
-                setActiveTab("products");
-              }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                isRestaurant && !activeBill
-                  ? "opacity-60 cursor-not-allowed text-zinc-400"
-                  : activeTab === "products"
-                  ? "bg-white text-zinc-900 shadow-2xs"
-                  : "text-zinc-600 hover:text-zinc-900"
-              }`}
-              title={isRestaurant && !activeBill ? "Select a table and open a bill first to order dishes" : "Menu & Dishes"}
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{isRestaurant ? "Menu & Dishes" : "Products & Cuts"}</span>
-              {isRestaurant && !activeBill && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-200 text-zinc-500">
-                  Open bill first
-                </span>
-              )}
-            </button>
-
-            {/* Floor Tables tab — restaurant owners only */}
-            {isRestaurant && (
+        {!(activeTab === "tables" && isFloorHeaderHidden) && (
+          <div className="px-4 py-2.5 bg-white border-b border-zinc-200 flex items-center justify-between shrink-0 shadow-2xs">
+            <div className="flex items-center gap-1.5 p-1 bg-zinc-100 rounded-xl">
               <button
                 type="button"
-                onClick={async () => {
-                  if (activeBill) {
-                    await handlePromptExitActiveTable();
+                onClick={() => {
+                  if (isRestaurant && !activeBill) {
+                    alert({
+                      title: "Open a Table Bill First",
+                      message: "Please select a table and open or create a bill from Floor Tables to view the menu and order dishes.",
+                      type: "warning",
+                    });
                     return;
                   }
-                  setActiveTab("tables");
+                  setActiveTab("products");
                 }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
-                  activeTab === "tables"
+                  isRestaurant && !activeBill
+                    ? "opacity-60 cursor-not-allowed text-zinc-400"
+                    : activeTab === "products"
                     ? "bg-white text-zinc-900 shadow-2xs"
                     : "text-zinc-600 hover:text-zinc-900"
                 }`}
-                title={activeBill ? "Exit table to return to Floor Tables" : "Floor Tables"}
+                title={isRestaurant && !activeBill ? "Select a table and open a bill first to order dishes" : "Menu & Dishes"}
               >
-                <UtensilsCrossed className="w-3.5 h-3.5 text-zinc-700" />
-                <span>Floor Tables</span>
-                {restaurantTables.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-zinc-200 text-zinc-700">
-                    {restaurantTables.length}
+                <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isRestaurant ? "Menu & Dishes" : "Products & Cuts"}</span>
+                {isRestaurant && !activeBill && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-200 text-zinc-500">
+                    Open bill first
                   </span>
-                )}
-                {restaurantTables.some((t) => t.status === "red") && (
-                  <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" title="Active unprinted orders" />
-                )}
-                {restaurantTables.some((t) => t.status === "yellow") && (
-                  <span className="w-2 h-2 rounded-full bg-amber-500" title="Bills printed awaiting payment" />
                 )}
               </button>
-            )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            {activeBill && (
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-bold text-emerald-950">
-                  Table {activeBill.table_number} ({activeBill.bill_number})
-                </span>
-                {hasUnsavedOrder && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300">
-                    Unsaved
+              {/* Floor Tables tab — restaurant owners only */}
+              {isRestaurant && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (activeBill) {
+                      await handlePromptExitActiveTable();
+                      return;
+                    }
+                    setActiveTab("tables");
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    activeTab === "tables"
+                      ? "bg-white text-zinc-900 shadow-2xs"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                  title={activeBill ? "Exit table to return to Floor Tables" : "Floor Tables"}
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5 text-zinc-700" />
+                  <span>Floor Tables</span>
+                  {restaurantTables.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-zinc-200 text-zinc-700">
+                      {restaurantTables.length}
+                    </span>
+                  )}
+                  {restaurantTables.some((t) => t.status === "red") && (
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" title="Active unprinted orders" />
+                  )}
+                  {restaurantTables.some((t) => t.status === "yellow") && (
+                    <span className="w-2 h-2 rounded-full bg-amber-500" title="Bills printed awaiting payment" />
+                  )}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {activeBill && (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="font-bold text-emerald-950">
+                    Table {activeBill.table_number} ({activeBill.bill_number})
                   </span>
-                )}
-              </div>
-            )}
+                  {hasUnsavedOrder && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                      Unsaved
+                    </span>
+                  )}
+                </div>
+              )}
 
-            {/* Receipt printer setup button */}
-            <button
-              type="button"
-              onClick={() => setIsPrinterSettingsOpen(true)}
-              className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
-              title="Receipt Printer Settings (QZ Tray)"
-            >
-              <Printer className="w-3.5 h-3.5 text-white" />
-              <span className="hidden sm:inline">Receipt Printer</span>
-            </button>
+              {/* Receipt printer setup button */}
+              <button
+                type="button"
+                onClick={() => setIsPrinterSettingsOpen(true)}
+                className="h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                title="Receipt Printer Settings (QZ Tray)"
+              >
+                <Printer className="w-3.5 h-3.5 text-white" />
+                <span className="hidden sm:inline">Receipt Printer</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* View Selection: Products vs Tables (tables only for restaurant) */}
         {activeTab === "tables" && isRestaurant ? (
@@ -1571,6 +1590,8 @@ export default function PosPage() {
               onOpenAddTableModal={() => setIsAddTableModalOpen(true)}
               onDeleteTable={handleDeleteTable}
               isLoading={isTablesLoading}
+              isHeaderHidden={isFloorHeaderHidden}
+              onToggleHideHeader={handleToggleHideFloorHeader}
             />
           </div>
         ) : (
