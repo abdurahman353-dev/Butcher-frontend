@@ -678,7 +678,7 @@ export default function PosPage() {
     setPrintingCustomerBill((prev) => (prev && prev.id === updatedBill.id ? updatedBill : prev));
   };
 
-  // Restaurant: Save Order & Print KOT Kitchen Receipt
+  // Restaurant: Save Order & Print KOT Kitchen Receipt (Ultra-Fast Optimistic Execution)
   const handleSaveOrder = async (): Promise<boolean> => {
     if (!activeBill) return false;
     if (items.length === 0) {
@@ -690,160 +690,152 @@ export default function PosPage() {
       return false;
     }
 
-    try {
-      setIsSavingOrder(true);
+    // 1. Identify newly added / unsaved items for KOT slip
+    const newItems = items.filter((it) => !it.is_saved);
 
-      let targetBill = activeBill;
-
-      // If bill is still a temp (id === 0), await the in-flight creation promise instead of creating a duplicate
-      if (!targetBill || targetBill.id === 0) {
-        if (pendingBillRef.current) {
-          // Await the already-in-flight createBill call — no duplicate API call
-          try {
-            const resolvedBill = await pendingBillRef.current;
-            targetBill = resolvedBill;
-            setActiveBill(resolvedBill);
-            activeBillRef.current = resolvedBill;
-          } catch {
-            throw new Error("Bill creation failed. Please try again.");
-          }
-        } else {
-          // Fallback: no pending promise — create the bill now
-          const tableId = targetBill?.table_id || activeTable?.id;
-          if (!tableId) throw new Error("No table selected to save this order to.");
-          const createdBill = await restaurantService.createBill(tableId, {
-            waiter_name: targetBill?.waiter_name || user?.name || "Server",
-            waiter_pin: targetBill?.waiter_pin || undefined,
-            guest_count: targetBill?.guest_count || 1,
-            customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
-            customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
-            customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
-            customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
-            notes: targetBill?.notes || undefined,
-          });
-          targetBill = createdBill;
-          setActiveBill(createdBill);
-          activeBillRef.current = createdBill;
-        }
-      }
-
-      if (!targetBill || !targetBill.id) {
-        throw new Error("Could not retrieve a valid bill ID. Please try saving again.");
-      }
-
-      // Identify only the newly added / unsaved items for this KOT print round
-      const newItems = items.filter((it) => !it.is_saved);
-
-      const formattedItems: RestaurantBillItem[] = items.map((it) => ({
+    const formattedItems: RestaurantBillItem[] = items.map((it) => {
+      const prod = products.find((p) => p.id === it.product_id);
+      return {
         product_id: it.product_id,
         product_name: it.product_name,
-        category_id: it.category_id,
-        category_name: it.category_name,
+        category_id: it.category_id || prod?.category_id,
+        category_name: it.category_name || prod?.category_name || "Kitchen",
         price_per_kg: it.price_per_kg,
         weight: it.weight,
         unit: it.unit,
         discount: it.discount || 0,
         notes: it.notes || "",
         line_total: it.subtotal,
-      }));
-
-      const res = await restaurantService.saveOrder(targetBill.id, {
-        items: formattedItems,
-        customer_id: selectedCustomer?.id || undefined,
-        customer_name: selectedCustomer?.name || targetBill.customer_name || undefined,
-        customer_phone: selectedCustomer?.phone || targetBill.customer_phone || undefined,
-        customer_address: selectedCustomer?.address || targetBill.customer_address || undefined,
-        waiter_name: targetBill.waiter_name,
-        guest_count: targetBill.guest_count,
-        notes: targetBill.notes || undefined,
-      });
-
-      // Mark all items in the cart as saved/read-only now
-      const allSavedCartItems: CartItem[] = items.map((it) => ({
-        ...it,
-        is_saved: true,
-      }));
-      restoreItems(allSavedCartItems);
-
-      setActiveBill(res.data);
-      activeBillRef.current = res.data;
-      setHasUnsavedOrder(false);
-
-      // Clean up any empty 0-item ghost bills that might exist on this table
-      const tableIdForClean = targetBill.table_id || activeTable?.id;
-      if (tableIdForClean) {
-        setRestaurantTables((prev) =>
-          prev.map((t) => {
-            if (t.id !== tableIdForClean) return t;
-            const validBills = (t.active_bills || []).filter(
-              (b) => b.id === res.data.id || ((b.items?.length || 0) > 0 && (b.total || 0) > 0)
-            );
-            const hasSavedBill = validBills.some((b) => b.id === res.data.id);
-            const finalBills = hasSavedBill
-              ? validBills.map((b) => (b.id === res.data.id ? res.data : b))
-              : [res.data, ...validBills];
-            return {
-              ...t,
-              status: "red" as const,
-              active_bills: finalBills,
-              active_bills_count: finalBills.length,
-            };
-          })
-        );
-        // Silently cancel empty ghost bills on this table in background
-        const currentTableObj = restaurantTables.find((t) => t.id === tableIdForClean);
-        if (currentTableObj?.active_bills) {
-          const emptyBillsToCancel = currentTableObj.active_bills.filter(
-            (b) =>
-              b.id > 0 &&
-              b.id !== res.data.id &&
-              (!b.items || b.items.length === 0) &&
-              (b.total === 0 || b.total === undefined)
-          );
-          emptyBillsToCancel.forEach((b) => {
-            restaurantService.cancelBill(b.id).catch(() => {});
-          });
-        }
-      }
-
-      // Only print newly posted items on this round's KOT slip
-      const itemsForSlip: RestaurantBillItem[] = (newItems.length > 0 ? newItems : items).map((it) => ({
-        product_id: it.product_id,
-        product_name: it.product_name,
-        category_id: it.category_id,
-        category_name: it.category_name,
-        price_per_kg: it.price_per_kg,
-        weight: it.weight,
-        unit: it.unit,
-        discount: it.discount || 0,
-        notes: it.notes || "",
-        line_total: it.subtotal,
-      }));
-
-      const billForKitchenSlip: RestaurantBill = {
-        ...res.data,
-        items: itemsForSlip,
       };
+    });
 
-      // Show & auto-print the Kitchen Order Ticket for the newly posted items
-      setIsSlipReprint(false);
-      setReprintProductId(undefined);
-      setPrintingKitchenBill(billForKitchenSlip);
-      // Silently refresh tables in background — no spinner
-      fetchRestaurantTables(true);
-      triggerTableSync();
-      return true;
-    } catch (e: any) {
-      console.error("Save order error:", e);
-      alert({
-        title: "Failed to Save Order",
-        message: e?.response?.data?.message || e?.message || "An error occurred while saving the order.",
-        type: "danger",
-      });
-      return false;
-    } finally {
-      setIsSavingOrder(false);
+    // 2. INSTANT OPTIMISTIC UI (0ms network delay!)
+    const allSavedCartItems: CartItem[] = items.map((it) => ({
+      ...it,
+      is_saved: true,
+    }));
+    restoreItems(allSavedCartItems);
+    setHasUnsavedOrder(false);
+
+    // Prepare KOT slip immediately
+    const itemsForSlip: RestaurantBillItem[] = (newItems.length > 0 ? newItems : items).map((it) => {
+      const prod = products.find((p) => p.id === it.product_id);
+      return {
+        product_id: it.product_id,
+        product_name: it.product_name,
+        category_id: it.category_id || prod?.category_id,
+        category_name: it.category_name || prod?.category_name || "Kitchen",
+        price_per_kg: it.price_per_kg,
+        weight: it.weight,
+        unit: it.unit,
+        discount: it.discount || 0,
+        notes: it.notes || "",
+        line_total: it.subtotal,
+      };
+    });
+
+    const billForKitchenSlip: RestaurantBill = {
+      ...activeBill,
+      items: itemsForSlip,
+      subtotal,
+      discount: totalDiscount,
+      total,
+      status: "open",
+    };
+
+    setIsSlipReprint(false);
+    setReprintProductId(undefined);
+    setPrintingKitchenBill(billForKitchenSlip);
+
+    // Optimistically update table on floor map to RED immediately
+    const tableIdForClean = activeBill.table_id || activeTable?.id;
+    if (tableIdForClean) {
+      setRestaurantTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== tableIdForClean) return t;
+          const otherBills = (t.active_bills || []).filter((b) => b.id !== activeBill.id);
+          const updatedActiveBill: RestaurantBill = {
+            ...activeBill,
+            items: formattedItems,
+            subtotal,
+            discount: totalDiscount,
+            total,
+            status: "open",
+          };
+          return {
+            ...t,
+            status: "red" as const,
+            active_bills: [updatedActiveBill, ...otherBills],
+            active_bills_count: otherBills.length + 1,
+            total_active_amount: (t.total_active_amount || 0) + total,
+          };
+        })
+      );
     }
+
+    // 3. PERSIST IN BACKGROUND (non-blocking)
+    (async () => {
+      try {
+        let targetBill = activeBill;
+
+        // If bill is temp (id === 0), await or create
+        if (!targetBill || targetBill.id === 0) {
+          if (pendingBillRef.current) {
+            try {
+              const resolvedBill = await pendingBillRef.current;
+              targetBill = resolvedBill;
+              setActiveBill(resolvedBill);
+              activeBillRef.current = resolvedBill;
+            } catch {
+              // fallback below
+            }
+          }
+          if (!targetBill || targetBill.id === 0) {
+            const tableId = targetBill?.table_id || activeTable?.id;
+            if (!tableId) return;
+            const createdBill = await restaurantService.createBill(tableId, {
+              waiter_name: targetBill?.waiter_name || user?.name || "Server",
+              waiter_pin: targetBill?.waiter_pin || undefined,
+              guest_count: targetBill?.guest_count || 1,
+              customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
+              customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
+              customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
+              customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
+              notes: targetBill?.notes || undefined,
+            });
+            targetBill = createdBill;
+            setActiveBill(createdBill);
+            activeBillRef.current = createdBill;
+          }
+        }
+
+        const res = await restaurantService.saveOrder(targetBill.id, {
+          items: formattedItems,
+          customer_id: selectedCustomer?.id || undefined,
+          customer_name: selectedCustomer?.name || targetBill.customer_name || undefined,
+          customer_phone: selectedCustomer?.phone || targetBill.customer_phone || undefined,
+          customer_address: selectedCustomer?.address || targetBill.customer_address || undefined,
+          waiter_name: targetBill.waiter_name,
+          guest_count: targetBill.guest_count,
+          notes: targetBill.notes || undefined,
+        });
+
+        setActiveBill(res.data);
+        activeBillRef.current = res.data;
+        triggerTableSync();
+        fetchRestaurantTables(true);
+      } catch (err: any) {
+        console.error("Background save order error:", err);
+        setHasUnsavedOrder(true);
+        alert({
+          title: "Save Notice",
+          message: err?.response?.data?.message || err?.message || "Order shown locally, but could not sync to database.",
+          type: "danger",
+        });
+      }
+    })();
+
+    return true;
   };
 
   // Restaurant: Print Pre-Settlement Customer Bill (Yellow status) — opens modal instantly, syncs API in background
@@ -1134,28 +1126,22 @@ export default function PosPage() {
       return;
     }
 
-    if (activeBill && (hasUnsavedOrder || activeBill.id === 0)) {
-      if (items.length === 0) {
-        alert({
-          title: "Cart is Empty",
-          message: "Please add products before checking out.",
-          type: "warning",
-        });
-        return;
-      }
-      const proceed = await confirm({
-        title: "Unsaved Order",
-        message:
-          "You have added products that haven't been saved. Would you like to save the order and print the kitchen receipt now before checkout?",
-        confirmText: "Save Order & Checkout",
-        cancelText: "Cancel",
+    if (items.length === 0) {
+      alert({
+        title: "Cart is Empty",
+        message: "Please add products before checking out.",
         type: "warning",
       });
-      if (proceed) {
-        await handleSaveOrder();
-      } else {
-        return;
-      }
+      return;
+    }
+
+    if (activeBill && (hasUnsavedOrder || activeBill.id === 0)) {
+      alert({
+        title: "Save Order Required",
+        message: "Please click 'Save Order & Send to Kitchen' first before proceeding to checkout.",
+        type: "warning",
+      });
+      return;
     }
 
     if (!isShiftOpen) {
@@ -1189,7 +1175,52 @@ export default function PosPage() {
     customer_phone?: string;
   }): Promise<Sale> => {
     if (activeBill) {
-      const res = await restaurantService.settleBill(activeBill.id, {
+      let targetBillId = activeBill.id;
+
+      // Handle in-flight or temp bill creation seamlessly
+      if (targetBillId === 0) {
+        if (pendingBillRef.current) {
+          try {
+            const resolvedBill = await pendingBillRef.current;
+            targetBillId = resolvedBill.id;
+          } catch {
+            // Fallback below
+          }
+        }
+        if (targetBillId === 0) {
+          const tableId = activeBill.table_id || activeTable?.id;
+          if (!tableId) throw new Error("No table selected for this bill.");
+          const createdBill = await restaurantService.createBill(tableId, {
+            waiter_name: activeBill.waiter_name || user?.name || "Server",
+            guest_count: activeBill.guest_count || 1,
+            customer_id: selectedCustomer?.id || (activeBill.customer_id ?? undefined),
+            customer_name: selectedCustomer?.name || (activeBill.customer_name ?? undefined),
+            customer_phone: selectedCustomer?.phone || (activeBill.customer_phone ?? undefined),
+            customer_address: selectedCustomer?.address || (activeBill.customer_address ?? undefined),
+            notes: activeBill.notes || undefined,
+          });
+          targetBillId = createdBill.id;
+        }
+      }
+
+      // Format current cart items so settleBill can settle all items in one call
+      const formattedItems: RestaurantBillItem[] = items.map((it) => {
+        const prod = products.find((p) => p.id === it.product_id);
+        return {
+          product_id: it.product_id,
+          product_name: it.product_name,
+          category_id: it.category_id || prod?.category_id,
+          category_name: it.category_name || prod?.category_name || "Kitchen",
+          price_per_kg: it.price_per_kg,
+          weight: it.weight,
+          unit: it.unit,
+          discount: it.discount || 0,
+          notes: it.notes || "",
+          line_total: it.subtotal,
+        };
+      });
+
+      const res = await restaurantService.settleBill(targetBillId, {
         payment_method: payload.payment_method,
         amount_received: payload.amount_received,
         mpesa_reference: payload.mpesa_reference,
@@ -1199,7 +1230,26 @@ export default function PosPage() {
           : (activeBill.customer_name || selectedCustomer?.name || undefined),
         customer_phone: payload.customer_phone || activeBill.customer_phone || selectedCustomer?.phone || undefined,
         notes: payload.notes,
+        items: formattedItems.length > 0 ? formattedItems : undefined,
       });
+
+      // Optimistic floor map table update — immediately free table with zero delay
+      const currentTableId = activeTable?.id || activeBill.table_id;
+      if (currentTableId) {
+        setRestaurantTables((prev) =>
+          prev.map((t) => {
+            if (t.id !== currentTableId) return t;
+            const remainingBills = (t.active_bills || []).filter((b) => b.id !== targetBillId);
+            return {
+              ...t,
+              status: remainingBills.length === 0 ? ("grey" as const) : t.status,
+              active_bills: remainingBills,
+              active_bills_count: remainingBills.length,
+              total_active_amount: remainingBills.reduce((sum, b) => sum + (b.total || 0), 0),
+            };
+          })
+        );
+      }
 
       // Non-blocking cleanup — don't delay the success screen
       clearCart();
@@ -1212,6 +1262,7 @@ export default function PosPage() {
       if (tableToUnlock) {
         restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
       }
+      triggerTableSync();
       // Silently refresh in background — no spinner
       fetchRestaurantTables(true);
       fetchUnpaidSales();

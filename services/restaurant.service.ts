@@ -109,6 +109,7 @@ export const restaurantService = {
       customer_name?: string;
       customer_phone?: string;
       notes?: string;
+      items?: RestaurantBillItem[];
     }
   ): Promise<{ message: string; data: Sale; bill: RestaurantBill }> {
     const res = await apiClient.post<{ message: string; data: Sale; bill: RestaurantBill }>(

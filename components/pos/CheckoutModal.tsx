@@ -119,40 +119,98 @@ export function CheckoutModal({
 
   if (!isOpen) return null;
 
-  const handleCashSuccess = async (received: number, change: number) => {
-    setIsProcessing(true);
-    try {
-      const sale = await onCompleteSale({ payment_method: "cash", amount_received: received });
-      setCompletedSale(sale);
-    } catch (e: any) {
-      await showAlert({
-        title: "Checkout Error",
-        message: e.message || "Failed to complete sale.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
+  const createOptimisticSale = (
+    method: "cash" | "mpesa" | "credit" | "free",
+    amountReceived: number,
+    change: number,
+    options?: {
+      ref?: string;
+      customerName?: string;
+      customerPhone?: string;
+      notes?: string;
     }
+  ): Sale => {
+    const isFree = method === "free";
+    const isCredit = method === "credit";
+    const custName = options?.customerName || customer?.name || defaultCustomerName || "Walk-in Customer";
+    const custPhone = options?.customerPhone || customer?.phone || defaultCustomerPhone || null;
+
+    return {
+      id: Date.now(),
+      sale_number: `POS-${Math.floor(100000 + Math.random() * 900000)}`,
+      cashier_id: 0,
+      cashier_name: "Cashier",
+      customer_id: customer?.id ?? null,
+      customer_name: custName,
+      customer_phone: custPhone,
+      subtotal,
+      discount: totalDiscount,
+      total: isFree ? 0 : total,
+      payment_method: method,
+      payment_status: isCredit ? "pending" : "completed",
+      sale_status: "completed",
+      amount_received: isCredit || isFree ? 0 : amountReceived,
+      change_given: isCredit || isFree ? 0 : change,
+      mpesa_reference: options?.ref,
+      notes: options?.notes,
+      table_number: tableNumber ? String(tableNumber) : undefined,
+      created_at: new Date().toISOString(),
+      items: items.map((it, idx) => ({
+        id: idx + 1,
+        sale_id: 0,
+        product_id: it.product_id,
+        product_name: it.product_name,
+        weight: it.weight,
+        price_per_kg: it.price_per_kg,
+        discount: it.discount || 0,
+        subtotal: it.subtotal,
+        notes: it.notes,
+      })),
+    };
+  };
+
+  const handleCashSuccess = async (received: number, change: number) => {
+    // Instant optimistic transition (0ms delay)
+    const optimisticSale = createOptimisticSale("cash", received, change);
+    setCompletedSale(optimisticSale);
+
+    // Sync to backend in background
+    onCompleteSale({ payment_method: "cash", amount_received: received })
+      .then((sale) => {
+        setCompletedSale((prev) => (prev ? { ...prev, ...sale } : sale));
+      })
+      .catch((e: any) => {
+        console.error("Cash checkout error:", e);
+        showAlert({
+          title: "Sync Error",
+          message: e.message || "Failed to persist sale to database.",
+          type: "danger",
+        });
+      });
   };
 
   const handleMPesaSuccess = async (received: number, change: number, ref?: string) => {
-    setIsProcessing(true);
-    try {
-      const sale = await onCompleteSale({
-        payment_method: "mpesa",
-        amount_received: received,
-        mpesa_reference: ref,
+    // Instant optimistic transition (0ms delay)
+    const optimisticSale = createOptimisticSale("mpesa", received, change, { ref });
+    setCompletedSale(optimisticSale);
+
+    // Sync to backend in background
+    onCompleteSale({
+      payment_method: "mpesa",
+      amount_received: received,
+      mpesa_reference: ref,
+    })
+      .then((sale) => {
+        setCompletedSale((prev) => (prev ? { ...prev, ...sale } : sale));
+      })
+      .catch((e: any) => {
+        console.error("M-Pesa checkout error:", e);
+        showAlert({
+          title: "Sync Error",
+          message: e.message || "Failed to persist sale to database.",
+          type: "danger",
+        });
       });
-      setCompletedSale(sale);
-    } catch (e: any) {
-      await showAlert({
-        title: "Checkout Error",
-        message: e.message || "Failed to complete sale.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handlePayLaterSuccess = async () => {
@@ -166,48 +224,71 @@ export function CheckoutModal({
       return;
     }
 
-    setIsProcessing(true);
-    try {
-      const sale = await onCompleteSale({
-        payment_method: "credit",
-        customer_name: custName,
-        customer_phone: creditCustomerPhone.trim() || customer?.phone || undefined,
-        notes: creditNotes.trim() || undefined,
+    const phone = creditCustomerPhone.trim() || customer?.phone || undefined;
+    const notes = creditNotes.trim() || undefined;
+
+    // Instant optimistic transition (0ms delay)
+    const optimisticSale = createOptimisticSale("credit", 0, 0, {
+      customerName: custName,
+      customerPhone: phone,
+      notes,
+    });
+    setCompletedSale(optimisticSale);
+
+    // Sync to backend in background
+    onCompleteSale({
+      payment_method: "credit",
+      customer_name: custName,
+      customer_phone: phone,
+      notes,
+    })
+      .then((sale) => {
+        setCompletedSale((prev) => (prev ? { ...prev, ...sale } : sale));
+      })
+      .catch((e: any) => {
+        console.error("Pay Later checkout error:", e);
+        showAlert({
+          title: "Sync Error",
+          message: e.message || "Failed to record pay later sale in database.",
+          type: "danger",
+        });
       });
-      setCompletedSale(sale);
-    } catch (e: any) {
-      await showAlert({
-        title: "Pay Later Error",
-        message: e.message || "Failed to record pay later sale.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handleFreeSuccess = async () => {
-    setIsProcessing(true);
-    try {
-      const finalCustName = creditCustomerName.trim() || customer?.name || defaultCustomerName || undefined;
-      const finalCustPhone = creditCustomerPhone.trim() || customer?.phone || defaultCustomerPhone || undefined;
-      const sale = await onCompleteSale({
-        payment_method: "free",
-        amount_received: 0,
-        customer_name: finalCustName,
-        customer_phone: finalCustPhone,
-        notes: freeMealReason.trim() ? `[FREE MEAL / COMPLIMENTARY]: ${freeMealReason.trim()}` : "[FREE MEAL / COMPLIMENTARY]",
+    const finalCustName = creditCustomerName.trim() || customer?.name || defaultCustomerName || undefined;
+    const finalCustPhone = creditCustomerPhone.trim() || customer?.phone || defaultCustomerPhone || undefined;
+    const reasonNotes = freeMealReason.trim()
+      ? `[FREE MEAL / COMPLIMENTARY]: ${freeMealReason.trim()}`
+      : "[FREE MEAL / COMPLIMENTARY]";
+
+    // Instant optimistic transition (0ms delay)
+    const optimisticSale = createOptimisticSale("free", 0, 0, {
+      customerName: finalCustName,
+      customerPhone: finalCustPhone,
+      notes: reasonNotes,
+    });
+    setCompletedSale(optimisticSale);
+
+    // Sync to backend in background
+    onCompleteSale({
+      payment_method: "free",
+      amount_received: 0,
+      customer_name: finalCustName,
+      customer_phone: finalCustPhone,
+      notes: reasonNotes,
+    })
+      .then((sale) => {
+        setCompletedSale((prev) => (prev ? { ...prev, ...sale } : sale));
+      })
+      .catch((e: any) => {
+        console.error("Free meal checkout error:", e);
+        showAlert({
+          title: "Sync Error",
+          message: e.message || "Failed to record free meal in database.",
+          type: "danger",
+        });
       });
-      setCompletedSale(sale);
-    } catch (e: any) {
-      await showAlert({
-        title: "Free Meal Error",
-        message: e.message || "Failed to complete free meal checkout.",
-        type: "danger",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const isFreeMeal = completedSale?.payment_method === "free";

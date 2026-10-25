@@ -39,15 +39,12 @@ export function CashPayment({ total, onConfirm, isProcessing = false }: CashPaym
 
   const handleDenomination = useCallback(
     (denom: number) => {
-      if (receivedNum === denom) {
-        setReceivedStr((denom * 2).toString());
-      } else if (receivedNum > 0 && receivedNum % denom === 0 && receivedNum < denom * 10) {
-        setReceivedStr((receivedNum + denom).toString());
-      } else {
-        setReceivedStr(denom.toString());
-      }
+      setReceivedStr((prev) => {
+        const current = prev === "" ? 0 : parseFloat(prev) || 0;
+        return (current + denom).toString();
+      });
     },
-    [receivedNum]
+    []
   );
 
   const setExact = useCallback(() => { setReceivedStr(total.toString()); }, [total]);

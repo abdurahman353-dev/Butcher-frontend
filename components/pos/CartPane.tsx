@@ -562,13 +562,13 @@ export function CartPane({
               <ChefHat className="w-4 h-4" />
               <span>
                 {isSavingOrder
-                  ? "Saving Order & Printing..."
-                  : `Save Order & Print Kitchen Receipt (${formatCurrency(total)})`}
+                  ? "Saving Order to Kitchen..."
+                  : `Save Order & Send to Kitchen (${formatCurrency(total)})`}
               </span>
             </button>
             <div className="flex items-center gap-1.5 p-2 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 font-bold">
               <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-              <span>Must Save Order first so receipts are printed before checkout.</span>
+              <span>Must click Save Order first before checking out this bill.</span>
             </div>
           </div>
         ) : (
@@ -627,19 +627,20 @@ export function CartPane({
                   type="button"
                   disabled={items.length === 0}
                   onClick={() => onProceedCheckout()}
-                  className={`w-full py-4 sm:py-3 px-4 rounded-xl font-bold text-sm sm:text-xs uppercase tracking-wider text-white flex items-center justify-center gap-2 transition-all shadow-sm ${items.length === 0
+                  className={`w-full py-4 sm:py-3 px-4 rounded-xl font-bold text-sm sm:text-xs uppercase tracking-wider text-white flex items-center justify-center gap-2 transition-all shadow-sm ${
+                    items.length === 0
                       ? "bg-zinc-200 text-zinc-400 cursor-not-allowed"
                       : !isShiftOpen
-                        ? "bg-amber-600 hover:bg-amber-700 active:scale-[0.98]"
-                        : "bg-green-600 hover:bg-green-700 active:scale-[0.98]"
-                    }`}
+                      ? "bg-amber-600 hover:bg-amber-700 active:scale-[0.98]"
+                      : "bg-green-600 hover:bg-green-700 active:scale-[0.98]"
+                  }`}
                 >
                   <span>
                     {!isShiftOpen && items.length > 0
                       ? `Open Shift to Checkout (${formatCurrency(total)})`
                       : activeBill
-                        ? `Settle & Checkout (${formatCurrency(total)})`
-                        : `Checkout (${formatCurrency(total)})`}
+                      ? `Settle & Checkout (${formatCurrency(total)})`
+                      : `Checkout (${formatCurrency(total)})`}
                   </span>
                   <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
