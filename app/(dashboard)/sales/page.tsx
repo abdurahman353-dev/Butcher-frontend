@@ -229,11 +229,11 @@ function SalesLedger() {
     handleCashierChange(filterId);
   }, [paginated.filter_options, handleCashierChange]);
 
-  // Reactive Fetch: Enforce 3-second database loading window for staff changes
+  // Reactive Fetch: Hold 'Querying Live Database' state until data is fully retrieved
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
-      fetchSales(); // non-silent only on first mount
+      fetchSales(); // non-silent on mount
       return;
     }
 
@@ -247,7 +247,8 @@ function SalesLedger() {
       fetchSales(false, 3000);
     } else {
       debounceRef.current = setTimeout(() => {
-        fetchSales(true);
+        // Non-silent: hold live database loading state until real data arrives
+        fetchSales(false);
       }, 150);
     }
 
@@ -419,6 +420,8 @@ function SalesLedger() {
   };
 
   const clearAllFilters = () => {
+    setPaginated((prev) => ({ ...prev, data: [], total: 0 }));
+    setIsLoading(true);
     setSearch("");
     setDateFrom("");
     setDateTo("");
@@ -1520,26 +1523,28 @@ function SalesLedger() {
             <tbody className="divide-y divide-zinc-100">
               {isLoading ? (
                 <>
-                  {isStaffQuerying && (
-                    <tr>
-                      <td colSpan={10} className="py-7 text-center bg-emerald-50/50 border-b border-emerald-100">
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
-                            <span className="text-xs font-black text-emerald-950 uppercase tracking-wider">
-                              Querying Live Database Records...
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-zinc-500 font-medium">
-                            Fetching verified bills and tables for {selectedCashierName || "selected staff"}
-                          </p>
-                          <div className="w-56 h-1 bg-emerald-200/80 rounded-full overflow-hidden mt-1">
-                            <div className="h-full bg-emerald-600 rounded-full animate-pulse w-full" />
-                          </div>
+                  <tr>
+                    <td colSpan={10} className="py-7 text-center bg-emerald-50/50 border-b border-emerald-100">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                          <span className="text-xs font-black text-emerald-950 uppercase tracking-wider">
+                            Querying Live Database Records...
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  )}
+                        <p className="text-[11px] text-zinc-500 font-medium">
+                          {cashierFilter !== "all"
+                            ? `Fetching verified bills and tables for ${selectedCashierName || "selected staff"} from database...`
+                            : tableFilter !== "all"
+                            ? `Fetching verified orders for Table ${tableFilter} from database...`
+                            : "Querying live database records and calculating ledger totals..."}
+                        </p>
+                        <div className="w-56 h-1 bg-emerald-200/80 rounded-full overflow-hidden mt-1">
+                          <div className="h-full bg-emerald-600 rounded-full animate-pulse w-full" />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="animate-pulse">
                       <td className="py-4 pl-4 pr-1 text-center"><div className="h-4 w-4 bg-zinc-200 rounded mx-auto" /></td>
