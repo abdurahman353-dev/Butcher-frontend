@@ -98,6 +98,7 @@ function SalesLedger() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAmountFilters, setShowAmountFilters] = useState(false);
   const [viewingReceiptSale, setViewingReceiptSale] = useState<Sale | null>(null);
@@ -123,9 +124,9 @@ function SalesLedger() {
     } catch { }
   }, [urlPaymentStatus, urlPaymentMethod]);
 
-  const fetchSales = useCallback(async () => {
+  const fetchSales = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const params: any = {
         page: currentPage,
         per_page: perPage,
@@ -166,6 +167,7 @@ function SalesLedger() {
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+      setIsInitialLoading(false);
     }
   }, [
     currentPage,
@@ -202,8 +204,8 @@ function SalesLedger() {
     };
   }, [fetchSales]);
 
-  // Real-time polling every 12s with current active filters
-  usePolling(fetchSales, 12000);
+  // Real-time polling every 12s with current active filters (silent background sync)
+  usePolling(() => fetchSales(true), 12000);
 
   const handleManualRefresh = () => {
     setIsRefreshing(true);
@@ -666,7 +668,7 @@ function SalesLedger() {
     paginated.summary?.refunded_count ??
     paginated.data.filter((s) => s.sale_status === "refunded").length;
 
-  if (isLoading && paginated.data.length === 0) {
+  if (isInitialLoading && paginated.data.length === 0) {
     return <PageSkeleton variant="table" title="Sales History & Financial Ledger" />;
   }
 
@@ -1455,7 +1457,7 @@ function SalesLedger() {
                 <th className="py-3.5 pr-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className={`divide-y divide-zinc-100 transition-opacity duration-200 ${isLoading && paginated.data.length > 0 ? "opacity-60" : "opacity-100"}`}>
               {isLoading && paginated.data.length === 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
