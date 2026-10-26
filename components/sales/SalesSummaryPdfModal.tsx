@@ -109,6 +109,7 @@ export function SalesSummaryPdfModal({
     const fetchRangeSales = async () => {
       try {
         setIsLoading(true);
+        setSales([]); // Clear old sales immediately so no stale data is shown
         const pad = (n: number) => String(n).padStart(2, "0");
         const fmtYMD = (d: Date) =>
           `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -124,7 +125,10 @@ export function SalesSummaryPdfModal({
         if (cashierId && cashierId !== "all") params.cashier_id = cashierId;
         if (tableNumber && tableNumber !== "all") params.table_number = tableNumber;
 
-        const res = await salesService.getSales(params);
+        const fetchPromise = salesService.getSales(params);
+        const delayPromise = new Promise((resolve) => setTimeout(resolve, 3000));
+
+        const [res] = await Promise.all([fetchPromise, delayPromise]);
         setSales(res.data || []);
       } catch (err) {
         console.error("Failed to fetch range sales:", err);
@@ -627,11 +631,12 @@ export function SalesSummaryPdfModal({
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-emerald-400" />
             <div>
-              <h3 className="text-sm font-black tracking-wide">
+              <h3 className="text-sm font-black tracking-wide flex items-center gap-1.5">
                 Sales Report PDF Preview
+                {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />}
               </h3>
               <p className="text-[11px] text-zinc-400 font-mono">
-                {dateRangeDisplay} • {dailyRows.length} Days
+                {isLoading ? "Querying database (3s verification)..." : `${dateRangeDisplay} • ${dailyRows.length} Days`}
               </p>
             </div>
           </div>
@@ -641,7 +646,8 @@ export function SalesSummaryPdfModal({
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              disabled={isLoading}
+              className={`h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer ${isLoading ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
               title="Share via WhatsApp"
             >
               <MessageCircle className="w-3.5 h-3.5 fill-current" />
@@ -652,7 +658,8 @@ export function SalesSummaryPdfModal({
             <button
               type="button"
               onClick={handleShareEmail}
-              className="h-9 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              disabled={isLoading}
+              className={`h-9 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer ${isLoading ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
               title="Share via Gmail / Email"
             >
               <Mail className="w-3.5 h-3.5" />
@@ -663,7 +670,8 @@ export function SalesSummaryPdfModal({
             <button
               type="button"
               onClick={handleNativeShare}
-              className="h-9 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              disabled={isLoading}
+              className={`h-9 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer ${isLoading ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
               title="Share PDF Form Document"
             >
               <Share2 className="w-3.5 h-3.5" />
@@ -674,7 +682,8 @@ export function SalesSummaryPdfModal({
             <button
               type="button"
               onClick={handleDownloadPdf}
-              className="h-9 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              disabled={isLoading}
+              className={`h-9 px-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer ${isLoading ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
               title="Download PDF Document"
             >
               <Download className="w-3.5 h-3.5" />
@@ -685,7 +694,8 @@ export function SalesSummaryPdfModal({
             <button
               type="button"
               onClick={handlePrint}
-              className="h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              disabled={isLoading}
+              className={`h-9 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer ${isLoading ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
               title="Print or Save as PDF"
             >
               <Printer className="w-4 h-4" />
@@ -709,14 +719,35 @@ export function SalesSummaryPdfModal({
           </div>
         )}
 
-        {/* Scrollable Document Canvas - EXACT Image 2 Look */}
+        {/* Scrollable Document Canvas */}
         <div className="flex-1 overflow-y-auto bg-zinc-200/60 p-3 sm:p-6 flex justify-center">
           <div
             ref={printAreaRef}
             className="w-full max-w-3xl bg-white shadow-xl border border-zinc-300 p-6 sm:p-8 rounded-sm my-auto"
             style={{ minHeight: "600px" }}
           >
-            {false ? null : (
+            {isLoading ? (
+              <div className="py-24 flex flex-col items-center justify-center text-center">
+                <div className="relative mb-4">
+                  <div className="w-14 h-14 rounded-full border-4 border-emerald-100 border-t-emerald-600 animate-spin" />
+                  <Printer className="w-6 h-6 text-emerald-600 absolute inset-0 m-auto" />
+                </div>
+                <h4 className="text-base font-extrabold text-zinc-900 tracking-tight">
+                  Compiling & Auditing Sales Ledger...
+                </h4>
+                <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+                  Fetching verified live transaction data for <span className="font-semibold text-zinc-700">{dateRangeDisplay}</span> from database.
+                </p>
+                <div className="w-64 h-1.5 bg-zinc-100 rounded-full overflow-hidden mt-4 border border-zinc-200">
+                  <div className="h-full bg-emerald-600 rounded-full animate-pulse w-full" />
+                </div>
+                <div className="w-full max-w-md mt-8 space-y-2 opacity-40">
+                  <div className="h-10 bg-zinc-100 rounded border border-zinc-200 animate-pulse" />
+                  <div className="h-4 bg-zinc-100 rounded w-1/2 mx-auto animate-pulse" />
+                  <div className="h-40 bg-zinc-50 rounded border border-zinc-200 animate-pulse" />
+                </div>
+              </div>
+            ) : (
               <>
                 {/* Company Header Box — Exact Match to Image 1 */}
                 <div className="border-[1.5px] border-black p-2.5 sm:p-3.5 mb-2 flex items-start justify-between font-sans">
