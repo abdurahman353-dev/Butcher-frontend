@@ -186,18 +186,18 @@ function SalesLedger() {
     sortDirection,
   ]);
 
-  // Reactive Debounced Auto-Fetch on any filter or page change (instant on mount)
+  // Reactive Debounced Auto-Fetch on any filter or page change
+  // Silent=true keeps existing rows visible while new data loads (no blank flash)
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
-      fetchSales();
+      fetchSales(); // non-silent only on first mount (shows skeleton)
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    // Use a longer debounce when only search changed so we don't fire on every keystroke
     debounceRef.current = setTimeout(() => {
-      fetchSales();
-    }, 400);
+      fetchSales(true); // silent: table stays populated until response arrives
+    }, 150); // fast 150ms so dropdown selections feel instant
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1175,6 +1175,9 @@ function SalesLedger() {
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
                   <User className="w-3 h-3 text-zinc-400" /> Cashier / Staff
+                  {isLoading && cashierFilter !== "all" && (
+                    <RefreshCw className="w-2.5 h-2.5 text-green-600 animate-spin ml-1" />
+                  )}
                 </label>
                 <select
                   value={cashierFilter}
