@@ -106,6 +106,8 @@ function SalesLedger() {
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
   const [deletingSaleId, setDeletingSaleId] = useState<number | null>(null);
   const [isSalesSummaryPdfOpen, setIsSalesSummaryPdfOpen] = useState(false);
+  const [selectedSaleIds, setSelectedSaleIds] = useState<number[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMountRef = useRef(true);
@@ -232,6 +234,105 @@ function SalesLedger() {
       });
     } finally {
       setDeletingSaleId(null);
+    }
+  };
+
+  // Clear selected sales when filters or page change
+  useEffect(() => {
+    setSelectedSaleIds([]);
+  }, [
+    currentPage,
+    search,
+    dateFrom,
+    dateTo,
+    paymentFilter,
+    paymentStatusFilter,
+    tableFilter,
+    statusFilter,
+    cashierFilter,
+    minAmount,
+    maxAmount,
+  ]);
+
+  const pageSaleIds = useMemo(() => paginated.data.map((s) => s.id), [paginated.data]);
+  const isAllPageSelected = useMemo(
+    () => pageSaleIds.length > 0 && pageSaleIds.every((id) => selectedSaleIds.includes(id)),
+    [pageSaleIds, selectedSaleIds]
+  );
+  const isSomePageSelected = useMemo(
+    () => pageSaleIds.some((id) => selectedSaleIds.includes(id)) && !isAllPageSelected,
+    [pageSaleIds, selectedSaleIds, isAllPageSelected]
+  );
+
+  const toggleSelectAllPage = useCallback(() => {
+    if (isAllPageSelected) {
+      setSelectedSaleIds((prev) => prev.filter((id) => !pageSaleIds.includes(id)));
+    } else {
+      setSelectedSaleIds((prev) => Array.from(new Set([...prev, ...pageSaleIds])));
+    }
+  }, [isAllPageSelected, pageSaleIds]);
+
+  const toggleSelectSale = useCallback((id: number) => {
+    setSelectedSaleIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  const selectedSalesTotal = useMemo(() => {
+    return paginated.data
+      .filter((s) => selectedSaleIds.includes(s.id))
+      .reduce((sum, s) => sum + Math.max(0, Number(s.total) - Number(s.refunded_amount || 0)), 0);
+  }, [paginated.data, selectedSaleIds]);
+
+  const handleBulkDelete = async (deleteAllMatching = false) => {
+    const countToDelete = deleteAllMatching ? paginated.total : selectedSaleIds.length;
+    if (countToDelete === 0) return;
+
+    const confirmed = await confirm({
+      title: deleteAllMatching
+        ? `Delete All ${countToDelete} Filtered Sales?`
+        : `Delete ${countToDelete} Selected Sale${countToDelete === 1 ? "" : "s"}?`,
+      message: deleteAllMatching
+        ? `Are you sure you want to permanently delete ALL ${countToDelete} sales matching your current filter criteria? This will deduct collected amounts everywhere (financial ledger, cashier shift, customer stats). Deleting sales does NOT restore stock (only refunds restore stock). This action is permanent and cannot be undone.`
+        : `Are you sure you want to permanently delete these ${countToDelete} selected sales (total net amount: ${formatCurrency(selectedSalesTotal)})? This will deduct collected amounts everywhere (financial ledger, cashier shift, customer stats). Deleting sales does NOT restore stock. This action cannot be undone.`,
+      confirmText: deleteAllMatching ? `Yes, Delete All ${countToDelete} Sales` : `Yes, Delete ${countToDelete} Sales`,
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setIsBulkDeleting(true);
+      const params: any = {
+        search: search.trim() || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        payment_method: paymentFilter !== "all" ? paymentFilter : undefined,
+        payment_status: paymentStatusFilter !== "all" ? paymentStatusFilter : undefined,
+        table_number: tableFilter !== "all" ? tableFilter : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        cashier_id: cashierFilter !== "all" ? cashierFilter : undefined,
+        min_amount: minAmount || undefined,
+        max_amount: maxAmount || undefined,
+      };
+
+      const res = await salesService.bulkDeleteSales({
+        all: deleteAllMatching ? true : undefined,
+        ids: !deleteAllMatching ? selectedSaleIds : undefined,
+        ...params,
+      });
+
+      setSelectedSaleIds([]);
+      await fetchSales();
+    } catch (err: any) {
+      alert({
+        title: "Bulk Delete Failed",
+        message: err?.response?.data?.message || err?.message || "Failed to delete selected sales.",
+        type: "danger",
+      });
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -1257,6 +1358,65 @@ function SalesLedger() {
         )}
       </div>
 
+      {/* ── BULK ACTIONS BAR (LIGHT THEME) ── */}
+      {selectedSaleIds.length > 0 && (
+        <div className="bg-white text-zinc-900 px-4 py-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-sm border-2 border-emerald-500 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+              {selectedSaleIds.length}
+            </div>
+            <div>
+              <div className="text-xs font-bold text-zinc-900 flex items-center gap-2 flex-wrap">
+                <span className="text-zinc-900 font-extrabold">{selectedSaleIds.length} sale{selectedSaleIds.length === 1 ? "" : "s"} selected</span>
+                <span className="text-emerald-700 font-black">• Total: {formatCurrency(selectedSalesTotal)}</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Selected from page {paginated.current_page} ({selectedSaleIds.length} of {paginated.data.length} records)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {paginated.total > selectedSaleIds.length && (
+              <button
+                type="button"
+                onClick={() => handleBulkDelete(true)}
+                disabled={isBulkDeleting}
+                className="h-8 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
+                title={`Permanently delete all ${paginated.total} sales matching current filters`}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Delete All {paginated.total} Filtered Sales</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleBulkDelete(false)}
+                disabled={isBulkDeleting}
+                className="h-8 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                {isBulkDeleting ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+                <span>Delete Selected ({selectedSaleIds.length})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setSelectedSaleIds([])}
+              className="h-8 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 text-xs font-semibold transition-all cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── MILLION DOLLAR SALES TRANSACTION LEDGER TABLE ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs relative">
         {/* Loading Progress Bar overlay */}
@@ -1270,7 +1430,21 @@ function SalesLedger() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/90 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                <th className="py-3.5 pl-4">{isRestaurant ? "Sale / Bill #" : "Sale #"}</th>
+                <th className="py-3.5 pl-4 pr-1 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllPageSelected}
+                    onChange={toggleSelectAllPage}
+                    ref={(el) => {
+                      if (el) {
+                        el.indeterminate = isSomePageSelected;
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-zinc-300 cursor-pointer accent-green-600 align-middle"
+                    title={isAllPageSelected ? "Deselect all on this page" : "Select all on this page"}
+                  />
+                </th>
+                <th className="py-3.5 pl-2 pr-3">{isRestaurant ? "Sale / Bill #" : "Sale #"}</th>
                 <th className="py-3.5 px-3">Date & Time</th>
                 <th className="py-3.5 px-3">{isRestaurant ? "Cashier & Waiter" : "Cashier / Staff"}</th>
                 <th className="py-3.5 px-3">{isRestaurant ? "Table & Customer" : "Customer Details"}</th>
@@ -1285,7 +1459,8 @@ function SalesLedger() {
               {isLoading && paginated.data.length === 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td className="py-4 pl-4"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
+                    <td className="py-4 pl-4 pr-1 text-center"><div className="h-4 w-4 bg-zinc-200 rounded mx-auto" /></td>
+                    <td className="py-4 pl-2 pr-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
                     <td className="py-4 px-3"><div className="h-3.5 w-28 bg-zinc-100 rounded" /></td>
                     <td className="py-4 px-3"><div className="h-3.5 w-20 bg-zinc-200 rounded" /></td>
                     <td className="py-4 px-3"><div className="h-3.5 w-24 bg-zinc-100 rounded" /></td>
@@ -1298,7 +1473,7 @@ function SalesLedger() {
                 ))
               ) : paginated.data.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-zinc-400">
+                  <td colSpan={10} className="py-12 text-center text-zinc-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Receipt className="w-8 h-8 text-zinc-300 stroke-[1.5]" />
                       <p className="font-semibold text-zinc-600 text-sm">No sales records found</p>
@@ -1318,18 +1493,35 @@ function SalesLedger() {
                   </td>
                 </tr>
               ) : (
-                paginated.data.map((sale) => (
+                paginated.data.map((sale) => {
+                  const isSelected = selectedSaleIds.includes(sale.id);
+                  return (
                   <tr
                     key={sale.id}
-                    className="hover:bg-zinc-50/80 transition-colors group"
+                    className={`hover:bg-zinc-50/80 transition-colors group ${
+                      isSelected
+                        ? "bg-rose-50/60 ring-1 ring-inset ring-rose-300/80"
+                        : ""
+                    }`}
                   >
+                    {/* Selection Checkbox */}
+                    <td className="py-3.5 pl-4 pr-1 w-10 text-center" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectSale(sale.id)}
+                        className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-zinc-300 cursor-pointer accent-green-600 align-middle"
+                        title={`Select sale #${sale.sale_number}`}
+                      />
+                    </td>
+
                     {/* Sale / Bill # */}
-                    <td className="py-3.5 pl-4 font-mono font-bold text-zinc-900 whitespace-nowrap">
+                    <td className="py-3.5 pl-2 pr-3 font-mono font-bold text-zinc-900 whitespace-nowrap">
                       <Link
                         href={`/sales/${sale.id}`}
                         className="text-zinc-900 group-hover:text-green-700 hover:underline flex items-center gap-1.5"
                       >
-                        <span className="w-2 h-2 rounded-full bg-green-500/70 shrink-0" />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? "bg-rose-500" : "bg-green-500/70"}`} />
                         <span>{sale.sale_number}</span>
                       </Link>
                       {sale.bill_number && (
@@ -1551,7 +1743,8 @@ function SalesLedger() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

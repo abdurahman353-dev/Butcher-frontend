@@ -240,12 +240,14 @@ export function TableBillsModal({
     setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
   }, [table?.active_bills, table?.id]);
 
-  // Strictly ensure ONLY real bills belonging to this specific table are shown (filter out 0-item ghost bills)
+  // Only show real bills (id > 0) that belong to this table and are open/printed.
+  // Never filter by items count or total — a freshly created bill has no items yet
+  // but is still a real, persisted bill that must remain visible.
   const activeBills = (billsList || []).filter(
     (b) =>
+      b.id > 0 &&
       b.table_id === table?.id &&
-      (b.status === "open" || b.status === "printed") &&
-      !((!b.items || b.items.length === 0) && (b.total === 0 || b.total === undefined))
+      (b.status === "open" || b.status === "printed")
   );
 
   const filteredBills = activeBills.filter((bill) => {

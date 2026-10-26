@@ -307,15 +307,15 @@ export function TableMapView({
             {filteredTables.map((table) => {
               const isSelected = activeTableId === table.id;
 
-              // Filter out 0-item / 0-amount empty ghost bills
+              // Real active bills on this table
               const realBills = (table.active_bills || []).filter(
-                (b) => (b.items && b.items.length > 0) || (b.total && b.total > 0)
+                (b) => (b.items && b.items.length > 0) || (b.total && b.total > 0) || b.id > 0
               );
-              const realBillsCount = realBills.length;
-              const realTotalAmount = realBills.reduce((sum, b) => sum + (b.total || 0), 0);
+              const realBillsCount = Math.max(realBills.length, table.active_bills_count || 0, (table.active_bills || []).length);
+              const realTotalAmount = realBills.reduce((sum, b) => sum + (b.total || 0), 0) || table.total_active_amount || 0;
               const isTrulyActive =
-                realBillsCount > 0 || (table.status === "red" && (table.total_active_amount || 0) > 0);
-              const isTrulyBilled = table.status === "yellow" && realBillsCount > 0;
+                realBillsCount > 0 || table.status === "red" || realTotalAmount > 0;
+              const isTrulyBilled = table.status === "yellow" && (realBillsCount > 0 || realTotalAmount > 0);
 
               // Colour scheme per status
               let cardClasses =
@@ -369,7 +369,7 @@ export function TableMapView({
                           {badgeText}
                         </span>
                         {/* Delete button (Only if empty with no orders & not waiter) — solid color always for mobile */}
-                        {!isWaiter && realBillsCount === 0 && onDeleteTable && (
+                        {!isWaiter && !isTrulyActive && !isTrulyBilled && realBillsCount === 0 && onDeleteTable && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -405,14 +405,14 @@ export function TableMapView({
 
                   {/* ─ Bottom section ─ */}
                   <div className={`pt-2 mt-2 border-t ${bottomBorder} flex items-end justify-between gap-1`}>
-                    {realBillsCount > 0 ? (
+                    {isTrulyActive || isTrulyBilled || realBillsCount > 0 ? (
                       <>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 flex-wrap">
                             <span className="flex items-center gap-1 shrink-0">
                               <Receipt className="w-3.5 h-3.5 text-zinc-400" />
-                              {realBillsCount}{" "}
-                              {realBillsCount === 1 ? "Bill" : "Bills"}
+                              {realBillsCount || 1}{" "}
+                              {(realBillsCount || 1) === 1 ? "Bill" : "Bills"}
                             </span>
                             {/* Breakdown of each bill when table has 2+ bills */}
                             {realBills.length > 1 && (
@@ -423,7 +423,7 @@ export function TableMapView({
                             )}
                           </div>
                           <div className="text-base sm:text-lg font-black tracking-tight mt-0.5 truncate font-mono text-emerald-600">
-                            {formatCurrency(realTotalAmount || table.total_active_amount)}
+                            {formatCurrency(realTotalAmount || table.total_active_amount || 0)}
                           </div>
                         </div>
                         <span className="text-[11px] font-bold text-zinc-400 group-hover:text-zinc-800 transition-colors shrink-0 mb-0.5">

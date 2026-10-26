@@ -58,4 +58,28 @@ export const salesService = {
     }
     return res.data;
   },
+
+  async bulkDeleteSales(payload: {
+    ids?: number[];
+    all?: boolean;
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+    payment_method?: string;
+    payment_status?: string;
+    table_number?: string;
+    status?: string;
+    cashier_id?: string;
+    min_amount?: string;
+    max_amount?: string;
+  }): Promise<{ message: string; deleted_count: number }> {
+    const res = await apiClient.post<{ message: string; deleted_count: number }>(
+      "/sales/bulk-delete",
+      payload
+    );
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("butcher:data-change"));
+    }
+    return res.data;
+  },
 };

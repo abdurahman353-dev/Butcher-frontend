@@ -89,23 +89,34 @@ export default function PosPage() {
   useEffect(() => { activeBillRef.current  = activeBill;  }, [activeBill]);
 
   /**
-   * Helper to sanitize table data: empty draft/ghost bills (0 items, KSh 0)
-   * are never treated as active orders on the floor.
+   * Helper to sanitize table data: ONLY strips id=0 placeholder bills that were
+   * never persisted to the database. Real bills (id > 0) from the server are
+   * always kept — they must only disappear on explicit cancel or checkout.
    */
   const sanitizeTablesData = useCallback((rawTables: RestaurantTable[]): RestaurantTable[] => {
     return rawTables.map((t) => {
+      // Keep real bills (id > 0) OR bills with items/total OR current active bill
       const validBills = (t.active_bills || []).filter(
         (b) =>
-          (activeBillRef.current?.id === b.id && activeTableRef.current?.id === t.id) ||
-          ((b.items && b.items.length > 0) || (b.total && b.total > 0))
+          b.id > 0 ||
+          (b.items && b.items.length > 0) ||
+          (b.total && b.total > 0) ||
+          (activeBillRef.current?.id === b.id && activeTableRef.current?.id === t.id)
       );
-      const hasValid = validBills.length > 0;
+      const hasValid =
+        validBills.length > 0 ||
+        (t.total_active_amount && t.total_active_amount > 0) ||
+        (t.active_bills_count && t.active_bills_count > 0) ||
+        t.status === "red" ||
+        t.status === "yellow";
+      const totalAmount =
+        validBills.reduce((sum, b) => sum + (b.total || 0), 0) || t.total_active_amount || 0;
       return {
         ...t,
         active_bills: validBills,
-        active_bills_count: validBills.length,
-        total_active_amount: validBills.reduce((sum, b) => sum + (b.total || 0), 0),
-        status: hasValid ? t.status : ("grey" as const),
+        active_bills_count: Math.max(validBills.length, t.active_bills_count || 0),
+        total_active_amount: totalAmount,
+        status: hasValid ? (t.status === "yellow" ? "yellow" : "red") : ("grey" as const),
       };
     });
   }, []);
@@ -132,12 +143,17 @@ export default function PosPage() {
       }
     }
 
-    // Also update the open table modal if one is showing
-    setSelectedTableForModal((prev) => {
-      if (!prev) return prev;
-      const freshTable = freshTables.find((t) => t.id === prev.id);
-      return freshTable ?? prev;
-    });
+    // Also update the open TableBillsModal if one is showing.
+    // Use raw freshTables (not cleaned) so bills just posted/printed are never
+    // accidentally dropped by the ghost-bill sanitizer while the modal is open.
+    const modalTableId = selectedTableForModalRef.current?.id;
+    if (modalTableId) {
+      const freshModalTable = freshTables.find((t) => t.id === modalTableId);
+      if (freshModalTable) {
+        selectedTableForModalRef.current = freshModalTable;
+        setSelectedTableForModal(freshModalTable);
+      }
+    }
   }, []);
 
   // Real-time sync via SSE — no polling, instant millisecond updates
@@ -235,6 +251,7 @@ export default function PosPage() {
       const data = await restaurantService.getTables();
       const cleaned = sanitizeTablesData(data);
       setRestaurantTables(cleaned);
+
       // ONLY update activeTable/activeBill if user currently has an active table session.
       // Uses refs to avoid stale closures from resurrecting previously opened tables.
       const currentActiveTable = activeTableRef.current;
@@ -251,6 +268,17 @@ export default function PosPage() {
               activeBillRef.current = foundBill;
             }
           }
+        }
+      }
+
+      // If the TableBillsModal is open, refresh it with the raw (unstripped) server data
+      // so that bills the user just posted/printed are never accidentally removed by sanitization.
+      const modalTableId = selectedTableForModalRef.current?.id;
+      if (modalTableId) {
+        const freshModalTable = data.find((t) => t.id === modalTableId);
+        if (freshModalTable) {
+          selectedTableForModalRef.current = freshModalTable;
+          setSelectedTableForModal(freshModalTable);
         }
       }
     } catch (e) {
@@ -420,13 +448,6 @@ export default function PosPage() {
         return;
       }
     }
-    if (activeBill && (!activeBill.items || activeBill.items.length === 0 || activeBill.total === 0)) {
-      try {
-        await restaurantService.cancelBill(activeBill.id, "Empty bill discarded");
-      } catch (e) {
-        console.error("Clean up empty bill error:", e);
-      }
-    }
     // Unlock the table so other users can access it
     if (activeTable) {
       try { await restaurantService.unlockTable(activeTable.id); } catch (e) { console.error("Unlock table error:", e); }
@@ -441,7 +462,6 @@ export default function PosPage() {
     setActiveTable(null);
     setSelectedTableForModal(null);
     setHasUnsavedOrder(false);
-    fetchRestaurantTables(true);
   };
 
   // Restaurant: Open Bill for Ordering (instant & clean, no flash)
@@ -526,26 +546,6 @@ export default function PosPage() {
   ) => {
     const waiterNameToUse = payload.waiter_name || user?.name || "Staff";
 
-    // Auto-cancel the previous bill on this table if it has 0 items (ghost bill prevention)
-    const prevBill = activeBillRef.current;
-    if (
-      prevBill &&
-      prevBill.id > 0 &&
-      prevBill.table_id === table.id &&
-      (!prevBill.items || prevBill.items.length === 0) &&
-      (prevBill.total === 0 || prevBill.total === undefined)
-    ) {
-      restaurantService.cancelBill(prevBill.id).catch(() => {});
-      // Optimistically remove it from tables state so it never shows on the floor
-      setRestaurantTables((prev) =>
-        prev.map((t) => {
-          if (t.id !== table.id) return t;
-          const remaining = (t.active_bills || []).filter((b) => b.id !== prevBill.id);
-          return { ...t, active_bills: remaining, active_bills_count: remaining.length };
-        })
-      );
-    }
-
     const tempBill: RestaurantBill = {
       id: 0,
       table_id: table.id,
@@ -625,9 +625,11 @@ export default function PosPage() {
           });
         }
 
+        // Optimistically add the real bill to the floor map immediately (no fetch needed)
         setRestaurantTables((prev) =>
           prev.map((t) => {
             if (t.id !== table.id) return t;
+            // Replace any id=0 placeholder + deduplicate the real bill
             const remaining = (t.active_bills || []).filter(
               (b) => b.id !== createdBill.id && b.id !== 0
             );
@@ -640,7 +642,8 @@ export default function PosPage() {
             };
           })
         );
-        fetchRestaurantTables(true);
+        // Trigger SSE sync so other connected clients see the new bill instantly
+        triggerTableSync();
       })
       .catch((e: any) => {
         console.error("Create bill error:", e);
@@ -780,80 +783,102 @@ export default function PosPage() {
             total,
             status: "open",
           };
+          const nextBills = [updatedActiveBill, ...otherBills];
           return {
             ...t,
             status: "red" as const,
-            active_bills: [updatedActiveBill, ...otherBills],
-            active_bills_count: otherBills.length + 1,
-            total_active_amount: (t.total_active_amount || 0) + total,
+            active_bills: nextBills,
+            active_bills_count: nextBills.length,
+            total_active_amount: nextBills.reduce((sum, b) => sum + (b.total || 0), 0),
           };
         })
       );
     }
 
-    // 3. PERSIST IN BACKGROUND (non-blocking)
-    (async () => {
-      try {
-        let targetBill = activeBill;
+    // 3. PERSIST TO BACKEND
+    setIsSavingOrder(true);
+    try {
+      let targetBill = activeBill;
 
-        // If bill is temp (id === 0), await or create
-        if (!targetBill || targetBill.id === 0) {
-          if (pendingBillRef.current) {
-            try {
-              const resolvedBill = await pendingBillRef.current;
-              targetBill = resolvedBill;
-              setActiveBill(resolvedBill);
-              activeBillRef.current = resolvedBill;
-            } catch {
-              // fallback below
-            }
-          }
-          if (!targetBill || targetBill.id === 0) {
-            const tableId = targetBill?.table_id || activeTable?.id;
-            if (!tableId) return;
-            const createdBill = await restaurantService.createBill(tableId, {
-              waiter_name: targetBill?.waiter_name || user?.name || "Server",
-              waiter_pin: targetBill?.waiter_pin || undefined,
-              guest_count: targetBill?.guest_count || 1,
-              customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
-              customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
-              customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
-              customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
-              notes: targetBill?.notes || undefined,
-            });
-            targetBill = createdBill;
-            setActiveBill(createdBill);
-            activeBillRef.current = createdBill;
+      // If bill is temp (id === 0), await or create
+      if (!targetBill || targetBill.id === 0) {
+        if (pendingBillRef.current) {
+          try {
+            const resolvedBill = await pendingBillRef.current;
+            targetBill = resolvedBill;
+            setActiveBill(resolvedBill);
+            activeBillRef.current = resolvedBill;
+          } catch {
+            // fallback below
           }
         }
-
-        const res = await restaurantService.saveOrder(targetBill.id, {
-          items: formattedItems,
-          customer_id: selectedCustomer?.id || undefined,
-          customer_name: selectedCustomer?.name || targetBill.customer_name || undefined,
-          customer_phone: selectedCustomer?.phone || targetBill.customer_phone || undefined,
-          customer_address: selectedCustomer?.address || targetBill.customer_address || undefined,
-          waiter_name: targetBill.waiter_name,
-          guest_count: targetBill.guest_count,
-          notes: targetBill.notes || undefined,
-        });
-
-        setActiveBill(res.data);
-        activeBillRef.current = res.data;
-        triggerTableSync();
-        fetchRestaurantTables(true);
-      } catch (err: any) {
-        console.error("Background save order error:", err);
-        setHasUnsavedOrder(true);
-        alert({
-          title: "Save Notice",
-          message: err?.response?.data?.message || err?.message || "Order shown locally, but could not sync to database.",
-          type: "danger",
-        });
+        if (!targetBill || targetBill.id === 0) {
+          const tableId = targetBill?.table_id || activeTable?.id;
+          if (!tableId) return true;
+          const createdBill = await restaurantService.createBill(tableId, {
+            waiter_name: targetBill?.waiter_name || user?.name || "Server",
+            waiter_pin: targetBill?.waiter_pin || undefined,
+            guest_count: targetBill?.guest_count || 1,
+            customer_id: selectedCustomer?.id || (targetBill?.customer_id ?? undefined),
+            customer_name: selectedCustomer?.name || (targetBill?.customer_name ?? undefined),
+            customer_phone: selectedCustomer?.phone || (targetBill?.customer_phone ?? undefined),
+            customer_address: selectedCustomer?.address || (targetBill?.customer_address ?? undefined),
+            notes: targetBill?.notes || undefined,
+          });
+          targetBill = createdBill;
+          setActiveBill(createdBill);
+          activeBillRef.current = createdBill;
+        }
       }
-    })();
 
-    return true;
+      const res = await restaurantService.saveOrder(targetBill.id, {
+        items: formattedItems,
+        customer_id: selectedCustomer?.id || undefined,
+        customer_name: selectedCustomer?.name || targetBill.customer_name || undefined,
+        customer_phone: selectedCustomer?.phone || targetBill.customer_phone || undefined,
+        customer_address: selectedCustomer?.address || targetBill.customer_address || undefined,
+        waiter_name: targetBill.waiter_name,
+        guest_count: targetBill.guest_count,
+        notes: targetBill.notes || undefined,
+      });
+
+      setActiveBill(res.data);
+      activeBillRef.current = res.data;
+
+      // Ensure confirmed bill with real id is updated in floor map state
+      if (tableIdForClean) {
+        setRestaurantTables((prev) =>
+          prev.map((t) => {
+            if (t.id !== tableIdForClean) return t;
+            const otherBills = (t.active_bills || []).filter(
+              (b) => b.id !== res.data.id && b.id !== 0 && b.id !== targetBill.id
+            );
+            const nextBills = [res.data, ...otherBills];
+            return {
+              ...t,
+              status: "red" as const,
+              active_bills: nextBills,
+              active_bills_count: nextBills.length,
+              total_active_amount: nextBills.reduce((sum, b) => sum + (b.total || 0), 0),
+            };
+          })
+        );
+      }
+
+      triggerTableSync();
+      return true;
+    } catch (err: any) {
+      console.error("Save order error:", err);
+      setHasUnsavedOrder(true);
+      alert({
+        title: "Save Notice",
+        message: err?.response?.data?.message || err?.message || "Order shown locally, but could not sync to database.",
+        type: "danger",
+      });
+      return false;
+    } finally {
+      setIsSavingOrder(false);
+    }
   };
 
   // Restaurant: Print Pre-Settlement Customer Bill (Yellow status) — opens modal instantly, syncs API in background
@@ -958,12 +983,11 @@ export default function PosPage() {
     setIsMobileCartOpen(false);
     setActiveTab("tables");
 
-    // 3. Background unlock + silent table refresh (non-blocking, no spinner)
+    // 3. Background unlock (non-blocking)
     if (tableToUnlock) {
       restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
     }
-    fetchRestaurantTables(true);
-  }, [activeTable, clearCart, fetchRestaurantTables, isSavingOrder]);
+  }, [activeTable, clearCart, isSavingOrder]);
 
   const handlePromptExitActiveTable = async () => {
     if (isSavingOrder) {
@@ -997,46 +1021,6 @@ export default function PosPage() {
         // Saving failed or could not be completed; keep the user safely on the bill
         return;
       }
-    }
-
-    // Auto-cancel empty bills (0 items, KSh 0) so the table never shows ghost bills
-    const currentTableId = activeTable?.id || activeBill.table_id;
-    const tableObj = restaurantTables.find((t) => t.id === currentTableId);
-    const billsOnTable = [
-      ...(tableObj?.active_bills || []),
-      ...(activeBill.id > 0 ? [activeBill] : []),
-    ];
-
-    // Collect all unique empty bills on this table
-    const emptyBillIds = new Set<number>();
-    for (const b of billsOnTable) {
-      if (
-        b.id > 0 &&
-        (!b.items || b.items.length === 0) &&
-        (b.total === 0 || b.total === undefined)
-      ) {
-        emptyBillIds.add(b.id);
-      }
-    }
-
-    if (emptyBillIds.size > 0 && currentTableId) {
-      // Optimistically strip all empty bills from tables state NOW before floor view renders
-      setRestaurantTables((prev) =>
-        prev.map((t) => {
-          if (t.id !== currentTableId) return t;
-          const remaining = (t.active_bills || []).filter((b) => !emptyBillIds.has(b.id));
-          return {
-            ...t,
-            active_bills: remaining,
-            active_bills_count: remaining.length,
-            status: remaining.length === 0 ? ("grey" as const) : t.status,
-          };
-        })
-      );
-      // Cancel each empty ghost bill in background
-      emptyBillIds.forEach((id) => {
-        restaurantService.cancelBill(id).catch(() => {});
-      });
     }
 
     handleCloseActiveBillSession();
@@ -1902,9 +1886,10 @@ export default function PosPage() {
       {isTableModalOpen && selectedTableForModal && (
         <TableBillsModal
           key={selectedTableForModal.id}
-          table={restaurantTables.find((t) => t.id === selectedTableForModal.id) || selectedTableForModal}
+          table={selectedTableForModal}
           isOpen={isTableModalOpen}
           onClose={() => {
+            selectedTableForModalRef.current = null;
             setIsTableModalOpen(false);
             setSelectedTableForModal(null);
           }}
