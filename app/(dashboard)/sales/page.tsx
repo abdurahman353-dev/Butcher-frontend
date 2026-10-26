@@ -112,6 +112,8 @@ function SalesLedger() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMountRef = useRef(true);
+  const allSalesCacheRef = useRef<Sale[]>([]);
+  const prevCashierRef = useRef<string>("all");
 
   // Load cached sales ONLY if no specific URL filters are requested
   useEffect(() => {
@@ -120,7 +122,11 @@ function SalesLedger() {
     }
     try {
       const cached = localStorage.getItem("butcher_cached_sales");
-      if (cached) setPaginated(JSON.parse(cached));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setPaginated(parsed);
+        if (parsed.data?.length) allSalesCacheRef.current = parsed.data;
+      }
     } catch { }
   }, [urlPaymentStatus, urlPaymentMethod]);
 
@@ -147,6 +153,10 @@ function SalesLedger() {
 
       const res = await salesService.getSales(params);
       setPaginated(res);
+
+      if (cashierFilter === "all" && res.data?.length > 0) {
+        allSalesCacheRef.current = res.data;
+      }
 
       if (
         typeof window !== "undefined" &&
@@ -186,23 +196,89 @@ function SalesLedger() {
     sortDirection,
   ]);
 
-  // Reactive Debounced Auto-Fetch on any filter or page change
-  // Silent=true keeps existing rows visible while new data loads (no blank flash)
+  // Instant staff filter selection (0ms delay, no previous stale data shown)
+  const handleCashierChange = useCallback((newVal: string) => {
+    setCashierFilter(newVal);
+    setCurrentPage(1);
+
+    if (newVal === "all") {
+      if (allSalesCacheRef.current.length > 0) {
+        setPaginated((prev) => ({
+          ...prev,
+          data: allSalesCacheRef.current,
+          total: allSalesCacheRef.current.length,
+          current_page: 1,
+        }));
+      }
+    } else {
+      const staffOpt = paginated.filter_options?.cashiers?.find((c) => String(c.id) === String(newVal));
+      const targetName = staffOpt?.name || (newVal.startsWith("name_") ? decodeURIComponent(newVal.slice(5)) : newVal);
+      const cleanTarget = targetName.toLowerCase().trim();
+
+      const pool = allSalesCacheRef.current.length > 0 ? allSalesCacheRef.current : paginated.data;
+      const instantMatches = pool.filter((s) => {
+        const waiter = (s.waiter_name || "").toLowerCase().trim();
+        return waiter === cleanTarget || waiter.includes(cleanTarget);
+      });
+
+      if (instantMatches.length > 0) {
+        // INSTANT 0ms DISPLAY of matching records!
+        setPaginated((prev) => ({
+          ...prev,
+          data: instantMatches,
+          total: instantMatches.length,
+          current_page: 1,
+        }));
+      } else {
+        // Clear previous rows immediately so user NEVER sees previous data!
+        setPaginated((prev) => ({
+          ...prev,
+          data: [],
+          total: 0,
+          current_page: 1,
+        }));
+        setIsLoading(true);
+      }
+    }
+  }, [paginated.filter_options, paginated.data]);
+
+  // Filter directly by clicking a Server badge in any row
+  const handleFilterByServer = useCallback((serverName: string) => {
+    if (!serverName) return;
+    const clean = serverName.toLowerCase().trim();
+    const foundOpt = paginated.filter_options?.cashiers?.find(
+      (c) => c.name.toLowerCase().trim() === clean
+    );
+    const filterId = foundOpt ? foundOpt.id : `name_${encodeURIComponent(serverName)}`;
+    handleCashierChange(filterId);
+  }, [paginated.filter_options, handleCashierChange]);
+
+  // Reactive Fetch: Instant for staff changes, debounced for text inputs
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
-      fetchSales(); // non-silent only on first mount (shows skeleton)
+      fetchSales(); // non-silent only on first mount
       return;
     }
+
+    const isCashierChange = prevCashierRef.current !== cashierFilter;
+    prevCashierRef.current = cashierFilter;
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchSales(true); // silent: table stays populated until response arrives
-    }, 150); // fast 150ms so dropdown selections feel instant
+
+    if (isCashierChange) {
+      // Immediate fetch without delay for staff dropdown / server badge click
+      fetchSales(false);
+    } else {
+      debounceRef.current = setTimeout(() => {
+        fetchSales(true);
+      }, 150);
+    }
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [fetchSales]);
+  }, [fetchSales, cashierFilter]);
 
   // Real-time polling every 12s with current active filters (silent background sync)
   usePolling(() => fetchSales(true), 12000);
@@ -601,9 +677,12 @@ function SalesLedger() {
     }
   };
 
-  // Selected Cashier Name for Badge
+  // Selected Cashier / Server Name for Badge
   const selectedCashierName = useMemo(() => {
     if (cashierFilter === "all") return null;
+    if (cashierFilter.startsWith("name_")) {
+      return decodeURIComponent(cashierFilter.slice(5));
+    }
     return paginated.filter_options?.cashiers?.find(
       (c) => String(c.id) === String(cashierFilter)
     )?.name || `Staff #${cashierFilter}`;
@@ -1174,25 +1253,27 @@ function SalesLedger() {
               {/* Cashier / Staff */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-                  <User className="w-3 h-3 text-zinc-400" /> Cashier / Staff
+                  <User className="w-3 h-3 text-zinc-400" /> Cashier / Server
                   {isLoading && cashierFilter !== "all" && (
                     <RefreshCw className="w-2.5 h-2.5 text-green-600 animate-spin ml-1" />
                   )}
                 </label>
                 <select
                   value={cashierFilter}
-                  onChange={(e) => {
-                    setCashierFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
+                  onChange={(e) => handleCashierChange(e.target.value)}
                   className="w-full h-10 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
                 >
-                  <option value="all">All Cashiers / Staff</option>
+                  <option value="all">All Cashiers / Servers</option>
                   {(paginated.filter_options?.cashiers || []).map((usr) => (
                     <option key={usr.id} value={usr.id}>
                       {usr.name}{usr.role ? ` (${usr.role === 'admin' ? 'superadmin' : usr.role})` : ""}
                     </option>
                   ))}
+                  {cashierFilter.startsWith("name_") && !paginated.filter_options?.cashiers?.some(c => String(c.id) === String(cashierFilter)) && (
+                    <option value={cashierFilter}>
+                      {decodeURIComponent(cashierFilter.slice(5))} (waiter)
+                    </option>
+                  )}
                 </select>
               </div>
 
@@ -1334,7 +1415,7 @@ function SalesLedger() {
               {cashierFilter !== "all" && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-[11px] font-semibold">
                   👤 {selectedCashierName}
-                  <button onClick={() => setCashierFilter("all")} className="hover:text-purple-950 ml-0.5">
+                  <button onClick={() => handleCashierChange("all")} className="hover:text-purple-950 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -1563,10 +1644,18 @@ function SalesLedger() {
                             {sale.cashier_name || "Cashier"}
                           </div>
                           {sale.waiter_name && (
-                            <div className="inline-flex items-center gap-1 text-[11px] font-extrabold text-zinc-950 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-300 shadow-2xs">
-                              <span className="text-zinc-600 font-semibold">Server:</span>
-                              <span className="text-black font-black">{sale.waiter_name}</span>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFilterByServer(sale.waiter_name!);
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-extrabold text-zinc-950 bg-zinc-100 hover:bg-green-100 hover:border-green-400 hover:text-green-950 px-2 py-0.5 rounded border border-zinc-300 shadow-2xs transition-all cursor-pointer group/server"
+                              title={`Click to filter instantly by server: ${sale.waiter_name}`}
+                            >
+                              <span className="text-zinc-600 font-semibold group-hover/server:text-green-800">Server:</span>
+                              <span className="text-black font-black group-hover/server:text-green-950 underline decoration-dotted">{sale.waiter_name}</span>
+                            </button>
                           )}
                         </div>
                       </div>
