@@ -381,7 +381,7 @@ export interface PaginatedResponse<T> {
     average_order_value: number;
   };
   filter_options?: {
-    cashiers: Array<{ id: number; name: string; role?: string }>;
+    cashiers: Array<{ id: string; name: string; role?: string }>;
     tables?: Array<{ table_number: string; name?: string | null; zone?: string | null }>;
   };
 }

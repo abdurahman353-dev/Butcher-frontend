@@ -716,12 +716,7 @@ export function SalesSummaryPdfModal({
             className="w-full max-w-3xl bg-white shadow-xl border border-zinc-300 p-6 sm:p-8 rounded-sm my-auto"
             style={{ minHeight: "600px" }}
           >
-            {isLoading ? (
-              <div className="py-24 flex flex-col items-center justify-center text-zinc-400 gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                <p className="text-sm font-bold">Compiling sales ledger...</p>
-              </div>
-            ) : (
+            {false ? null : (
               <>
                 {/* Company Header Box — Exact Match to Image 1 */}
                 <div className="border-[1.5px] border-black p-2.5 sm:p-3.5 mb-2 flex items-start justify-between font-sans">

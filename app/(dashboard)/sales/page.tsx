@@ -1187,7 +1187,7 @@ function SalesLedger() {
                   <option value="all">All Cashiers / Staff</option>
                   {(paginated.filter_options?.cashiers || []).map((usr) => (
                     <option key={usr.id} value={usr.id}>
-                      {usr.name} {usr.role ? `(${usr.role})` : ""}
+                      {usr.name}{usr.role ? ` (${usr.role === 'admin' ? 'superadmin' : usr.role})` : ""}
                     </option>
                   ))}
                 </select>
