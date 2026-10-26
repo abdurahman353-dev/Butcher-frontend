@@ -161,4 +161,16 @@ export const restaurantService = {
     }>(`/restaurant/bills/${billId}/split`, payload);
     return res.data;
   },
+
+  async transferBill(
+    billId: number,
+    targetTableId: number
+  ): Promise<{ message: string; data: RestaurantBill; target_table: { id: number; name: string; table_number: string } }> {
+    const res = await apiClient.post<{
+      message: string;
+      data: RestaurantBill;
+      target_table: { id: number; name: string; table_number: string };
+    }>(`/restaurant/bills/${billId}/transfer`, { target_table_id: targetTableId });
+    return res.data;
+  },
 };

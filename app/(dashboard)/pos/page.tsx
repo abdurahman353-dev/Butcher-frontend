@@ -1905,6 +1905,7 @@ export default function PosPage() {
           }}
           customers={customers}
           onBillUpdated={handleBillUpdated}
+          allTables={restaurantTables}
         />
       )}
 

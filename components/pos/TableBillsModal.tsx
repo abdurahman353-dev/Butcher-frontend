@@ -32,6 +32,7 @@ import {
   Check,
   Edit,
   Split,
+  ArrowRightLeft,
 } from "lucide-react";
 import { SplitBillModal } from "./SplitBillModal";
 
@@ -59,6 +60,8 @@ interface TableBillsModalProps {
   onPrintKitchenSlip: (bill: RestaurantBill, productId?: number) => void;
   customers?: Customer[];
   onBillUpdated?: (updatedBill: RestaurantBill) => void;
+  /** All restaurant tables — used by the Transfer Table picker (cashier/admin only) */
+  allTables?: RestaurantTable[];
 }
 
 export function TableBillsModal({
@@ -73,6 +76,7 @@ export function TableBillsModal({
   onPrintKitchenSlip,
   customers = [],
   onBillUpdated,
+  allTables = [],
 }: TableBillsModalProps) {
   const { user } = useAuth();
   const isWaiter = user?.role === "waiter";
@@ -189,6 +193,51 @@ export function TableBillsModal({
     (table?.active_bills || []).filter((b) => b.table_id === table?.id)
   );
   const [splittingBill, setSplittingBill] = useState<RestaurantBill | null>(null);
+
+  // ── Transfer Bill State ──
+  const [transferringBill, setTransferringBill] = useState<RestaurantBill | null>(null);
+  const [transferTableSearch, setTransferTableSearch] = useState("");
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferFeedback, setTransferFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleTransferBill = async (bill: RestaurantBill, targetTable: RestaurantTable) => {
+    if (isTransferring) return;
+
+    // Optimistic: remove bill instantly so UI feels immediate
+    setBillsList((prev) => prev.filter((b) => b.id !== bill.id));
+    setTransferFeedback({ type: "success", text: `Moving ${bill.bill_number} to ${targetTable.name}...` });
+    setIsTransferring(true);
+
+    try {
+      const res = await restaurantService.transferBill(bill.id, targetTable.id);
+      const updatedBill = res.data;
+
+      if (onBillUpdated) {
+        onBillUpdated({ ...updatedBill, table_id: targetTable.id } as RestaurantBill);
+      }
+
+      setTransferFeedback({
+        type: "success",
+        text: `Bill ${bill.bill_number} moved to ${targetTable.name}`,
+      });
+
+      setTimeout(() => {
+        setTransferringBill(null);
+        setTransferFeedback(null);
+        setTransferTableSearch("");
+      }, 900);
+    } catch (err: any) {
+      // Rollback on failure
+      setBillsList((prev) => [bill, ...prev.filter((b) => b.id !== bill.id)]);
+      setTransferFeedback({
+        type: "error",
+        text: err?.response?.data?.message || err?.message || "Transfer failed. Bill restored.",
+      });
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
 
   const handleSplitSuccess = (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
     // 1. Update internal bills list: update source bill, insert target bill
@@ -1114,6 +1163,22 @@ export function TableBillsModal({
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
+                        {/* Transfer Bill button — cashier/admin only */}
+                        {!isWaiter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransferringBill(bill);
+                              setTransferTableSearch("");
+                              setTransferFeedback(null);
+                            }}
+                            className="px-2.5 py-1.5 text-xs bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white rounded-xl transition-all font-bold flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer"
+                            title="Shift this bill to another table"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                            <span>Transfer</span>
+                          </button>
+                        )}
                         {/* Divide / Split Bill button */}
                         {itemsCount > 0 && (
                           <button
@@ -1229,6 +1294,159 @@ export function TableBillsModal({
           </button>
         </div>
       </div>
+
+      {/* ── Transfer Bill Modal — Cashier / Admin only ── */}
+      {transferringBill && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-sky-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
+                  <ArrowRightLeft className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-zinc-900 leading-tight">Transfer Bill</h4>
+                  <p className="text-[11px] text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-zinc-800">{transferringBill.bill_number}</span>
+                    <span className="text-emerald-700 font-black">{formatCurrency(transferringBill.total)}</span>
+                    <span className="text-zinc-400">— pick destination table</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferringBill(null);
+                  setTransferFeedback(null);
+                  setTransferTableSearch("");
+                }}
+                disabled={isTransferring}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 transition-all cursor-pointer disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Feedback banner */}
+            {transferFeedback && (
+              <div
+                className={`mx-4 mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  transferFeedback.type === "success"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
+                    : "bg-rose-50 text-rose-700 border border-rose-300"
+                }`}
+              >
+                {transferFeedback.type === "success" ? (
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                )}
+                {transferFeedback.text}
+              </div>
+            )}
+
+            {/* Table Search */}
+            <div className="px-4 pt-3 pb-1">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={transferTableSearch}
+                  onChange={(e) => setTransferTableSearch(e.target.value)}
+                  placeholder="Search table name or number..."
+                  className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 hover:border-sky-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl text-xs font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-all"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Table List */}
+            <div className="px-4 pb-4 pt-2 overflow-y-auto max-h-72 space-y-1.5">
+              {allTables
+                .filter((t) => {
+                  // Exclude current table
+                  if (t.id === table?.id) return false;
+                  if (!t.is_active) return false;
+                  const q = transferTableSearch.toLowerCase().trim();
+                  if (!q) return true;
+                  return (
+                    t.name.toLowerCase().includes(q) ||
+                    t.table_number.toLowerCase().includes(q) ||
+                    (t.zone || "").toLowerCase().includes(q)
+                  );
+                })
+                .map((t) => {
+                  const billsOnTable = t.active_bills || [];
+                  const hasActiveBills = billsOnTable.length > 0;
+                  const tableTotal = t.total_active_amount || billsOnTable.reduce((s, b) => s + (b.total || 0), 0);
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      disabled={isTransferring}
+                      onClick={() => handleTransferBill(transferringBill, t)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:border-sky-500 hover:bg-sky-50 border-zinc-200 bg-white"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl font-mono font-black text-sm flex items-center justify-center shadow-xs text-white shrink-0 ${
+                          t.status === "red" ? "bg-rose-500"
+                          : t.status === "yellow" ? "bg-amber-500"
+                          : "bg-zinc-700"
+                        }`}>
+                          {t.table_number}
+                        </div>
+                        <div className="text-left min-w-0">
+                          <div className="text-xs font-black text-zinc-900">{t.name}</div>
+                          <div className="text-[10px] font-medium flex items-center gap-1 flex-wrap">
+                            <span className="text-zinc-500">{t.zone || "Main Floor"}</span>
+                            {hasActiveBills ? (
+                              <>
+                                <span className="text-zinc-300">•</span>
+                                <span className="text-amber-700 font-bold">{billsOnTable.length} bill{billsOnTable.length !== 1 ? "s" : ""}</span>
+                                {tableTotal > 0 && (
+                                  <span className="text-emerald-700 font-black">{formatCurrency(tableTotal)}</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-zinc-400">Empty</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 ml-2">
+                        {isTransferring ? (
+                          <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
+                        ) : (
+                          <span className="text-[10px] font-black text-sky-600 uppercase tracking-wider">
+                            Move
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+
+              {allTables.filter((t) => {
+                if (t.id === table?.id) return false;
+                if (!t.is_active) return false;
+                const q = transferTableSearch.toLowerCase().trim();
+                if (!q) return true;
+                return (
+                  t.name.toLowerCase().includes(q) ||
+                  t.table_number.toLowerCase().includes(q) ||
+                  (t.zone || "").toLowerCase().includes(q)
+                );
+              }).length === 0 && (
+                <div className="text-center py-6 text-xs text-zinc-400 font-medium">
+                  No other tables found.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Waiter PIN On-Screen Numpad Modal for Opening Bill ── */}
       {pinPromptBill && (
