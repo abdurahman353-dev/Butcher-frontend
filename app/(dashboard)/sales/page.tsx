@@ -114,6 +114,7 @@ function SalesLedger() {
   const isFirstMountRef = useRef(true);
   const allSalesCacheRef = useRef<Sale[]>([]);
   const prevCashierRef = useRef<string>("all");
+  const [isStaffQuerying, setIsStaffQuerying] = useState(false);
 
   // Load cached sales ONLY if no specific URL filters are requested
   useEffect(() => {
@@ -130,9 +131,11 @@ function SalesLedger() {
     } catch { }
   }, [urlPaymentStatus, urlPaymentMethod]);
 
-  const fetchSales = useCallback(async (silent = false) => {
+  const fetchSales = useCallback(async (silent = false, minDelay = 0) => {
     try {
       if (!silent) setIsLoading(true);
+      if (minDelay > 0) setIsStaffQuerying(true);
+
       const params: any = {
         page: currentPage,
         per_page: perPage,
@@ -151,7 +154,10 @@ function SalesLedger() {
       if (minAmount) params.min_amount = minAmount;
       if (maxAmount) params.max_amount = maxAmount;
 
-      const res = await salesService.getSales(params);
+      const fetchPromise = salesService.getSales(params);
+      const delayPromise = minDelay > 0 ? new Promise((resolve) => setTimeout(resolve, minDelay)) : Promise.resolve();
+
+      const [res] = await Promise.all([fetchPromise, delayPromise]);
       setPaginated(res);
 
       if (cashierFilter === "all" && res.data?.length > 0) {
@@ -176,6 +182,7 @@ function SalesLedger() {
       console.error("Failed to load sales:", e);
     } finally {
       setIsLoading(false);
+      setIsStaffQuerying(false);
       setIsRefreshing(false);
       setIsInitialLoading(false);
     }
@@ -196,51 +203,20 @@ function SalesLedger() {
     sortDirection,
   ]);
 
-  // Instant staff filter selection (0ms delay, no previous stale data shown)
+  // Clean staff filter handler: instantly wipes stale data and initiates 3s verified query
   const handleCashierChange = useCallback((newVal: string) => {
+    // 1. Immediately wipe previous rows so no old data lingers on screen
+    setPaginated((prev) => ({
+      ...prev,
+      data: [],
+      total: 0,
+    }));
+    setIsLoading(true);
+    setIsStaffQuerying(true);
+
     setCashierFilter(newVal);
     setCurrentPage(1);
-
-    if (newVal === "all") {
-      if (allSalesCacheRef.current.length > 0) {
-        setPaginated((prev) => ({
-          ...prev,
-          data: allSalesCacheRef.current,
-          total: allSalesCacheRef.current.length,
-          current_page: 1,
-        }));
-      }
-    } else {
-      const staffOpt = paginated.filter_options?.cashiers?.find((c) => String(c.id) === String(newVal));
-      const targetName = staffOpt?.name || (newVal.startsWith("name_") ? decodeURIComponent(newVal.slice(5)) : newVal);
-      const cleanTarget = targetName.toLowerCase().trim();
-
-      const pool = allSalesCacheRef.current.length > 0 ? allSalesCacheRef.current : paginated.data;
-      const instantMatches = pool.filter((s) => {
-        const waiter = (s.waiter_name || "").toLowerCase().trim();
-        return waiter === cleanTarget || waiter.includes(cleanTarget);
-      });
-
-      if (instantMatches.length > 0) {
-        // INSTANT 0ms DISPLAY of matching records!
-        setPaginated((prev) => ({
-          ...prev,
-          data: instantMatches,
-          total: instantMatches.length,
-          current_page: 1,
-        }));
-      } else {
-        // Clear previous rows immediately so user NEVER sees previous data!
-        setPaginated((prev) => ({
-          ...prev,
-          data: [],
-          total: 0,
-          current_page: 1,
-        }));
-        setIsLoading(true);
-      }
-    }
-  }, [paginated.filter_options, paginated.data]);
+  }, []);
 
   // Filter directly by clicking a Server badge in any row
   const handleFilterByServer = useCallback((serverName: string) => {
@@ -253,7 +229,7 @@ function SalesLedger() {
     handleCashierChange(filterId);
   }, [paginated.filter_options, handleCashierChange]);
 
-  // Reactive Fetch: Instant for staff changes, debounced for text inputs
+  // Reactive Fetch: Enforce 3-second database loading window for staff changes
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
@@ -267,8 +243,8 @@ function SalesLedger() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (isCashierChange) {
-      // Immediate fetch without delay for staff dropdown / server badge click
-      fetchSales(false);
+      // 3-second deliberate loading window for clean, rock-solid database fetch
+      fetchSales(false, 3000);
     } else {
       debounceRef.current = setTimeout(() => {
         fetchSales(true);
@@ -1541,22 +1517,44 @@ function SalesLedger() {
                 <th className="py-3.5 pr-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className={`divide-y divide-zinc-100 transition-opacity duration-200 ${isLoading && paginated.data.length > 0 ? "opacity-60" : "opacity-100"}`}>
-              {isLoading && paginated.data.length === 0 ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td className="py-4 pl-4 pr-1 text-center"><div className="h-4 w-4 bg-zinc-200 rounded mx-auto" /></td>
-                    <td className="py-4 pl-2 pr-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
-                    <td className="py-4 px-3"><div className="h-3.5 w-28 bg-zinc-100 rounded" /></td>
-                    <td className="py-4 px-3"><div className="h-3.5 w-20 bg-zinc-200 rounded" /></td>
-                    <td className="py-4 px-3"><div className="h-3.5 w-24 bg-zinc-100 rounded" /></td>
-                    <td className="py-4 px-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
-                    <td className="py-4 px-3 text-right"><div className="h-3.5 w-12 bg-zinc-100 rounded ml-auto" /></td>
-                    <td className="py-4 px-3 text-right"><div className="h-3.5 w-16 bg-zinc-200 rounded ml-auto" /></td>
-                    <td className="py-4 px-3 text-center"><div className="h-5 w-14 bg-zinc-200 rounded-full mx-auto" /></td>
-                    <td className="py-4 pr-4 text-center"><div className="h-6 w-16 bg-zinc-100 rounded mx-auto" /></td>
-                  </tr>
-                ))
+            <tbody className="divide-y divide-zinc-100">
+              {isLoading ? (
+                <>
+                  {isStaffQuerying && (
+                    <tr>
+                      <td colSpan={10} className="py-7 text-center bg-emerald-50/50 border-b border-emerald-100">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                            <span className="text-xs font-black text-emerald-950 uppercase tracking-wider">
+                              Querying Live Database Records...
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 font-medium">
+                            Fetching verified bills and tables for {selectedCashierName || "selected staff"}
+                          </p>
+                          <div className="w-56 h-1 bg-emerald-200/80 rounded-full overflow-hidden mt-1">
+                            <div className="h-full bg-emerald-600 rounded-full animate-pulse w-full" />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="py-4 pl-4 pr-1 text-center"><div className="h-4 w-4 bg-zinc-200 rounded mx-auto" /></td>
+                      <td className="py-4 pl-2 pr-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
+                      <td className="py-4 px-3"><div className="h-3.5 w-28 bg-zinc-100 rounded" /></td>
+                      <td className="py-4 px-3"><div className="h-3.5 w-20 bg-zinc-200 rounded" /></td>
+                      <td className="py-4 px-3"><div className="h-3.5 w-24 bg-zinc-100 rounded" /></td>
+                      <td className="py-4 px-3"><div className="h-3.5 w-16 bg-zinc-200 rounded" /></td>
+                      <td className="py-4 px-3 text-right"><div className="h-3.5 w-12 bg-zinc-100 rounded ml-auto" /></td>
+                      <td className="py-4 px-3 text-right"><div className="h-3.5 w-16 bg-zinc-200 rounded ml-auto" /></td>
+                      <td className="py-4 px-3 text-center"><div className="h-5 w-14 bg-zinc-200 rounded-full mx-auto" /></td>
+                      <td className="py-4 pr-4 text-center"><div className="h-6 w-16 bg-zinc-100 rounded mx-auto" /></td>
+                    </tr>
+                  ))}
+                </>
               ) : paginated.data.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-zinc-400">
