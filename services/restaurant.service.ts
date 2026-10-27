@@ -173,4 +173,16 @@ export const restaurantService = {
     }>(`/restaurant/bills/${billId}/transfer`, { target_table_id: targetTableId });
     return res.data;
   },
+
+  async mergeBill(
+    sourceBillId: number,
+    targetBillId: number
+  ): Promise<{ message: string; target_bill: RestaurantBill; source_bill: RestaurantBill }> {
+    const res = await apiClient.post<{
+      message: string;
+      target_bill: RestaurantBill;
+      source_bill: RestaurantBill;
+    }>(`/restaurant/bills/${sourceBillId}/merge`, { target_bill_id: targetBillId });
+    return res.data;
+  },
 };

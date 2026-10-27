@@ -33,6 +33,7 @@ import {
   Edit,
   Split,
   ArrowRightLeft,
+  GitMerge,
 } from "lucide-react";
 import { SplitBillModal } from "./SplitBillModal";
 
@@ -238,9 +239,54 @@ export function TableBillsModal({
     }
   };
 
+  // ── Merge Bill State ──
+  const [mergingBill, setMergingBill] = useState<RestaurantBill | null>(null);
+  const [selectedMergeTableId, setSelectedMergeTableId] = useState<number | null>(null);
+  const [selectedMergeBillId, setSelectedMergeBillId] = useState<number | null>(null);
+  const [mergeTableSearch, setMergeTableSearch] = useState("");
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeFeedback, setMergeFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const handleMergeBill = async (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
+    if (isMerging) return;
+    // Optimistic: remove source bill instantly
+    setBillsList((prev) => prev.filter((b) => b.id !== sourceBill.id));
+    setMergeFeedback({ type: "success", text: `Merging into ${targetBill.bill_number}...` });
+    setIsMerging(true);
+    try {
+      const res = await restaurantService.mergeBill(sourceBill.id, targetBill.id);
+      // If target is on same table, update it in the list
+      if (res.target_bill.table_id === table?.id) {
+        setBillsList((prev) =>
+          prev.map((b) => (b.id === res.target_bill.id ? res.target_bill : b))
+        );
+      }
+      if (onBillUpdated) {
+        onBillUpdated(res.target_bill);
+      }
+      setMergeFeedback({ type: "success", text: `Merged into ${targetBill.bill_number}` });
+      setTimeout(() => {
+        setMergingBill(null);
+        setSelectedMergeTableId(null);
+        setSelectedMergeBillId(null);
+        setMergeFeedback(null);
+        setMergeTableSearch("");
+      }, 900);
+    } catch (err: any) {
+      // Rollback
+      setBillsList((prev) => [sourceBill, ...prev.filter((b) => b.id !== sourceBill.id)]);
+      setMergeFeedback({
+        type: "error",
+        text: err?.response?.data?.message || err?.message || "Merge failed. Bill restored.",
+      });
+    } finally {
+      setIsMerging(false);
+    }
+  };
 
   const handleSplitSuccess = (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
     // 1. Update internal bills list: update source bill, insert target bill
+
     setBillsList((prev) => {
       const updated = prev.map((b) => (b.id === sourceBill.id ? sourceBill : b));
       if (!updated.some((b) => b.id === targetBill.id)) {
@@ -1163,6 +1209,47 @@ export function TableBillsModal({
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
+                        {/* Merge Bill button — cashier/admin only */}
+                        {!isWaiter && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMergingBill(bill);
+                              setMergeTableSearch("");
+                              setMergeFeedback(null);
+                              // Default selection: if current table has other candidate bills, pick current table!
+                              const sameTableCandidates = billsList.filter(
+                                (b) => b.id !== bill.id && (b.status === "open" || b.status === "printed")
+                              );
+                              if (sameTableCandidates.length > 0 && table) {
+                                setSelectedMergeTableId(table.id);
+                                setSelectedMergeBillId(sameTableCandidates[0].id);
+                              } else {
+                                const firstOther = allTables.find((t) => {
+                                  if (!t.is_active || t.id === table?.id) return false;
+                                  return (t.active_bills || []).some(
+                                    (b) => (b.status === "open" || b.status === "printed")
+                                  );
+                                });
+                                if (firstOther) {
+                                  setSelectedMergeTableId(firstOther.id);
+                                  const bList = (firstOther.active_bills || []).filter(
+                                    (b) => (b.status === "open" || b.status === "printed")
+                                  );
+                                  setSelectedMergeBillId(bList[0]?.id ?? null);
+                                } else {
+                                  setSelectedMergeTableId(null);
+                                  setSelectedMergeBillId(null);
+                                }
+                              }
+                            }}
+                            className="px-2.5 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white rounded-xl transition-all font-bold flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer"
+                            title="Merge this bill into another bill"
+                          >
+                            <GitMerge className="w-3.5 h-3.5" />
+                            <span>Merge</span>
+                          </button>
+                        )}
                         {/* Transfer Bill button — cashier/admin only */}
                         {!isWaiter && (
                           <button
@@ -1297,22 +1384,41 @@ export function TableBillsModal({
 
       {/* ── Transfer Bill Modal — Cashier / Admin only ── */}
       {transferringBill && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-3xl sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
 
             {/* Header */}
-            <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-sky-50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
-                  <ArrowRightLeft className="w-4 h-4" />
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-sky-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                  <ArrowRightLeft className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-zinc-900 leading-tight">Transfer Bill</h4>
-                  <p className="text-[11px] text-zinc-500 font-medium flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold text-zinc-800">{transferringBill.bill_number}</span>
-                    <span className="text-emerald-700 font-black">{formatCurrency(transferringBill.total)}</span>
-                    <span className="text-zinc-400">— pick destination table</span>
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-zinc-900 leading-tight">Shift / Transfer Bill</h4>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-sky-600 text-white shadow-2xs">
+                      Source
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {/* 1. Source Table Number */}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-100/90 text-sky-950 border border-sky-300 rounded-lg text-xs font-bold shadow-2xs">
+                      <span className="text-[10px] uppercase tracking-wider font-black text-sky-600">Source Table:</span>
+                      <span className="font-black font-mono text-zinc-900">{table?.name || `Table ${table?.table_number}`}</span>
+                    </span>
+
+                    {/* 2. Source Bill */}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-zinc-900 border border-sky-300 rounded-lg text-xs font-bold shadow-2xs">
+                      <span className="text-[10px] uppercase tracking-wider font-black text-sky-600">Source Bill:</span>
+                      <span className="font-mono font-black text-sky-950">{transferringBill.bill_number}</span>
+                    </span>
+
+                    {/* 3. Source Amount */}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold shadow-2xs">
+                      <span className="text-[10px] uppercase tracking-wider font-black text-emerald-600">Source Amount:</span>
+                      <span className="font-black text-emerald-700">{formatCurrency(transferringBill.total)}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
@@ -1323,16 +1429,16 @@ export function TableBillsModal({
                   setTransferTableSearch("");
                 }}
                 disabled={isTransferring}
-                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 transition-all cursor-pointer disabled:opacity-40"
+                className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 transition-all cursor-pointer disabled:opacity-40"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Feedback banner */}
             {transferFeedback && (
               <div
-                className={`mx-4 mt-3 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                className={`mx-6 mt-3 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
                   transferFeedback.type === "success"
                     ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
                     : "bg-rose-50 text-rose-700 border border-rose-300"
@@ -1348,85 +1454,87 @@ export function TableBillsModal({
             )}
 
             {/* Table Search */}
-            <div className="px-4 pt-3 pb-1">
+            <div className="px-6 pt-3 pb-2">
               <div className="relative">
-                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
                   value={transferTableSearch}
                   onChange={(e) => setTransferTableSearch(e.target.value)}
-                  placeholder="Search table name or number..."
-                  className="w-full pl-8 pr-3 py-2 bg-zinc-50 border border-zinc-200 hover:border-sky-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl text-xs font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-all"
+                  placeholder="Filter destination tables by name, number, or zone..."
+                  className="w-full pl-9 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 hover:border-sky-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 rounded-xl text-xs font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-all"
                   autoFocus
                 />
               </div>
             </div>
 
-            {/* Table List */}
-            <div className="px-4 pb-4 pt-2 overflow-y-auto max-h-72 space-y-1.5">
-              {allTables
-                .filter((t) => {
-                  // Exclude current table
-                  if (t.id === table?.id) return false;
-                  if (!t.is_active) return false;
-                  const q = transferTableSearch.toLowerCase().trim();
-                  if (!q) return true;
-                  return (
-                    t.name.toLowerCase().includes(q) ||
-                    t.table_number.toLowerCase().includes(q) ||
-                    (t.zone || "").toLowerCase().includes(q)
-                  );
-                })
-                .map((t) => {
-                  const billsOnTable = t.active_bills || [];
-                  const hasActiveBills = billsOnTable.length > 0;
-                  const tableTotal = t.total_active_amount || billsOnTable.reduce((s, b) => s + (b.total || 0), 0);
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      disabled={isTransferring}
-                      onClick={() => handleTransferBill(transferringBill, t)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:border-sky-500 hover:bg-sky-50 border-zinc-200 bg-white"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl font-mono font-black text-sm flex items-center justify-center shadow-xs text-white shrink-0 ${
-                          t.status === "red" ? "bg-rose-500"
-                          : t.status === "yellow" ? "bg-amber-500"
-                          : "bg-zinc-700"
-                        }`}>
-                          {t.table_number}
-                        </div>
-                        <div className="text-left min-w-0">
-                          <div className="text-xs font-black text-zinc-900">{t.name}</div>
-                          <div className="text-[10px] font-medium flex items-center gap-1 flex-wrap">
-                            <span className="text-zinc-500">{t.zone || "Main Floor"}</span>
-                            {hasActiveBills ? (
-                              <>
-                                <span className="text-zinc-300">•</span>
-                                <span className="text-amber-700 font-bold">{billsOnTable.length} bill{billsOnTable.length !== 1 ? "s" : ""}</span>
-                                {tableTotal > 0 && (
-                                  <span className="text-emerald-700 font-black">{formatCurrency(tableTotal)}</span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-zinc-400">Empty</span>
-                            )}
+            {/* Table List — 2 to 3 column grid stretched for PC screens */}
+            <div className="px-6 pb-4 pt-2 overflow-y-auto max-h-[62vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {allTables
+                  .filter((t) => {
+                    // Exclude current table
+                    if (t.id === table?.id) return false;
+                    if (!t.is_active) return false;
+                    const q = transferTableSearch.toLowerCase().trim();
+                    if (!q) return true;
+                    return (
+                      t.name.toLowerCase().includes(q) ||
+                      t.table_number.toLowerCase().includes(q) ||
+                      (t.zone || "").toLowerCase().includes(q)
+                    );
+                  })
+                  .map((t) => {
+                    const billsOnTable = t.active_bills || [];
+                    const hasActiveBills = billsOnTable.length > 0;
+                    const tableTotal = t.total_active_amount || billsOnTable.reduce((s, b) => s + (b.total || 0), 0);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={isTransferring}
+                        onClick={() => handleTransferBill(transferringBill, t)}
+                        className="group flex items-center justify-between p-3.5 rounded-xl border-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:border-sky-500 hover:bg-sky-50/70 border-zinc-200 bg-white shadow-2xs hover:shadow-xs"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-xl font-mono font-black text-sm flex items-center justify-center shadow-xs text-white shrink-0 ${
+                            t.status === "red" ? "bg-rose-500"
+                            : t.status === "yellow" ? "bg-amber-500"
+                            : "bg-zinc-700"
+                          }`}>
+                            {t.table_number}
+                          </div>
+                          <div className="text-left min-w-0">
+                            <div className="text-xs font-black text-zinc-900 truncate">{t.name}</div>
+                            <div className="text-[11px] font-medium flex items-center gap-1.5 flex-wrap">
+                              <span className="text-zinc-500">{t.zone || "Main Floor"}</span>
+                              {hasActiveBills ? (
+                                <>
+                                  <span className="text-zinc-300">•</span>
+                                  <span className="text-amber-700 font-bold">{billsOnTable.length} bill{billsOnTable.length !== 1 ? "s" : ""}</span>
+                                  {tableTotal > 0 && (
+                                    <span className="text-emerald-700 font-black">{formatCurrency(tableTotal)}</span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-emerald-600 font-semibold">• Empty</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="shrink-0 ml-2">
-                        {isTransferring ? (
-                          <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
-                        ) : (
-                          <span className="text-[10px] font-black text-sky-600 uppercase tracking-wider">
-                            Move
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+                        <div className="shrink-0 ml-2">
+                          {isTransferring ? (
+                            <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
+                          ) : (
+                            <span className="text-[11px] font-black text-sky-600 uppercase tracking-wider group-hover:translate-x-0.5 transition-transform">
+                              Move →
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
 
               {allTables.filter((t) => {
                 if (t.id === table?.id) return false;
@@ -1439,16 +1547,438 @@ export function TableBillsModal({
                   (t.zone || "").toLowerCase().includes(q)
                 );
               }).length === 0 && (
-                <div className="text-center py-6 text-xs text-zinc-400 font-medium">
-                  No other tables found.
+                <div className="text-center py-12 text-sm text-zinc-400 font-medium">
+                  No destination tables found matching your search.
                 </div>
               )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between">
+              <span className="text-xs text-zinc-500 font-medium">
+                Moving a bill relocates all its items to the destination table.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferringBill(null);
+                  setTransferFeedback(null);
+                  setTransferTableSearch("");
+                }}
+                disabled={isTransferring}
+                className="px-4 py-2 text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Merge Bill Modal — Cashier / Admin only ── */}
+      {mergingBill && (() => {
+        // Build list of candidate tables that have active bills (other than source bill)
+        const getCandidateBills = (t: RestaurantTable) => {
+          if (t.id === table?.id) {
+            return billsList.filter(
+              (b) => b.id !== mergingBill.id && (b.status === "open" || b.status === "printed")
+            );
+          }
+          return (t.active_bills || []).filter(
+            (b) => b.id !== mergingBill.id && (b.status === "open" || b.status === "printed")
+          );
+        };
+
+        const eligibleTables = allTables
+          .filter((t) => t.is_active)
+          .map((t) => ({
+            table: t,
+            isCurrentTable: t.id === table?.id,
+            bills: getCandidateBills(t),
+            totalAmount: getCandidateBills(t).reduce((s, b) => s + (b.total || 0), 0),
+          }))
+          .filter((item) => item.bills.length > 0)
+          .sort((a, b) => {
+            if (a.isCurrentTable) return -1;
+            if (b.isCurrentTable) return 1;
+            return a.table.name.localeCompare(b.table.name, undefined, { numeric: true });
+          });
+
+        const activeTableItem =
+          eligibleTables.find((it) => it.table.id === selectedMergeTableId) ||
+          eligibleTables[0];
+        const activeTable = activeTableItem?.table;
+        const candidateBillsOnActiveTable = activeTableItem?.bills || [];
+        const activeTargetBill =
+          candidateBillsOnActiveTable.find((b) => b.id === selectedMergeBillId) ||
+          candidateBillsOnActiveTable[0];
+
+        const q = mergeTableSearch.toLowerCase().trim();
+        const filteredEligibleTables = eligibleTables.filter((it) => {
+          if (!q) return true;
+          return (
+            it.table.name.toLowerCase().includes(q) ||
+            it.table.table_number.toLowerCase().includes(q) ||
+            (it.table.zone || "").toLowerCase().includes(q)
+          );
+        });
+
+        return (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-4xl sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-violet-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                    <GitMerge className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-base font-black text-zinc-900 leading-tight">Merge Bills</h4>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-violet-600 text-white shadow-2xs">
+                        Source
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {/* 1. Source Table Number */}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100/90 text-violet-950 border border-violet-300 rounded-lg text-xs font-bold shadow-2xs">
+                        <span className="text-[10px] uppercase tracking-wider font-black text-violet-600">Source Table:</span>
+                        <span className="font-black font-mono text-zinc-900">{table?.name || `Table ${table?.table_number}`}</span>
+                      </span>
+
+                      {/* 2. Source Bill */}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-zinc-900 border border-violet-300 rounded-lg text-xs font-bold shadow-2xs">
+                        <span className="text-[10px] uppercase tracking-wider font-black text-violet-600">Source Bill:</span>
+                        <span className="font-mono font-black text-violet-950">{mergingBill.bill_number}</span>
+                      </span>
+
+                      {/* 3. Source Amount */}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold shadow-2xs">
+                        <span className="text-[10px] uppercase tracking-wider font-black text-emerald-600">Source Amount:</span>
+                        <span className="font-black text-emerald-700">{formatCurrency(mergingBill.total)}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMergingBill(null);
+                    setSelectedMergeTableId(null);
+                    setSelectedMergeBillId(null);
+                    setMergeFeedback(null);
+                    setMergeTableSearch("");
+                  }}
+                  disabled={isMerging}
+                  className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60 transition-all cursor-pointer disabled:opacity-40"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Feedback */}
+              {mergeFeedback && (
+                <div className={`mx-6 mt-3 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  mergeFeedback.type === "success"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
+                    : "bg-rose-50 text-rose-700 border border-rose-300"
+                }`}>
+                  {mergeFeedback.type === "success" ? (
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  {mergeFeedback.text}
+                </div>
+              )}
+
+              {/* Quick Dropdown Selectors Bar — Table number & Bill number */}
+              {eligibleTables.length > 0 && (
+                <div className="px-6 py-3 bg-zinc-50 border-b border-zinc-200 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-700 shrink-0">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+                    <span>Quick Select:</span>
+                  </div>
+
+                  {/* Select Table */}
+                  <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                    <span className="text-[11px] font-bold text-zinc-500 shrink-0">Table:</span>
+                    <select
+                      value={activeTable?.id || ""}
+                      onChange={(e) => {
+                        const tid = Number(e.target.value);
+                        setSelectedMergeTableId(tid);
+                        const tbl = eligibleTables.find((it) => it.table.id === tid);
+                        setSelectedMergeBillId(tbl?.bills[0]?.id ?? null);
+                      }}
+                      className="w-full px-3 py-1.5 bg-white border border-zinc-300 hover:border-violet-400 focus:border-violet-600 focus:ring-2 focus:ring-violet-500/20 rounded-xl text-xs font-bold text-zinc-900 outline-none transition-all cursor-pointer"
+                    >
+                      {eligibleTables.map((it) => (
+                        <option key={it.table.id} value={it.table.id}>
+                          {it.table.name} {it.isCurrentTable ? "(Current Table)" : ""} — {it.bills.length} active bill{it.bills.length !== 1 ? "s" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Select Bill */}
+                  <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
+                    <span className="text-[11px] font-bold text-zinc-500 shrink-0">Bill:</span>
+                    <select
+                      value={activeTargetBill?.id || ""}
+                      onChange={(e) => setSelectedMergeBillId(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 bg-white border border-zinc-300 hover:border-violet-400 focus:border-violet-600 focus:ring-2 focus:ring-violet-500/20 rounded-xl text-xs font-bold text-zinc-900 outline-none transition-all cursor-pointer"
+                    >
+                      {candidateBillsOnActiveTable.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.bill_number} — {formatCurrency(b.total)} ({b.items?.length || 0} items)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Fast Merge Button */}
+                  {activeTargetBill && (
+                    <button
+                      type="button"
+                      disabled={isMerging}
+                      onClick={() => handleMergeBill(mergingBill, activeTargetBill)}
+                      className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {isMerging ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Merging...</span>
+                        </>
+                      ) : (
+                        <>
+                          <GitMerge className="w-3.5 h-3.5" />
+                          <span>Merge into {activeTargetBill.bill_number}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Side-by-side Visual Selection: Left Table Picker | Right Bill Picker */}
+              {eligibleTables.length === 0 ? (
+                <div className="text-center py-16 text-sm text-zinc-400 font-medium">
+                  No other active bills found across any tables to merge with.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-zinc-200 flex-1 overflow-hidden min-h-[440px]">
+
+                  {/* LEFT COLUMN: 1. Select Table */}
+                  <div className="md:col-span-5 flex flex-col overflow-hidden bg-zinc-50/60">
+                    <div className="p-3.5 border-b border-zinc-200 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-black text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] flex items-center justify-center font-bold">1</span>
+                          Select Target Table
+                        </span>
+                        <span className="text-[11px] font-bold text-zinc-500">
+                          {eligibleTables.length} table{eligibleTables.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          type="text"
+                          value={mergeTableSearch}
+                          onChange={(e) => setMergeTableSearch(e.target.value)}
+                          placeholder="Filter tables..."
+                          className="w-full pl-8 pr-3 py-1.5 bg-zinc-50 border border-zinc-200 hover:border-violet-400 focus:border-violet-500 rounded-xl text-xs font-medium text-zinc-900 placeholder-zinc-400 outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[50vh]">
+                      {filteredEligibleTables.map((it) => {
+                        const isSelected = it.table.id === activeTable?.id;
+                        return (
+                          <button
+                            key={it.table.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMergeTableId(it.table.id);
+                              setSelectedMergeBillId(it.bills[0]?.id ?? null);
+                            }}
+                            className={`w-full text-left p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                              isSelected
+                                ? "border-violet-600 bg-violet-50/90 ring-2 ring-violet-500/20 shadow-xs"
+                                : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/80"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-9 h-9 rounded-xl font-mono font-black text-xs flex items-center justify-center shadow-xs text-white shrink-0 ${
+                                it.table.status === "red" ? "bg-rose-500"
+                                : it.table.status === "yellow" ? "bg-amber-500"
+                                : "bg-zinc-700"
+                              }`}>
+                                {it.table.table_number}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-black text-zinc-900">{it.table.name}</span>
+                                  {it.isCurrentTable && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                                      Same Table
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] font-medium text-zinc-500 mt-0.5 flex items-center gap-1">
+                                  <span className="font-bold text-violet-700">{it.bills.length} active bill{it.bills.length !== 1 ? "s" : ""}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-700 font-black">{formatCurrency(it.totalAmount)}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="shrink-0 ml-2">
+                              {isSelected ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 bg-violet-600 text-white rounded-lg uppercase tracking-wider flex items-center gap-1">
+                                  <Check className="w-3 h-3 stroke-[3]" /> Active
+                                </span>
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-zinc-400" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* RIGHT COLUMN: 2. Select Bill to Merge Into */}
+                  <div className="md:col-span-7 flex flex-col overflow-hidden bg-white">
+                    <div className="p-3.5 border-b border-zinc-200 bg-zinc-50/50 flex items-center justify-between">
+                      <span className="text-xs font-black text-zinc-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] flex items-center justify-center font-bold">2</span>
+                        Select Target Bill on {activeTable?.name || "Selected Table"}
+                      </span>
+                      <span className="text-[11px] font-bold text-zinc-500">
+                        {candidateBillsOnActiveTable.length} bill{candidateBillsOnActiveTable.length !== 1 ? "s" : ""} available
+                      </span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 max-h-[50vh]">
+                      {candidateBillsOnActiveTable.map((targetB) => {
+                        const isChosen = targetB.id === activeTargetBill?.id;
+                        const combinedTotal = (mergingBill.total || 0) + (targetB.total || 0);
+
+                        return (
+                          <div
+                            key={targetB.id}
+                            onClick={() => setSelectedMergeBillId(targetB.id)}
+                            className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                              isChosen
+                                ? "border-violet-600 bg-violet-50/40 shadow-md ring-2 ring-violet-500/10"
+                                : "border-zinc-200 bg-white hover:border-violet-300 hover:bg-zinc-50/50"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono text-sm font-black text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-lg border border-zinc-200">
+                                    {targetB.bill_number}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                                      targetB.status === "printed"
+                                        ? "bg-amber-50 text-amber-700 border-amber-300"
+                                        : "bg-rose-50 text-rose-700 border-rose-300"
+                                    }`}
+                                  >
+                                    {targetB.status === "printed" ? "Bill Printed" : "Order Active"}
+                                  </span>
+                                </div>
+                                <div className="text-xs font-semibold text-zinc-600 mt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span>{targetB.customer_name || "Walk-in Guest"}</span>
+                                  {targetB.items && targetB.items.length > 0 && (
+                                    <>
+                                      <span className="text-zinc-300">•</span>
+                                      <span className="text-zinc-500">{targetB.items.length} item{targetB.items.length !== 1 ? "s" : ""}</span>
+                                    </>
+                                  )}
+                                  {targetB.waiter_name && (
+                                    <>
+                                      <span className="text-zinc-300">•</span>
+                                      <span className="text-zinc-500">Waiter: {targetB.waiter_name}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <div className="text-xs text-zinc-400 font-bold uppercase">Current Total</div>
+                                <div className="text-base font-black text-emerald-700">{formatCurrency(targetB.total)}</div>
+                              </div>
+                            </div>
+
+                            {/* Merge preview calculation & Action button */}
+                            <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 flex-wrap">
+                              <div className="text-[11px] font-medium text-zinc-500">
+                                Combined total: <span className="font-black text-emerald-800 text-xs">{formatCurrency(combinedTotal)}</span>
+                              </div>
+
+                              <button
+                                type="button"
+                                disabled={isMerging}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMergeBill(mergingBill, targetB);
+                                }}
+                                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 active:scale-95 ml-auto"
+                              >
+                                {isMerging && isChosen ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Merging...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <GitMerge className="w-3.5 h-3.5" />
+                                    <span>MERGE INTO THIS BILL →</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-zinc-100 bg-zinc-50 flex items-center justify-between">
+                <span className="text-xs text-zinc-500 font-medium">
+                  Merging moves all items from {mergingBill.bill_number} into the selected bill and cancels {mergingBill.bill_number}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMergingBill(null);
+                    setSelectedMergeTableId(null);
+                    setSelectedMergeBillId(null);
+                    setMergeFeedback(null);
+                    setMergeTableSearch("");
+                  }}
+                  disabled={isMerging}
+                  className="px-4 py-2 text-xs font-bold text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:bg-zinc-100 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Waiter PIN On-Screen Numpad Modal for Opening Bill ── */}
+
       {pinPromptBill && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 bg-zinc-950/75 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-sm overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
