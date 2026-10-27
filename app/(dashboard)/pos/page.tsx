@@ -57,6 +57,7 @@ export default function PosPage() {
   const { confirm, alert } = useSystemDialog();
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const isWaiter = user?.role === "waiter";
   const isSuperAdmin = user?.role === "superadmin";
   const [activeTab, setActiveTab] = useState<"products" | "tables">(
@@ -1530,7 +1531,7 @@ export default function PosPage() {
                 title={isRestaurant && !activeBill ? "Select a table and open a bill first to order dishes" : "Menu & Dishes"}
               >
                 <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{isRestaurant ? "Menu & Dishes" : "Products & Cuts"}</span>
+                <span>{isRestaurant ? "Menu & Dishes" : isClothing ? "Products & Items" : "Products & Cuts"}</span>
                 {isRestaurant && !activeBill && (
                   <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-200 text-zinc-500">
                     Open bill first
@@ -1664,6 +1665,7 @@ export default function PosPage() {
               onSelectProduct={handleSelectProduct}
               isLoading={isLoading}
               isRestaurant={isRestaurant}
+              isClothing={isClothing}
               canDrag={isSuperAdmin}
               onUpdateProduct={(productId, patch) => {
                 setProducts((prev) =>
@@ -1698,6 +1700,7 @@ export default function PosPage() {
           onProceedCheckout={handleProceedCheckout}
           isShiftOpen={isShiftOpen}
           isRestaurant={isRestaurant}
+          isClothing={isClothing}
           heldCount={heldCount}
           onOpenHeldOrders={() => setIsHeldOrdersOpen(true)}
           onHoldOrder={handleHoldOrder}
@@ -1839,6 +1842,7 @@ export default function PosPage() {
               }}
               isShiftOpen={isShiftOpen}
               isRestaurant={isRestaurant}
+              isClothing={isClothing}
               heldCount={heldCount}
               onOpenHeldOrders={() => {
                 setIsMobileCartOpen(false);

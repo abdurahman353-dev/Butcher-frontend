@@ -49,6 +49,7 @@ interface CartPaneProps {
   onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "credit") => void;
   isShiftOpen?: boolean;
   isRestaurant?: boolean;
+  isClothing?: boolean;
   heldCount?: number;
   onOpenHeldOrders?: () => void;
   onHoldOrder?: () => void;
@@ -84,6 +85,7 @@ export function CartPane({
   onProceedCheckout,
   isShiftOpen = true,
   isRestaurant = false,
+  isClothing = false,
   heldCount = 0,
   onOpenHeldOrders,
   onHoldOrder,
@@ -149,11 +151,13 @@ export function CartPane({
             {isRestaurant ? "Table Order" : "Current Order"}
           </h2>
           <span className="text-[11px] font-bold text-zinc-600">
-            {items.length} {isRestaurant
+            {items.length} {isRestaurant || isClothing
               ? `item${items.length !== 1 ? "s" : ""}`
               : `cut${items.length !== 1 ? "s" : ""}`}
             {isRestaurant
               ? (totalWeighedKg > 0 ? ` • ${formatWeight(totalWeighedKg)}` : "")
+              : isClothing
+              ? ""
               : ` • ${formatWeight(totalWeight)}`}
           </span>
         </div>
@@ -487,11 +491,13 @@ export function CartPane({
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-zinc-50/50">
         {items.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400">
-            <span className="text-3xl mb-2 opacity-40">{isRestaurant ? "🍽️" : "🥩"}</span>
+            <span className="text-3xl mb-2 opacity-40">{isRestaurant ? "🍽️" : isClothing ? "👗" : "🥩"}</span>
             <p className="text-sm font-medium text-zinc-500">Cart is empty</p>
             <p className="text-xs text-zinc-400 mt-1">
               {isRestaurant
                 ? "Select a table and open a bill, then add menu items."
+                : isClothing
+                ? "Click a product to add it to this sale."
                 : "Click a meat cut to weigh and add it to this sale."}
             </p>
             {heldCount > 0 && onOpenHeldOrders && (
@@ -529,6 +535,8 @@ export function CartPane({
               Subtotal
               {isRestaurant
                 ? (totalWeighedKg > 0 ? ` (${formatWeight(totalWeighedKg)})` : ` (${items.length} ${items.length !== 1 ? "items" : "item"})`)
+                : isClothing
+                ? ` (${items.length} ${items.length !== 1 ? "items" : "item"})`
                 : ` (${formatWeight(totalWeight)})`}
               :
             </span>

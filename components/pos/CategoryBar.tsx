@@ -11,6 +11,7 @@ interface CategoryBarProps {
   productCounts?: Record<string, number>;
   totalCount?: number;
   isRestaurant?: boolean;
+  isClothing?: boolean;
   canDrag?: boolean;
   onReorderCategories?: (reorderedCategories: Category[]) => void;
   onDropItemOnCategory?: (productId: number, categoryId: number) => void;
@@ -60,6 +61,7 @@ export function CategoryBar({
   productCounts = {},
   totalCount,
   isRestaurant = false,
+  isClothing = false,
   canDrag = false,
   onReorderCategories,
   onDropItemOnCategory,
@@ -220,7 +222,7 @@ export function CategoryBar({
               : "bg-white border-zinc-300 text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400"
           }`}
         >
-          <span className="tracking-tight">{isRestaurant ? "All Items" : "All Cuts"}</span>
+          <span className="tracking-tight">{isClothing || isRestaurant ? "All Items" : "All Cuts"}</span>
           <span
             className={`px-2 py-0.5 rounded-full text-xs font-mono leading-none transition-transform group-hover:scale-105 ${
               selectedCategoryId === "all"

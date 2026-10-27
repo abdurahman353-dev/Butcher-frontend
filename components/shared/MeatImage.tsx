@@ -72,6 +72,41 @@ function getDepartmentTheme(category: string, name: string): DepartmentTheme {
   const lowerName = (name || "").toLowerCase();
   const lowerCat = (category || "").toLowerCase();
 
+  // 0. Clothing, Fashion & Apparel
+  if (
+    lowerCat.includes("clothing") ||
+    lowerCat.includes("wear") ||
+    lowerCat.includes("fashion") ||
+    lowerCat.includes("apparel") ||
+    lowerCat.includes("shoe") ||
+    lowerCat.includes("dress") ||
+    lowerCat.includes("shirt") ||
+    lowerCat.includes("jacket") ||
+    lowerCat.includes("bag") ||
+    lowerCat.includes("boutique") ||
+    lowerName.includes("shirt") ||
+    lowerName.includes("dress") ||
+    lowerName.includes("shoe") ||
+    lowerName.includes("pant") ||
+    lowerName.includes("trouser") ||
+    lowerName.includes("jean") ||
+    lowerName.includes("jacket") ||
+    lowerName.includes("suit") ||
+    lowerName.includes("t-shirt")
+  ) {
+    return {
+      tag: "FASHION & APPAREL",
+      code: "CL",
+      bgGradient: "bg-gradient-to-b from-purple-300/70 via-indigo-200/60 to-violet-100/50 border-b border-purple-300",
+      stampGradient: "bg-gradient-to-tr from-purple-600 to-indigo-600",
+      stampText: "text-white",
+      shadowColor: "shadow-purple-600/35",
+      pillBg: "bg-white/95",
+      pillText: "text-purple-950",
+      pillBorder: "border-purple-300",
+    };
+  }
+
   // 1. Goat / Mbuzi
   if (lowerCat.includes("goat") || lowerName.includes("mbuzi") || lowerName.includes("goat")) {
     return {

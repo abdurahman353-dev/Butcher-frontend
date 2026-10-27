@@ -38,6 +38,7 @@ import { ManageCategoriesModal } from "@/components/products/ManageCategoriesMod
 export default function ProductsPage() {
   const { user, isAdmin, isCashier } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const { confirm, alert } = useSystemDialog();
   const [paginated, setPaginated] = useState<PaginatedResponse<Product>>({
     data: [],
@@ -297,7 +298,7 @@ export default function ProductsPage() {
       name: "",
       sku: "",
       category_id: categories[0]?.id || 0,
-      unit: "KG",
+      unit: isClothing ? "PCS" : "KG",
       price_per_kg: "",
       buying_cost_per_kg: "",
       current_stock: "",
@@ -327,7 +328,7 @@ export default function ProductsPage() {
     setModalError(null);
 
     if (!formData.name.trim() || !formData.price_per_kg) {
-      const errMsg = "Please fill in the product name and selling price per KG.";
+      const errMsg = `Please fill in the product name and selling price.`;
       setModalError(errMsg);
       await alert({
         title: "Validation Error",
@@ -349,7 +350,7 @@ export default function ProductsPage() {
     }
 
     if (!isRestaurant && formData.buying_cost_per_kg === "") {
-      const errMsg = "Please enter the buying cost per KG.";
+      const errMsg = `Please enter the buying cost per ${formData.unit || "unit"}.`;
       setModalError(errMsg);
       await alert({
         title: "Buying Cost Required",
@@ -360,7 +361,7 @@ export default function ProductsPage() {
     }
 
     if (!isRestaurant && !editingProduct && formData.current_stock === "") {
-      const errMsg = "Please enter the initial stock quantity in KG.";
+      const errMsg = `Please enter the initial stock quantity (${formData.unit || "units"}).`;
       setModalError(errMsg);
       await alert({
         title: "Initial Stock Required",
@@ -371,7 +372,7 @@ export default function ProductsPage() {
     }
 
     if (!isRestaurant && formData.min_stock === "") {
-      const errMsg = "Please enter the minimum alert stock level in KG.";
+      const errMsg = `Please enter the minimum alert stock level (${formData.unit || "units"}).`;
       setModalError(errMsg);
       await alert({
         title: "Minimum Stock Required",
@@ -421,8 +422,8 @@ export default function ProductsPage() {
     const isActivating = !product.is_active;
     const confirmed = await confirm({
       title: isActivating
-        ? (isRestaurant ? "Activate Menu Item" : "Activate Meat Cut")
-        : (isRestaurant ? "Deactivate Menu Item" : "Deactivate Meat Cut"),
+        ? (isClothing ? "Activate Product" : isRestaurant ? "Activate Menu Item" : "Activate Meat Cut")
+        : (isClothing ? "Deactivate Product" : isRestaurant ? "Deactivate Menu Item" : "Deactivate Meat Cut"),
       message: isActivating
         ? `Make "${product.name}" active and visible on the POS terminal?`
         : `Deactivate "${product.name}"? It will no longer be sellable on the POS terminal until re-activated.`,
@@ -447,8 +448,8 @@ export default function ProductsPage() {
 
   const handleDeleteProduct = async (product: Product) => {
     const confirmed = await confirm({
-      title: isRestaurant ? "Delete Menu / Stock Item" : "Delete Meat Cut",
-      message: `Are you sure you want to delete "${product.name}" (${product.sku})?\n\nThis will permanently remove this ${isRestaurant ? "item" : "meat cut"} from inventory and POS terminal. This action cannot be undone.`,
+      title: isClothing ? "Delete Product" : isRestaurant ? "Delete Menu / Stock Item" : "Delete Meat Cut",
+      message: `Are you sure you want to delete "${product.name}" (${product.sku})?\n\nThis will permanently remove this ${isClothing ? "product" : isRestaurant ? "item" : "meat cut"} from inventory and POS terminal. This action cannot be undone.`,
       confirmText: "Yes, Delete Product",
       cancelText: "No, Keep Product",
       type: "danger",
@@ -469,7 +470,7 @@ export default function ProductsPage() {
   };
 
   if (isLoading && paginated.data.length === 0) {
-    return <PageSkeleton variant="table" title={isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"} />;
+    return <PageSkeleton variant="table" title={isClothing ? "Products & Apparel Catalog" : isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"} />;
   }
 
   return (
@@ -482,11 +483,13 @@ export default function ProductsPage() {
               <Package className="w-5 h-5" />
             </div>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-              {isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"}
+              {isClothing ? "Products & Apparel Catalog" : isRestaurant ? "Menu & Inventory Items" : "Products & Meat Cuts"}
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            {isRestaurant
+            {isClothing
+              ? "Manage your clothing catalog, apparel sizes, pricing per item, minimum stock, and availability."
+              : isRestaurant
               ? "Manage your restaurant menu, beverage lists, portions, pricing, and stock thresholds."
               : "Manage your butcher inventory cuts, pricing per KG, minimum thresholds, and availability."}
           </p>
@@ -515,7 +518,7 @@ export default function ProductsPage() {
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center gap-1.5 active:scale-95"
           >
             <Plus className="w-4 h-4" />
-            <span>{isRestaurant ? "Add Menu Item" : "Add New Cut"}</span>
+            <span>{isClothing ? "Add New Product" : isRestaurant ? "Add Menu Item" : "Add New Cut"}</span>
           </button>
         </div>
       </div>
@@ -542,7 +545,7 @@ export default function ProductsPage() {
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-500">
-                    {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : (isRestaurant ? "Filter menu & stock items by name, category, or status." : "Filter cuts by name, category, or status.")}
+                    {isFilterOpen ? "Click to collapse" : activeFiltersCount > 0 ? `${activeFiltersCount} filter(s) applied. Click to expand.` : (isClothing ? "Filter products by name, category, or status." : isRestaurant ? "Filter menu & stock items by name, category, or status." : "Filter cuts by name, category, or status.")}
                   </p>
                 </div>
               </div>
@@ -581,7 +584,7 @@ export default function ProductsPage() {
                       type="text"
                       value={search}
                       onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                      placeholder={isRestaurant ? "Item name or SKU..." : "Cut name or SKU..."}
+                      placeholder={isClothing ? "Product name or SKU..." : isRestaurant ? "Item name or SKU..." : "Cut name or SKU..."}
                       className="w-full h-10 bg-zinc-50 hover:bg-zinc-100/70 focus:bg-white border border-zinc-200 rounded-xl pl-9 pr-8 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-500 transition-colors"
                     />
                     <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -663,11 +666,11 @@ export default function ProductsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                <th className="py-3.5 pl-4">{isRestaurant ? "Item / Dish Name" : "Cut Name"}</th>
+                <th className="py-3.5 pl-4">{isClothing ? "Product / Item Name" : isRestaurant ? "Item / Dish Name" : "Cut Name"}</th>
                 <th className="py-3.5 px-3">SKU</th>
                 <th className="py-3.5 px-3">Category</th>
-                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Selling Price / Unit" : "Selling Price / KG"}</th>
-                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Cost Price / Unit" : "Cost Price / KG"}</th>
+                <th className="py-3.5 px-3 text-right">{isClothing ? "Selling Price" : isRestaurant ? "Selling Price / Unit" : "Selling Price / KG"}</th>
+                <th className="py-3.5 px-3 text-right">{isClothing ? "Cost Price" : isRestaurant ? "Cost Price / Unit" : "Cost Price / KG"}</th>
                 <th className="py-3.5 px-3 text-right">Current Stock</th>
                 <th className="py-3.5 px-3 text-right">Min Stock</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
@@ -678,7 +681,7 @@ export default function ProductsPage() {
               {paginated.data.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-zinc-400">
-                    {isRestaurant ? "No menu or inventory items found matching your search." : "No meat products found matching your search."}
+                    {isClothing ? "No clothing products found matching your search." : isRestaurant ? "No menu or inventory items found matching your search." : "No meat products found matching your search."}
                   </td>
                 </tr>
               ) : (
@@ -757,7 +760,7 @@ export default function ProductsPage() {
                             type="button"
                             onClick={() => openEditModal(product)}
                             className="p-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-600 hover:text-zinc-900 transition-colors shadow-2xs"
-                            title={isRestaurant ? "Edit item" : "Edit meat cut"}
+                            title={isClothing ? "Edit product" : isRestaurant ? "Edit item" : "Edit meat cut"}
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -765,7 +768,7 @@ export default function ProductsPage() {
                             type="button"
                             onClick={() => handleDeleteProduct(product)}
                             className="p-1.5 rounded-lg border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-600 hover:text-red-700 transition-colors shadow-2xs"
-                            title={isRestaurant ? "Delete item" : "Delete meat cut"}
+                            title={isClothing ? "Delete product" : isRestaurant ? "Delete item" : "Delete meat cut"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -802,7 +805,7 @@ export default function ProductsPage() {
           <div className="relative w-full max-w-md bg-white border border-zinc-200 rounded-2xl p-6 shadow-2xl z-10 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
               <h3 className="text-base font-bold text-zinc-900">
-                {editingProduct ? (isRestaurant ? "Edit Menu / Stock Item" : "Edit Meat Cut") : (isRestaurant ? "Add Menu / Stock Item" : "Add New Meat Cut")}
+                {editingProduct ? (isClothing ? "Edit Product" : isRestaurant ? "Edit Menu / Stock Item" : "Edit Meat Cut") : (isClothing ? "Add New Product" : isRestaurant ? "Add Menu / Stock Item" : "Add New Meat Cut")}
               </h3>
               <button
                 type="button"
@@ -830,7 +833,7 @@ export default function ProductsPage() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={isRestaurant ? "e.g. Grilled Chicken Wings, Wagyu Burger, Tusker" : "e.g. Beef Ribeye, Lamb Chops"}
+                  placeholder={isClothing ? "e.g. Men's Cotton T-Shirt, Women's Floral Dress, Denim Jacket" : isRestaurant ? "e.g. Grilled Chicken Wings, Wagyu Burger, Tusker" : "e.g. Beef Ribeye, Lamb Chops"}
                   className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 placeholder:text-zinc-400 focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                 />
               </div>
@@ -845,21 +848,18 @@ export default function ProductsPage() {
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                     className="w-full bg-white border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 font-semibold focus:outline-hidden focus:border-green-600 focus:ring-1 focus:ring-green-500 shadow-2xs"
                   >
+                    <option value="PCS">PCS (Pieces)</option>
+                    <option value="PAIR">PAIR</option>
+                    <option value="PACK">PACK (Package)</option>
+                    <option value="BOX">BOX</option>
+                    <option value="SET">SET</option>
                     <option value="PORTION">PORTION</option>
                     <option value="PLATE">PLATE</option>
                     <option value="BOTTLE">BOTTLE</option>
                     <option value="GLASS">GLASS</option>
                     <option value="CUP">CUP</option>
-                    <option value="SHOT">SHOT</option>
-                    <option value="BOWL">BOWL</option>
-                    <option value="BOX">BOX</option>
-                    <option value="TRIP">TRIP</option>
-                    <option value="PCS">PCS (Pieces)</option>
-                    <option value="PACK">PACK (Package)</option>
                     <option value="KG">KG (Weight)</option>
                     <option value="G">G (Grams)</option>
-                    <option value="L">L (Liters)</option>
-                    <option value="ML">ML (Milliliters)</option>
                   </select>
                 </div>
                 <div>
@@ -883,7 +883,9 @@ export default function ProductsPage() {
                       <div className="flex-1 text-xs">
                         <p className="font-bold text-amber-900">No categories yet</p>
                         <p className="text-amber-700 mt-0.5">
-                          {isRestaurant
+                          {isClothing
+                            ? "Create at least one clothing category (e.g. Men's Wear, Dresses) before adding items."
+                            : isRestaurant
                             ? "Create at least one menu category (e.g. Starters, Mains) before adding items."
                             : "Create at least one meat category (e.g. Beef, Lamb) before adding products."}
                         </p>
@@ -1041,7 +1043,7 @@ export default function ProductsPage() {
                   disabled={isSaving}
                   className="w-1/2 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-colors shadow-xs"
                 >
-                  {isSaving ? "Saving..." : editingProduct ? (isRestaurant ? "Update Item" : "Update Cut") : (isRestaurant ? "Create Item" : "Create Cut")}
+                  {isSaving ? "Saving..." : editingProduct ? (isClothing ? "Update Product" : isRestaurant ? "Update Item" : "Update Cut") : (isClothing ? "Create Product" : isRestaurant ? "Create Item" : "Create Cut")}
                 </button>
               </div>
             </form>
@@ -1061,7 +1063,9 @@ export default function ProductsPage() {
                 <div>
                   <h3 className="text-base font-bold">Bulk Add Products</h3>
                   <p className="text-xs text-blue-100">
-                    {isRestaurant
+                    {isClothing
+                      ? "Import multiple clothing & apparel products at once — fast, reliable, isolated to your store"
+                      : isRestaurant
                       ? "Import multiple menu items and beverages at once — fast, reliable, isolated to your venue"
                       : "Import multiple cuts at once — fast, reliable, isolated to your company"}
                   </p>

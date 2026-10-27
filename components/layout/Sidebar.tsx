@@ -52,7 +52,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
   const handleLogout = async () => {
     const confirmed = await confirm({
       title: "Sign Out",
-      message: "Are you sure you want to sign out of the butcher POS system?",
+      message: "Are you sure you want to sign out of the POS system?",
       confirmText: "Yes, Sign Out",
       cancelText: "Stay Logged In",
       type: "warning",
@@ -63,6 +63,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
   };
 
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
 
   const navigation: NavItem[] = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -106,7 +107,7 @@ export function Sidebar({ isCollapsed = false, onToggleCollapse }: SidebarProps)
                 {settings.shop_name.toUpperCase()}
               </h1>
               <p className="text-[10px] text-zinc-500 font-medium truncate">
-                {isRestaurant ? "Hotel & Restaurant POS" : "Butcher POS System"}
+                {isClothing ? "Clothing & Apparel POS" : isRestaurant ? "Hotel & Restaurant POS" : "Butcher POS System"}
               </p>
             </div>
           )}

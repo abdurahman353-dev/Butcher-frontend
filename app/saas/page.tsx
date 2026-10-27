@@ -14,7 +14,7 @@ import {
   Calendar, AlertTriangle, Loader2,
   Lock, Unlock, MoreVertical, Star, Infinity,
   Activity, ChevronRight, AlertCircle, Search, Filter,
-  SlidersHorizontal, ChevronDown, ArrowUpDown, Phone, Mail, MapPin, Minus, Trash2,
+  SlidersHorizontal, ChevronDown, ArrowUpDown, Phone, Mail, MapPin, Minus, Trash2, Pencil,
 } from "lucide-react";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ export default function SaasPortalPage() {
   const { confirm } = useSystemDialog();
 
   const [companies, setCompanies] = useState<SaasCompany[]>([]);
-  const [summary, setSummary] = useState<{ total: number; active: number; suspended: number; butcheries?: number; restaurants?: number }>({ total: 0, active: 0, suspended: 0 });
+  const [summary, setSummary] = useState<{ total: number; active: number; suspended: number; butcheries?: number; restaurants?: number; clothing?: number }>({ total: 0, active: 0, suspended: 0 });
   const [isFetching, setIsFetching] = useState(true);
   const [actionLoading, setActionLoading] = useState<Record<number, string>>({});
   const [enteringId, setEnteringId] = useState<number | null>(null);
@@ -108,7 +108,7 @@ export default function SaasPortalPage() {
 
   // ── Filters & Search State ──
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "butchery" | "restaurant">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "butchery" | "restaurant" | "clothing">("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -129,7 +129,7 @@ export default function SaasPortalPage() {
 
   const defaultForm = {
     name: "",
-    business_type: "restaurant" as "butchery" | "restaurant",
+    business_type: "restaurant" as "butchery" | "restaurant" | "clothing",
     phone: "",
     email: "",
     address: "",
@@ -141,6 +141,7 @@ export default function SaasPortalPage() {
     subscription_starts_at: new Date().toISOString().slice(0, 10),
     duration_days: 30 as string | number,
     plan: "monthly_30d" as "monthly_30d" | "lifetime",
+    subscription_amount: "" as string | number,
   };
   const [form, setForm] = useState(defaultForm);
 
@@ -152,6 +153,71 @@ export default function SaasPortalPage() {
       delete next[field];
       return next;
     });
+  };
+
+  // ── Edit Company Modal State ──
+  const [showEdit, setShowEdit] = useState<SaasCompany | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "", phone: "", email: "", address: "", tax_pin: "",
+    business_type: "butchery" as "butchery" | "restaurant" | "clothing",
+    subscription_amount: "" as string | number,
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  const openEdit = (c: SaasCompany) => {
+    setShowEdit(c);
+    setEditForm({
+      name: c.name ?? "",
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+      address: c.address ?? "",
+      tax_pin: c.tax_pin ?? "",
+      business_type: (c.business_type as any) ?? "butchery",
+      subscription_amount: c.subscription_amount ?? "",
+    });
+    setEditError("");
+    setOpenMenu(null);
+  };
+
+  const handleEditSave = async () => {
+    if (!showEdit) return;
+    if (!editForm.name.trim()) { setEditError("Organisation name is required."); return; }
+    setEditSaving(true);
+    setEditError("");
+    try {
+      await saasService.updateCompany(showEdit.id, {
+        name: editForm.name.trim(),
+        phone: editForm.phone.trim() || undefined,
+        email: editForm.email.trim() || undefined,
+        address: editForm.address.trim() || undefined,
+        tax_pin: (editForm.tax_pin as any)?.trim() || undefined,
+        business_type: editForm.business_type,
+        subscription_amount: editForm.subscription_amount !== "" ? Number(editForm.subscription_amount) : undefined,
+      });
+      setCompanies((prev) =>
+        prev.map((x) =>
+          x.id === showEdit.id
+            ? {
+                ...x,
+                name: editForm.name.trim(),
+                phone: editForm.phone.trim() || x.phone,
+                email: editForm.email.trim() || x.email,
+                address: editForm.address.trim() || x.address,
+                tax_pin: (editForm.tax_pin as any)?.trim() || x.tax_pin,
+                business_type: editForm.business_type,
+                subscription_amount: editForm.subscription_amount !== "" ? Number(editForm.subscription_amount) : x.subscription_amount,
+              }
+            : x
+        )
+      );
+      showToast(`"${editForm.name.trim()}" updated successfully!`);
+      setShowEdit(null);
+    } catch (err: any) {
+      setEditError(err?.response?.data?.message ?? err?.message ?? "Failed to save changes.");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // ── Extend / Reduce Modal State ──
@@ -215,13 +281,14 @@ export default function SaasPortalPage() {
       return;
     }
     const rect = e.currentTarget.getBoundingClientRect();
-    const dropdownHeight = 145;
-    const spaceBelow = window.innerHeight - rect.bottom;
+    const dropdownHeight = 270; // real height with all menu items
+    const margin = 10;
+    const spaceBelow = window.innerHeight - rect.bottom - margin;
     const openUp = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
     setOpenMenu({
       id: company.id,
-      top: openUp ? rect.top - dropdownHeight - 4 : rect.bottom + 6,
+      top: openUp ? Math.max(margin, rect.top - dropdownHeight - 4) : rect.bottom + 6,
       right: Math.max(12, window.innerWidth - rect.right),
       company,
     });
@@ -518,11 +585,11 @@ export default function SaasPortalPage() {
     }
     setFieldErrors({});
 
-    const typeLabel = form.business_type === "restaurant" ? "Restaurant & Hotel POS" : "Butchery POS";
+    const typeLabel = form.business_type === "restaurant" ? "Restaurant & Hotel POS" : form.business_type === "clothing" ? "Clothing & Apparel POS" : "Butchery POS";
     const confirmed = await confirm({
       title: `Create New ${typeLabel}?`,
       message: `Are you sure you want to create "${form.name.trim()}" (${typeLabel}) with plan "${form.plan === "lifetime" ? "Lifetime VIP" : "Monthly (30 Days)"}"?`,
-      confirmText: `Yes, Create ${form.business_type === "restaurant" ? "Restaurant" : "Butchery"}`,
+      confirmText: `Yes, Create ${form.business_type === "restaurant" ? "Restaurant" : form.business_type === "clothing" ? "Clothing Store" : "Butchery"}`,
       cancelText: "No, Review",
       type: "info",
     });
@@ -534,6 +601,7 @@ export default function SaasPortalPage() {
       const payload: CreateCompanyPayload = {
         name: form.name.trim(),
         business_type: form.business_type,
+        subscription_amount: form.subscription_amount ? Number(form.subscription_amount) : undefined,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
         address: form.address.trim() || undefined,
@@ -723,6 +791,8 @@ export default function SaasPortalPage() {
             style={{
               top: `${openMenu.top}px`,
               right: `${openMenu.right}px`,
+              maxHeight: `calc(100vh - ${openMenu.top + 10}px)`,
+              overflowY: "auto",
             }}
           >
             <div className="px-3 py-1.5 border-b border-zinc-100 mb-1">
@@ -732,6 +802,14 @@ export default function SaasPortalPage() {
             </div>
 
 
+
+            <button
+              onClick={() => openEdit(openMenu.company)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Edit Organisation</span>
+            </button>
 
             <button
               onClick={() => handleToggleBlock(openMenu.company)}
@@ -794,7 +872,7 @@ export default function SaasPortalPage() {
               className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Butchery</span>
+              <span>Delete Organisation</span>
             </button>
           </div>
         </>
@@ -949,6 +1027,21 @@ export default function SaasPortalPage() {
               {companies.filter((c) => (c.business_type || "butchery") === "butchery").length}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => { setTypeFilter("clothing"); setCurrentPage(1); }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              typeFilter === "clothing"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-white text-purple-800 hover:bg-purple-50 border border-purple-200"
+            }`}
+          >
+            <span>👗 Clothing &amp; Apparel</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${typeFilter === "clothing" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-800"}`}>
+              {companies.filter((c) => c.business_type === "clothing").length}
+            </span>
+          </button>
         </div>
 
         {/* Search & Filter Bar */}
@@ -1096,6 +1189,7 @@ export default function SaasPortalPage() {
                   <option value="all">All Types (All)</option>
                   <option value="restaurant">🍽️ Restaurant & Hotel</option>
                   <option value="butchery">🥩 Butchery</option>
+                  <option value="clothing">👗 Clothing &amp; Boutique</option>
                 </select>
               </div>
 
@@ -1256,6 +1350,7 @@ export default function SaasPortalPage() {
                       const loading = actionLoading[company.id];
                       const isEntering = enteringId === company.id;
                       const isRest = company.business_type === "restaurant";
+                      const isCloth = company.business_type === "clothing";
 
                       return (
                         <tr key={company.id} className="hover:bg-zinc-50/70 transition-colors">
@@ -1267,6 +1362,8 @@ export default function SaasPortalPage() {
                                     ? "bg-zinc-400"
                                     : isRest
                                     ? "bg-amber-600"
+                                    : isCloth
+                                    ? "bg-purple-600"
                                     : "bg-green-600"
                                 }`}
                               >
@@ -1278,6 +1375,10 @@ export default function SaasPortalPage() {
                                   {isRest ? (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
                                       🍽️ Restaurant
+                                    </span>
+                                  ) : isCloth ? (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-purple-50 text-purple-800 border border-purple-200/80 shrink-0">
+                                      👗 Clothing
                                     </span>
                                   ) : (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200/80 shrink-0">
@@ -1340,23 +1441,30 @@ export default function SaasPortalPage() {
                           </td>
 
                           <td className="py-3 px-3">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
-                                company.plan === "lifetime"
-                                  ? "bg-amber-50 text-amber-800 border border-amber-200"
-                                  : "bg-zinc-100 text-zinc-800 border border-zinc-200"
-                              }`}
-                            >
-                              {company.plan === "lifetime" ? (
-                                <>
-                                  <Crown className="w-3 h-3 text-amber-600" /> Lifetime
-                                </>
-                              ) : (
-                                <>
-                                  <Calendar className="w-3 h-3 text-zinc-600" /> Monthly
-                                </>
+                            <div className="flex flex-col gap-0.5">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold w-fit ${
+                                  company.plan === "lifetime"
+                                    ? "bg-amber-50 text-amber-800 border border-amber-200"
+                                    : "bg-zinc-100 text-zinc-800 border border-zinc-200"
+                                }`}
+                              >
+                                {company.plan === "lifetime" ? (
+                                  <>
+                                    <Crown className="w-3 h-3 text-amber-600" /> Lifetime
+                                  </>
+                                ) : (
+                                  <>
+                                    <Calendar className="w-3 h-3 text-zinc-600" /> Monthly
+                                  </>
+                                )}
+                              </span>
+                              {Number(company.subscription_amount || 0) > 0 && (
+                                <span className="text-[11px] font-black text-emerald-700">
+                                  KSh {Number(company.subscription_amount).toLocaleString()}
+                                </span>
                               )}
-                            </span>
+                            </div>
                           </td>
 
                           <td className="py-3 px-3">
@@ -1405,6 +1513,7 @@ export default function SaasPortalPage() {
                   const loading = actionLoading[company.id];
                   const isEntering = enteringId === company.id;
                   const isRest = company.business_type === "restaurant";
+                  const isCloth = company.business_type === "clothing";
 
                   return (
                     <div key={company.id} className="p-3.5 sm:p-4 space-y-3 bg-white">
@@ -1416,6 +1525,8 @@ export default function SaasPortalPage() {
                                 ? "bg-zinc-400"
                                 : isRest
                                 ? "bg-amber-600"
+                                : isCloth
+                                ? "bg-purple-600"
                                 : "bg-green-600"
                             }`}
                           >
@@ -1428,6 +1539,10 @@ export default function SaasPortalPage() {
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200">
                                   🍽️ Restaurant
                                 </span>
+                              ) : isCloth ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-purple-50 text-purple-800 border border-purple-200">
+                                  👗 Clothing
+                                </span>
                               ) : (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-800 border border-rose-200">
                                   🥩 Butchery
@@ -1439,6 +1554,11 @@ export default function SaasPortalPage() {
                               <span className="text-[10px] font-bold text-zinc-600">
                                 • {company.plan === "lifetime" ? "Lifetime VIP" : "Monthly"}
                               </span>
+                              {Number(company.subscription_amount || 0) > 0 && (
+                                <span className="text-[10px] font-black text-emerald-700">
+                                  • KSh {Number(company.subscription_amount).toLocaleString()}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1569,7 +1689,11 @@ export default function SaasPortalPage() {
                   <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-bold text-green-900">
-                      {successInfo.business_type === "restaurant" ? "🍽️ Restaurant & Hotel" : "🥩 Butchery"} Created Successfully!
+                      {successInfo.business_type === "restaurant"
+                        ? "🍽️ Restaurant & Hotel"
+                        : successInfo.business_type === "clothing"
+                        ? "👗 Clothing & Apparel Store"
+                        : "🥩 Butchery"} Created Successfully!
                     </p>
                     <p className="text-xs text-green-800 font-medium mt-0.5">
                       &quot;{successInfo.company}&quot; has been initialized and is ready for use.
@@ -1622,7 +1746,7 @@ export default function SaasPortalPage() {
                 {/* 1. Organisation Type Selector */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-800 mb-2">Organisation Type *</label>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <button
                       type="button"
                       onClick={() => updateFormField("business_type", "restaurant")}
@@ -1638,9 +1762,30 @@ export default function SaasPortalPage() {
                           <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
                         )}
                       </div>
-                      <p className="text-xs font-black">Restaurant & Hotel F&B</p>
+                      <p className="text-xs font-black">Restaurant &amp; Hotel</p>
                       <p className="text-[10px] text-zinc-500 font-medium leading-tight">
-                        Tables, dining, takeaway, kitchen tickets, grill &amp; meals POS
+                        Tables, dining, takeaway, kitchen tickets, food &amp; drinks POS
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateFormField("business_type", "clothing")}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col gap-1.5 ${
+                        form.business_type === "clothing"
+                          ? "border-purple-500 bg-purple-50/80 text-purple-950 ring-2 ring-purple-500/20 shadow-xs"
+                          : "border-zinc-200 hover:border-zinc-300 bg-white text-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl">👗</span>
+                        {form.business_type === "clothing" && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                        )}
+                      </div>
+                      <p className="text-xs font-black">Clothing &amp; Apparel</p>
+                      <p className="text-[10px] text-zinc-500 font-medium leading-tight">
+                        Retail fashion, shoes, boutique items, inventory &amp; till POS
                       </p>
                     </button>
 
@@ -1704,17 +1849,48 @@ export default function SaasPortalPage() {
                   </div>
                 </div>
 
+                {/* 3. Subscription Renewal Amount */}
+                <div>
+                  <label className="block text-xs font-bold text-zinc-800 mb-1.5">
+                    Subscription Renewal Amount (KSh)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={form.subscription_amount}
+                    onChange={(e) => updateFormField("subscription_amount", e.target.value)}
+                    placeholder="e.g. 3000 (amount for client to pay on renewal)"
+                    className={inputCls}
+                  />
+                  <p className="text-[10px] text-zinc-500 font-medium mt-1">
+                    Set the exact amount this client pays. It will be shown on their countdown reminder banner so they know how much to pay.
+                  </p>
+                </div>
+
                 <hr className="border-zinc-100" />
                 <p className="text-[11px] font-bold text-zinc-600 uppercase tracking-wider">
-                  {form.business_type === "restaurant" ? "🍽️ Restaurant / Hotel Details" : "🥩 Butchery Details"}
+                  {form.business_type === "restaurant"
+                    ? "🍽️ Restaurant / Hotel Details"
+                    : form.business_type === "clothing"
+                    ? "👗 Clothing / Boutique Details"
+                    : "🥩 Butchery Details"}
                 </p>
 
                 {[
                   {
-                    label: form.business_type === "restaurant" ? "Restaurant / Hotel Name *" : "Butchery Name *",
+                    label: form.business_type === "restaurant"
+                      ? "Restaurant / Hotel Name *"
+                      : form.business_type === "clothing"
+                      ? "Clothing Store / Boutique Name *"
+                      : "Butchery Name *",
                     field: "name" as const,
                     type: "text",
-                    placeholder: form.business_type === "restaurant" ? "e.g. The Grand Hotel & Restaurant" : "e.g. Prime Cuts Butchery",
+                    placeholder: form.business_type === "restaurant"
+                      ? "e.g. The Grand Hotel & Restaurant"
+                      : form.business_type === "clothing"
+                      ? "e.g. Nairobi Chic Boutique"
+                      : "e.g. Prime Cuts Butchery",
                   },
                   { label: "Phone", field: "phone" as const, type: "tel", placeholder: "0712345678" },
                   { label: "Email", field: "email" as const, type: "email", placeholder: "business@email.com" },
@@ -2086,6 +2262,163 @@ export default function SaasPortalPage() {
                     : "Enter days above"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Organisation Modal ── */}
+      {showEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-2xl border border-zinc-200 shadow-2xl overflow-hidden my-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 bg-white">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-zinc-900">Edit Organisation</h2>
+                  <p className="text-[11px] text-zinc-500 font-medium">{showEdit.name}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEdit(null)} className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-800 hover:bg-zinc-100 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {editError}
+                </div>
+              )}
+
+              {/* Business Type */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-2">Organisation Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["restaurant", "clothing", "butchery"] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setEditForm((p) => ({ ...p, business_type: type }))}
+                      className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 text-xs font-bold transition-all ${
+                        editForm.business_type === type
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                      }`}
+                    >
+                      <span className="text-lg">{type === "restaurant" ? "🍽️" : type === "clothing" ? "👗" : "🥩"}</span>
+                      <span>{type === "restaurant" ? "Restaurant" : type === "clothing" ? "Clothing" : "Butchery"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">Organisation Name *</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Fresh Cuts Butchery"
+                  className={inputCls}
+                />
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">Phone Number</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="e.g. 0712 345 678"
+                    className={`${inputCls} pl-9`}
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="e.g. info@freshcuts.co.ke"
+                    className={`${inputCls} pl-9`}
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">Physical Address</label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 w-3.5 h-3.5 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm((p) => ({ ...p, address: e.target.value }))}
+                    placeholder="e.g. Tom Mboya St, Nairobi"
+                    className={`${inputCls} pl-9`}
+                  />
+                </div>
+              </div>
+
+              {/* Tax PIN */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">KRA Tax PIN</label>
+                <input
+                  type="text"
+                  value={editForm.tax_pin}
+                  onChange={(e) => setEditForm((p) => ({ ...p, tax_pin: e.target.value }))}
+                  placeholder="e.g. A001234567K"
+                  className={inputCls}
+                />
+              </div>
+
+              {/* Subscription Amount */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-800 mb-1.5">Subscription Renewal Amount (KSh)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">KSh</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editForm.subscription_amount}
+                    onChange={(e) => setEditForm((p) => ({ ...p, subscription_amount: e.target.value }))}
+                    placeholder="e.g. 3500"
+                    className={`${inputCls} pl-11`}
+                  />
+                </div>
+                <p className="text-[11px] text-zinc-500 mt-1">Shown in renewal reminder so the client knows how much to pay.</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-5 pb-5 pt-2">
+              <button
+                onClick={() => setShowEdit(null)}
+                className="flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-zinc-700 bg-white border border-zinc-200 hover:bg-zinc-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editForm.name.trim()}
+                className="flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 active:scale-95"
+              >
+                {editSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Pencil className="w-4 h-4" /> Save Changes</>}
+              </button>
             </div>
           </div>
         </div>

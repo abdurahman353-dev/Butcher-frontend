@@ -35,6 +35,7 @@ import {
 export default function DashboardPage() {
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [chartPeriod, setChartPeriod] = useState<"today" | "week" | "month">("today");
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +75,7 @@ export default function DashboardPage() {
         : summary?.sales_chart.month || [];
 
   if (isLoading && !summary) {
-    return <PageSkeleton variant="dashboard" title={isRestaurant ? "Restaurant & Hotel Overview" : "Butcher Shop Overview"} />;
+    return <PageSkeleton variant="dashboard" title={isRestaurant ? "Restaurant & Hotel Overview" : isClothing ? "Clothing & Apparel Overview" : "Butcher Shop Overview"} />;
   }
 
   return (
@@ -83,9 +84,9 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-zinc-200 rounded-2xl p-6 shadow-xs">
         <div>
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{isRestaurant ? "🍽️" : "🥩"}</span>
+            <span className="text-2xl">{isRestaurant ? "🍽️" : isClothing ? "👗" : "🥩"}</span>
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 tracking-tight">
-              {isRestaurant ? "Restaurant & Hotel Overview" : "Butcher Shop Overview"}
+              {isRestaurant ? "Restaurant & Hotel Overview" : isClothing ? "Clothing & Apparel Overview" : "Butcher Shop Overview"}
             </h1>
             <button
               type="button"
@@ -100,6 +101,8 @@ export default function DashboardPage() {
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
             {isRestaurant
               ? "Real-time monitoring of dining and takeaway sales, food & drink profit margins, and orders."
+              : isClothing
+              ? "Real-time monitoring of daily sales, profit margins, stock levels, and retail transactions."
               : "Real-time monitoring of daily sales, profit margins, inventory levels, and counter transactions."}
           </p>
         </div>
@@ -109,7 +112,7 @@ export default function DashboardPage() {
           className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider shadow-xs flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0"
         >
           <ShoppingCart className="w-4 h-4" />
-          <span>{isRestaurant ? "Launch F&B Terminal" : "Launch POS Terminal"}</span>
+          <span>{isRestaurant ? "Launch F&B Terminal" : isClothing ? "Launch Retail POS" : "Launch POS Terminal"}</span>
         </Link>
       </div>
 
@@ -204,7 +207,7 @@ export default function DashboardPage() {
               {formatCurrency(summary?.today_profit)}
             </div>
             <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-              {isRestaurant ? "Revenue Less Item Cost" : "Revenue Less Meat Cost"}
+              {isRestaurant ? "Revenue Less Item Cost" : isClothing ? "Revenue Less Stock Cost" : "Revenue Less Meat Cost"}
             </p>
           </div>
         </div>
@@ -222,7 +225,7 @@ export default function DashboardPage() {
               {formatCurrency(summary?.current_stock_value)}
             </div>
             <p className="text-[11px] text-amber-700 font-semibold mt-0.5 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> {summary?.low_stock_count || 0} {isRestaurant ? "items low" : "cuts low"}
+              <AlertTriangle className="w-3 h-3" /> {summary?.low_stock_count || 0} {isRestaurant ? "items low" : isClothing ? "items low" : "cuts low"}
             </p>
           </div>
         </div>
@@ -307,7 +310,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{isRestaurant ? "Low Stock Items" : "Low Stock Cuts"}</h2>
+                <h2 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{isRestaurant || isClothing ? "Low Stock Items" : "Low Stock Cuts"}</h2>
               </div>
               <Link
                 href="/inventory"
@@ -318,14 +321,14 @@ export default function DashboardPage() {
               </Link>
             </div>
             <p className="text-xs text-zinc-500 mb-4">
-              {isRestaurant ? "Menu & kitchen items requiring immediate order or stock-in." : "Meat cuts requiring immediate supplier order or stock-in."}
+              {isRestaurant ? "Menu & kitchen items requiring immediate order or stock-in." : isClothing ? "Clothing items requiring immediate supplier order or restock." : "Meat cuts requiring immediate supplier order or stock-in."}
             </p>
 
             <div className="space-y-2.5">
               {!summary?.low_stock_products || summary.low_stock_products.length === 0 ? (
                 <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-center text-xs text-zinc-500">
                   <CheckCircle2 className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                  {isRestaurant ? "All menu inventory levels are healthy!" : "All meat inventory levels are healthy!"}
+                  {isRestaurant || isClothing ? "All inventory levels are healthy!" : "All meat inventory levels are healthy!"}
                 </div>
               ) : (
                 summary.low_stock_products.slice(0, 5).map((p) => (

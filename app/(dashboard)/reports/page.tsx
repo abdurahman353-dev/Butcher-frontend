@@ -49,6 +49,7 @@ type MetricView = "revenue" | "weight" | "profit";
 export default function ReportsPage() {
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const { settings: shopSettings } = useShopSettings();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -341,14 +342,14 @@ export default function ReportsPage() {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${shopSettings.shop_name} Report</title>
 <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',Arial,sans-serif;font-size:11px;color:#1a1a1a}@media print{.no-print{display:none!important}}</style></head><body>
 <div style="background:linear-gradient(135deg,#14532d,#15803d);color:#fff;padding:28px 32px 24px;display:flex;justify-content:space-between;align-items:flex-start">
-  <div><div style="font-size:22px;font-weight:900">${isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isRestaurant ? "Restaurant & Dining F&B" : "Premium Meat Shop")}</div></div>
+  <div><div style="font-size:22px;font-weight:900">${isClothing ? "👗" : isRestaurant ? "🍽️" : "🥩"} ${shopSettings.shop_name.toUpperCase()}</div><div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px">${shopSettings.address || (isClothing ? "Fashion & Apparel Boutique" : isRestaurant ? "Restaurant & Dining F&B" : "Premium Meat Shop")}</div></div>
   <div style="text-align:right"><div style="font-size:14px;font-weight:800">EXECUTIVE PERFORMANCE REPORT</div><div style="font-size:10px;color:rgba(255,255,255,0.75);margin-top:4px">Generated: ${dateStr} at ${timeStr}</div><div style="display:inline-block;margin-top:8px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase">Range: ${rangeLabel}</div></div>
 </div>
 <div style="display:flex;background:#f8fafb;border-bottom:2px solid #e5e7eb">
   <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Revenue</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(totalRevenue)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${analytics.transactions} orders</div></div>
   <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Gross Profit</div><div style="font-size:16px;font-weight:900;color:#15803d;margin-top:3px">${fK(analytics.gross_profit||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">Margin: ${analytics.gross_margin||0}%</div></div>
   <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Net Profit</div><div style="font-size:16px;font-weight:900;color:#1d4ed8;margin-top:3px">${fK(analytics.net_profit||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">After wastage</div></div>
-  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">${isRestaurant ? "Volume Sold" : "Volume Sold"}</div><div style="font-size:16px;font-weight:900;color:#b45309;margin-top:3px">${isRestaurant ? `${Number(analytics.total_weight || 0).toFixed(2)} items` : fW(analytics.total_weight||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">AOV: ${fK(analytics.average_order_value||0)}</div></div>
+  <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">${isClothing ? "Units Sold" : isRestaurant ? "Volume Sold" : "Volume Sold"}</div><div style="font-size:16px;font-weight:900;color:#b45309;margin-top:3px">${isClothing ? `${Number(analytics.total_weight || 0).toLocaleString()} pcs` : isRestaurant ? `${Number(analytics.total_weight || 0).toFixed(2)} items` : fW(analytics.total_weight||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">AOV: ${fK(analytics.average_order_value||0)}</div></div>
   <div style="flex:1;padding:14px 18px;border-right:1px solid #e5e7eb"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Wastage Loss</div><div style="font-size:16px;font-weight:900;color:#be123c;margin-top:3px">${fK(analytics.wastage_cost||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">${fW(analytics.wastage_weight||0)} lost</div></div>
   <div style="flex:1;padding:14px 18px"><div style="font-size:8.5px;font-weight:700;text-transform:uppercase;color:#6b7280">Discounts</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:3px">${fK(analytics.total_discount||0)}</div><div style="font-size:9px;color:#9ca3af;margin-top:2px">Concessions</div></div>
 </div>
@@ -359,8 +360,8 @@ ${sec("Payment Method Breakdown","Tender collection channels")}
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #15803d;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">📱 M-Pesa Mobile</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(mpesaAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${mpesaCount} transactions · ${mpesaPercent}% share</div></div>
   <div style="border:1.5px solid #e5e7eb;border-left:3px solid #1d4ed8;border-radius:8px;padding:12px 14px;background:#f9fafb"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280">💳 Card Payment</div><div style="font-size:16px;font-weight:900;color:#111827;margin-top:4px">${fK(cardAmount)}</div><div style="font-size:9px;color:#9ca3af;margin-top:3px">${cardCount} transactions · ${cardPercent}% share</div></div>
 </div>
-${(analytics.itemized_categories||[]).length>0?`${sec(isRestaurant ? "Sales by Category" : "Sales by Meat Category", isRestaurant ? "All items grouped by category" : "All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Discount</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.total_discount||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">${isRestaurant ? "Total Volume / Items" : "Total Weight"}</div><div style="font-size:18px;font-weight:900;margin-top:2px">${isRestaurant ? `${Number(analytics.total_weight || 0).toFixed(2)} items` : fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Reinvest (Cost)</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK((analytics.itemized_categories||[]).reduce((s,c)=>s+(c.subtotal_cost||0),0))}</div></div></div>`:""}
-${(analytics.top_products||[]).length>0?`${sec(isRestaurant ? "Top Selling Items & Margins" : "Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>${isRestaurant ? "Menu Item" : "Meat Cut"}</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
+${(analytics.itemized_categories||[]).length>0?`${sec(isClothing ? "Sales by Category" : isRestaurant ? "Sales by Category" : "Sales by Meat Category", isClothing ? "All products grouped by category" : isRestaurant ? "All items grouped by category" : "All cuts grouped by category")}${itemizedHTML}<div style="background:#14532d;color:#fff;padding:14px 20px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Revenue</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(totalRevenue)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Total Discount</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.total_discount||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">${isClothing ? "Total Items Sold" : isRestaurant ? "Total Volume / Items" : "Total Weight"}</div><div style="font-size:18px;font-weight:900;margin-top:2px">${isClothing ? `${Number(analytics.total_weight || 0).toLocaleString()} pcs` : isRestaurant ? `${Number(analytics.total_weight || 0).toFixed(2)} items` : fW(analytics.total_weight||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Gross Profit</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK(analytics.gross_profit||0)}</div></div><div style="width:1px;height:36px;background:rgba(255,255,255,0.2)"></div><div><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.7)">Reinvest (Cost)</div><div style="font-size:18px;font-weight:900;margin-top:2px">${fK((analytics.itemized_categories||[]).reduce((s,c)=>s+(c.subtotal_cost||0),0))}</div></div></div>`:""}
+${(analytics.top_products||[]).length>0?`${sec(isClothing ? "Top Selling Apparel & Margins" : isRestaurant ? "Top Selling Items & Margins" : "Top Selling Cuts & Margins","Ranked by revenue")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${thc}>#</th><th ${th}>${isClothing ? "Apparel Product" : isRestaurant ? "Menu Item" : "Meat Cut"}</th><th ${th}>Category</th><th ${thr}>Volume</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Margin</th></tr></thead><tbody>${topHTML}</tbody></table>`:""}
 ${(analytics.category_breakdown||[]).length>0?`${sec("Category Performance","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Category</th><th ${thr}>Weight</th><th ${thr}>Revenue</th><th ${thr}>Profit</th><th ${thc}>Share</th></tr></thead><tbody>${catHTML}</tbody></table>`:""}
 ${(analytics.cashier_breakdown||[]).length>0?`${sec("Staff / Cashier Audit","")}<table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Staff</th><th ${thr}>Transactions</th><th ${thr}>Revenue</th><th ${thr}>Weight</th><th ${thr}>AOV</th></tr></thead><tbody>${cashierHTML}</tbody></table>`:""}
 ${(analytics.wastage_breakdown||[]).length>0?`<div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:8px;padding:12px 16px;margin-top:16px"><div style="font-size:10px;font-weight:800;text-transform:uppercase;color:#be123c;margin-bottom:8px;display:flex;justify-content:space-between"><span>⚠️ Wastage & Loss Audit</span><span>Total: ${fK(analytics.wastage_cost||0)} · ${fW(analytics.wastage_weight||0)}</span></div><table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr><th ${th}>Reason</th><th ${thr}>Incidents</th><th ${thr}>Weight</th><th ${thr}>Cost Loss</th></tr></thead><tbody>${wastageHTML}</tbody></table></div>`:""}
@@ -636,10 +637,10 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
               </select>
             </div>
 
-            {/* Meat Category */}
+            {/* Category Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider flex items-center gap-1">
-                <Layers className="w-3 h-3 text-zinc-400" /> Meat Category
+                <Layers className="w-3 h-3 text-zinc-400" /> {isClothing ? "Category" : isRestaurant ? "Menu Category" : "Meat Category"}
               </label>
               <select
                 value={categoryId}
@@ -795,11 +796,11 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
           </div>
         </div>
 
-        {/* CARD 4: Total Volume Sold (KG) */}
+        {/* CARD 4: Total Volume Sold (KG/Units) */}
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs flex flex-col justify-between hover:border-zinc-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-              {isRestaurant ? "Total Items Sold" : "Total Meat Volume Sold"}
+              {isClothing ? "Total Items Sold" : isRestaurant ? "Total Items Sold" : "Total Meat Volume Sold"}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
               <Scale className="w-4 h-4" />
@@ -807,16 +808,20 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
           </div>
           <div className="mt-3">
             <div className="text-xl sm:text-2xl md:text-3xl font-black text-amber-700 tabular-nums tracking-tight">
-              {isRestaurant
+              {isClothing
+                ? `${Number(analytics?.total_weight || 0).toLocaleString()} pcs`
+                : isRestaurant
                 ? `${(analytics?.total_weight || 0).toFixed(2)} items`
                 : formatWeight(analytics?.total_weight || 0)}
             </div>
             <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 pt-2 border-t border-zinc-100">
-              <span>{isRestaurant ? "Across all categories" : "Across all cuts"}</span>
+              <span>{isClothing ? "Across all products" : isRestaurant ? "Across all categories" : "Across all cuts"}</span>
               <span className="font-semibold text-zinc-700">
                 Avg:{" "}
                 {analytics?.transactions
-                  ? isRestaurant
+                  ? isClothing
+                    ? `${((analytics.total_weight || 0) / analytics.transactions).toFixed(1)} pcs`
+                    : isRestaurant
                     ? `${((analytics.total_weight || 0) / analytics.transactions).toFixed(2)} items`
                     : formatWeight((analytics.total_weight || 0) / analytics.transactions)
                   : "0"}{" "}
@@ -1077,7 +1082,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
                 {chartMetric === "revenue"
                   ? "Revenue Trend Over Time"
                   : chartMetric === "weight"
-                  ? "Meat Volume Sold (KG) Over Time"
+                  ? (isClothing ? "Apparel Units Sold Over Time" : isRestaurant ? "Items Sold Over Time" : "Meat Volume Sold (KG) Over Time")
                   : "Gross Profit Trend"}
               </h2>
               <p className="text-xs text-zinc-500">Timeline dynamics for active filtered timeframe</p>
@@ -1105,7 +1110,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
                     : "text-zinc-600 hover:text-zinc-900"
                 }`}
               >
-                Weight
+                {isClothing ? "Quantity" : isRestaurant ? "Items" : "Weight"}
               </button>
               <button
                 type="button"
@@ -1329,19 +1334,19 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
         </div>
       </div>
 
-      {/* ── TOP PERFORMING MEAT CUTS TABLE ── */}
+      {/* ── TOP PERFORMING PRODUCTS TABLE ── */}
       <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs">
         <div className="p-4 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold text-zinc-900">
-              {isRestaurant ? "Top Selling Dishes & Menu Items & Profit Margins" : "Top Selling Meat Cuts & Profit Margins"}
+              {isClothing ? "Top Selling Apparel Products & Margins" : isRestaurant ? "Top Selling Dishes & Menu Items & Profit Margins" : "Top Selling Meat Cuts & Profit Margins"}
             </h2>
             <p className="text-xs text-zinc-500">
               Ranked by revenue contribution, volume sold, and profit margin
             </p>
           </div>
           <span className="text-xs font-semibold text-zinc-500">
-            {topProducts.length} {isRestaurant ? "Items Recorded" : "Cuts Recorded"}
+            {topProducts.length} {isClothing ? "Products Recorded" : isRestaurant ? "Items Recorded" : "Cuts Recorded"}
           </span>
         </div>
 
@@ -1351,7 +1356,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                 <th className="py-3.5 pl-4"># Rank</th>
-                <th className="py-3.5 px-3">{isRestaurant ? "Item / Dish Name" : "Meat Cut Name"}</th>
+                <th className="py-3.5 px-3">{isClothing ? "Product / Item Name" : isRestaurant ? "Item / Dish Name" : "Meat Cut Name"}</th>
                 <th className="py-3.5 px-3">Category</th>
                 <th className="py-3.5 px-3 text-right">Volume Sold</th>
                 <th className="py-3.5 px-3 text-right">Total Revenue</th>
@@ -1439,8 +1444,8 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
         <div className="p-4 sm:p-5 rounded-2xl bg-white border border-zinc-200 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-zinc-900">Meat Category Performance</h2>
-              <p className="text-xs text-zinc-500 mt-0.5">Revenue and weight distribution</p>
+              <h2 className="text-sm font-bold text-zinc-900">{isClothing ? "Apparel Category Performance" : isRestaurant ? "Menu Category Performance" : "Meat Category Performance"}</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">Revenue and volume distribution</p>
             </div>
             <span className="text-xs font-semibold text-zinc-500">
               {categories.length} Categories

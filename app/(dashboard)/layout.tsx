@@ -18,10 +18,12 @@ function ExpiryBanner({
   remainingSeconds,
   companyName,
   subscriptionEndsAt,
+  subscriptionAmount,
 }: {
   remainingSeconds: number;
   companyName: string;
   subscriptionEndsAt?: string | null;
+  subscriptionAmount?: number;
 }) {
   const getInitialSecs = () => {
     if (subscriptionEndsAt) {
@@ -63,10 +65,13 @@ function ExpiryBanner({
   const s = secs % 60;
   const isExpired = secs <= 0;
 
+  const amountLine = Number(subscriptionAmount || 0) > 0 ? `• Renewal Amount: KSh ${Number(subscriptionAmount).toLocaleString()}\n` : "";
+
   // Pre-filled WhatsApp message
   const waMessage = encodeURIComponent(
-    `Hello Abdulrahman, I have sent payment via M-Pesa to ${MPESA_NUMBER} for butchery subscription renewal.\n\n` +
+    `Hello Abdulrahman, I have sent payment via M-Pesa to ${MPESA_NUMBER} for subscription renewal.\n\n` +
     `• Business: ${companyName}\n` +
+    amountLine +
     `• Recipient: ABDULRAHMAN RAMADHAN\n\n` +
     `Please confirm receipt and renew access. Thank you!`
   );
@@ -106,6 +111,12 @@ function ExpiryBanner({
                 </span>
               )}
 
+              {Number(subscriptionAmount || 0) > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-black bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                  Pay: KSh {Number(subscriptionAmount).toLocaleString()}
+                </span>
+              )}
+
               {isExpired && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-rose-200 text-rose-900 border border-rose-300">
                   Suspended
@@ -114,7 +125,7 @@ function ExpiryBanner({
             </div>
 
             <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-zinc-600 mt-0.5 flex-wrap">
-              <span>Pay via M-Pesa to</span>
+              <span>Pay {Number(subscriptionAmount || 0) > 0 ? <strong className="text-zinc-900 font-bold">KSh {Number(subscriptionAmount).toLocaleString()}</strong> : "subscription"} via M-Pesa to</span>
               <button
                 type="button"
                 onClick={handleCopyNumber}
@@ -359,8 +370,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {showExpiryBanner && (
           <ExpiryBanner
             remainingSeconds={Math.max(0, currentRemainingSecs)}
-            companyName={company?.name ?? "Your Butchery"}
+            companyName={company?.name ?? "Your Store"}
             subscriptionEndsAt={company?.subscription_ends_at}
+            subscriptionAmount={company?.subscription_amount}
           />
         )}
 

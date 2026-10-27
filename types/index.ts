@@ -14,7 +14,8 @@ export interface Company {
   address?: string;
   tax_pin?: string;
   status: "active" | "suspended";
-  business_type?: "butchery" | "restaurant";
+  business_type?: "butchery" | "restaurant" | "clothing";
+  subscription_amount?: number;
   is_blocked_manually?: boolean;
   subscription_starts_at?: string;
   subscription_ends_at?: string;
@@ -69,6 +70,7 @@ export interface SaasSummary {
   suspended: number;
   butcheries?: number;
   restaurants?: number;
+  clothing?: number;
 }
 export interface Category {
   id: number;

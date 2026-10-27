@@ -13,6 +13,7 @@ interface ProductGridProps {
   onSelectProduct: (product: Product) => void;
   isLoading?: boolean;
   isRestaurant?: boolean;
+  isClothing?: boolean;
   canDrag?: boolean;
   onUpdateProduct?: (productId: number, patch: Partial<Product>) => void;
 }
@@ -23,6 +24,7 @@ export function ProductGrid({
   onSelectProduct,
   isLoading = false,
   isRestaurant = false,
+  isClothing = false,
   canDrag = false,
   onUpdateProduct,
 }: ProductGridProps) {
@@ -175,7 +177,7 @@ export function ProductGrid({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isRestaurant ? "Search item, dish, or SKU..." : "Search cut, meat name, or SKU..."}
+            placeholder={isRestaurant ? "Search item, dish, or SKU..." : isClothing ? "Search product, item name, or SKU..." : "Search cut, meat name, or SKU..."}
             className="w-full bg-zinc-50 border-2 border-emerald-500 rounded-lg pl-9 pr-8 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-600 transition-colors"
           />
           {searchQuery && (
@@ -196,6 +198,7 @@ export function ProductGrid({
           productCounts={categoryCounts.counts}
           totalCount={categoryCounts.total}
           isRestaurant={isRestaurant}
+          isClothing={isClothing}
           canDrag={canDrag}
           onDropItemOnCategory={canDrag ? handleDropItemOnCategory : undefined}
         />
@@ -218,7 +221,7 @@ export function ProductGrid({
           </div>
         ) : filteredProducts.length === 0 ? (
           <EmptyState
-            title={isRestaurant ? "No menu items found" : "No cuts found"}
+            title={isRestaurant ? "No menu items found" : isClothing ? "No products found" : "No cuts found"}
             description={
               searchQuery
                 ? `No ${isRestaurant ? "items" : "products"} matching "${searchQuery}". Try a different term or clear the search.`

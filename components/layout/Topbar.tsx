@@ -74,8 +74,13 @@ export function Topbar({
   };
 
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   let title = pageTitles[pathname] ?? settings.shop_name;
-  if (isRestaurant) {
+  if (isClothing) {
+    if (pathname === "/pos") title = "Clothing & Boutique POS";
+    if (pathname === "/products") title = "Clothing & Apparel Catalog";
+    if (pathname === "/inventory") title = "Apparel Stock Inventory";
+  } else if (isRestaurant) {
     if (pathname === "/pos") title = "Hotel & Restaurant POS";
     if (pathname === "/products") title = "Menu Items & Catalog";
   }

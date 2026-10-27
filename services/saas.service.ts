@@ -6,7 +6,9 @@ export interface CreateCompanyPayload {
   phone?: string;
   email?: string;
   address?: string;
-  business_type?: "butchery" | "restaurant";
+  tax_pin?: string;
+  business_type?: "butchery" | "restaurant" | "clothing";
+  subscription_amount?: number;
   admin_name: string;
   admin_email: string;
   admin_password: string;
