@@ -204,36 +204,35 @@ export function TableBillsModal({
   const handleTransferBill = async (bill: RestaurantBill, targetTable: RestaurantTable) => {
     if (isTransferring) return;
 
-    // Optimistic: remove bill instantly so UI feels immediate
+    // 0ms Instant Optimistic Close & Update
+    const prevList = [...billsList];
     setBillsList((prev) => prev.filter((b) => b.id !== bill.id));
-    setTransferFeedback({ type: "success", text: `Moving ${bill.bill_number} to ${targetTable.name}...` });
+    if (table && table.active_bills) {
+      table.active_bills = table.active_bills.filter((b) => b.id !== bill.id);
+    }
+    allTables.forEach((t) => {
+      if (t.id === table?.id && t.active_bills) {
+        t.active_bills = t.active_bills.filter((b) => b.id !== bill.id);
+      }
+    });
+    setTransferringBill(null);
+    setTransferFeedback(null);
+    setTransferTableSearch("");
     setIsTransferring(true);
+
+    if (onBillUpdated) {
+      onBillUpdated({ ...bill, table_id: targetTable.id } as RestaurantBill);
+    }
 
     try {
       const res = await restaurantService.transferBill(bill.id, targetTable.id);
-      const updatedBill = res.data;
-
-      if (onBillUpdated) {
-        onBillUpdated({ ...updatedBill, table_id: targetTable.id } as RestaurantBill);
+      if (onBillUpdated && res.data) {
+        onBillUpdated({ ...res.data, table_id: targetTable.id } as RestaurantBill);
       }
-
-      setTransferFeedback({
-        type: "success",
-        text: `Bill ${bill.bill_number} moved to ${targetTable.name}`,
-      });
-
-      setTimeout(() => {
-        setTransferringBill(null);
-        setTransferFeedback(null);
-        setTransferTableSearch("");
-      }, 900);
     } catch (err: any) {
       // Rollback on failure
-      setBillsList((prev) => [bill, ...prev.filter((b) => b.id !== bill.id)]);
-      setTransferFeedback({
-        type: "error",
-        text: err?.response?.data?.message || err?.message || "Transfer failed. Bill restored.",
-      });
+      setBillsList(prevList);
+      alert(err?.response?.data?.message || err?.message || "Transfer failed. Bill restored.");
     } finally {
       setIsTransferring(false);
     }
@@ -249,36 +248,89 @@ export function TableBillsModal({
 
   const handleMergeBill = async (sourceBill: RestaurantBill, targetBill: RestaurantBill) => {
     if (isMerging) return;
-    // Optimistic: remove source bill instantly
+
+    // 0ms Instant Optimistic UI: Close modal immediately so cashier perceives ZERO delay
+    const prevList = [...billsList];
+    setMergingBill(null);
+    setSelectedMergeTableId(null);
+    setSelectedMergeBillId(null);
+    setMergeFeedback(null);
+    setMergeTableSearch("");
+
+    // 1. Instantly purge source bill in-place from table.active_bills and allTables so no re-render can resurrect it
+    if (table && table.active_bills) {
+      table.active_bills = table.active_bills.filter((b) => b.id !== sourceBill.id);
+    }
+    allTables.forEach((t) => {
+      if (t.active_bills) {
+        t.active_bills = t.active_bills.filter((b) => b.id !== sourceBill.id);
+      }
+    });
+
+    // 2. Optimistically remove source bill from internal billsList state
     setBillsList((prev) => prev.filter((b) => b.id !== sourceBill.id));
-    setMergeFeedback({ type: "success", text: `Merging into ${targetBill.bill_number}...` });
+
+    // 3. Notify parent immediately that source bill is cancelled so parent purges it everywhere
+    if (onBillUpdated) {
+      onBillUpdated({ ...sourceBill, status: "cancelled", items: [], total: 0 });
+    }
+
+    // 4. If target bill is on the same table, optimistically merge items and recalculate totals
+    if (targetBill.table_id === table?.id) {
+      const combinedItems = [...(targetBill.items || []), ...(sourceBill.items || [])];
+      const combinedSubtotal = Math.round(((targetBill.subtotal || 0) + (sourceBill.subtotal || 0)) * 100) / 100;
+      const combinedDiscount = Math.round(((targetBill.discount || 0) + (sourceBill.discount || 0)) * 100) / 100;
+      const combinedTotal = Math.round(Math.max(0, combinedSubtotal - combinedDiscount) * 100) / 100;
+
+      const optimisticTarget: RestaurantBill = {
+        ...targetBill,
+        items: combinedItems,
+        subtotal: combinedSubtotal,
+        discount: combinedDiscount,
+        total: combinedTotal,
+        status: "open",
+      };
+
+      setBillsList((prev) =>
+        prev.map((b) => (b.id === targetBill.id ? optimisticTarget : b))
+      );
+
+      if (table && table.active_bills) {
+        table.active_bills = table.active_bills.map((b) =>
+          b.id === targetBill.id ? optimisticTarget : b
+        );
+      }
+
+      if (onBillUpdated) {
+        onBillUpdated(optimisticTarget);
+      }
+    }
+
     setIsMerging(true);
     try {
       const res = await restaurantService.mergeBill(sourceBill.id, targetBill.id);
-      // If target is on same table, update it in the list
+      // Synchronize with exact server bill
+      if (onBillUpdated) {
+        onBillUpdated(res.source_bill);
+        onBillUpdated(res.target_bill);
+      }
       if (res.target_bill.table_id === table?.id) {
         setBillsList((prev) =>
           prev.map((b) => (b.id === res.target_bill.id ? res.target_bill : b))
         );
+        if (table && table.active_bills) {
+          table.active_bills = table.active_bills.map((b) =>
+            b.id === res.target_bill.id ? res.target_bill : b
+          );
+        }
       }
-      if (onBillUpdated) {
-        onBillUpdated(res.target_bill);
-      }
-      setMergeFeedback({ type: "success", text: `Merged into ${targetBill.bill_number}` });
-      setTimeout(() => {
-        setMergingBill(null);
-        setSelectedMergeTableId(null);
-        setSelectedMergeBillId(null);
-        setMergeFeedback(null);
-        setMergeTableSearch("");
-      }, 900);
     } catch (err: any) {
-      // Rollback
-      setBillsList((prev) => [sourceBill, ...prev.filter((b) => b.id !== sourceBill.id)]);
-      setMergeFeedback({
-        type: "error",
-        text: err?.response?.data?.message || err?.message || "Merge failed. Bill restored.",
-      });
+      // Rollback on failure
+      setBillsList(prevList);
+      if (table && table.active_bills) {
+        table.active_bills = [...table.active_bills, sourceBill];
+      }
+      alert(err?.response?.data?.message || err?.message || "Merge failed. Bill restored.");
     } finally {
       setIsMerging(false);
     }
@@ -332,7 +384,11 @@ export function TableBillsModal({
   }, [isOpen, table?.id]);
 
   useEffect(() => {
-    setBillsList((table?.active_bills || []).filter((b) => b.table_id === table?.id));
+    setBillsList(
+      (table?.active_bills || []).filter(
+        (b) => b.table_id === table?.id && b.status !== "cancelled" && b.status !== "settled"
+      )
+    );
   }, [table?.active_bills, table?.id]);
 
   // Only show real bills (id > 0) that belong to this table and are open/printed.

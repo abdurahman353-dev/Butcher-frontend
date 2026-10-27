@@ -662,24 +662,66 @@ export default function PosPage() {
 
   // Restaurant: Update active bill when customer or bill details change
   const handleBillUpdated = (updatedBill: RestaurantBill) => {
-    setRestaurantTables((prev) =>
-      prev.map((t) =>
-        t.id === updatedBill.table_id
+    // If the bill was cancelled or settled, remove it from active_bills everywhere immediately!
+    if (updatedBill.status === "cancelled" || updatedBill.status === "settled") {
+      setRestaurantTables((prev) =>
+        prev.map((t) => ({
+          ...t,
+          active_bills: (t.active_bills || []).filter((b) => b.id !== updatedBill.id),
+        }))
+      );
+      setSelectedTableForModal((prev) =>
+        prev
           ? {
-              ...t,
-              active_bills: (t.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b)),
+              ...prev,
+              active_bills: (prev.active_bills || []).filter((b) => b.id !== updatedBill.id),
             }
-          : t
-      )
+          : prev
+      );
+      if (selectedTableForModalRef.current) {
+        selectedTableForModalRef.current = {
+          ...selectedTableForModalRef.current,
+          active_bills: (selectedTableForModalRef.current.active_bills || []).filter(
+            (b) => b.id !== updatedBill.id
+          ),
+        };
+      }
+      return;
+    }
+
+    setRestaurantTables((prev) =>
+      prev.map((t) => {
+        if (t.id === updatedBill.table_id) {
+          const exists = (t.active_bills || []).some((b) => b.id === updatedBill.id);
+          const bills = exists
+            ? (t.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b))
+            : [...(t.active_bills || []), updatedBill];
+          return { ...t, active_bills: bills };
+        } else {
+          // If bill was transferred from another table, remove it from that table
+          return {
+            ...t,
+            active_bills: (t.active_bills || []).filter((b) => b.id !== updatedBill.id),
+          };
+        }
+      })
     );
-    setSelectedTableForModal((prev) =>
-      prev && prev.id === updatedBill.table_id
-        ? {
-            ...prev,
-            active_bills: (prev.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b)),
-          }
-        : prev
-    );
+    setSelectedTableForModal((prev) => {
+      if (!prev) return prev;
+      if (prev.id === updatedBill.table_id) {
+        const exists = (prev.active_bills || []).some((b) => b.id === updatedBill.id);
+        const bills = exists
+          ? (prev.active_bills || []).map((b) => (b.id === updatedBill.id ? updatedBill : b))
+          : [...(prev.active_bills || []), updatedBill];
+        return { ...prev, active_bills: bills };
+      } else {
+        // If it was moved away or doesn't belong to this modal table, remove it
+        return {
+          ...prev,
+          active_bills: (prev.active_bills || []).filter((b) => b.id !== updatedBill.id),
+        };
+      }
+    });
     if (activeBill && activeBill.id === updatedBill.id) {
       setActiveBill(updatedBill);
       if (updatedBill.customer_name) {
