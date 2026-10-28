@@ -44,6 +44,8 @@ interface CartPaneProps {
   onAdjustWeight: (id: string, deltaKg: number) => void;
   onOpenWeightEdit: (item: CartItem) => void;
   onUpdateDiscount: (id: string, discount: number) => void;
+  onUpdateItemNote?: (id: string, note: string) => void;
+  presetNotes?: import("@/services/presetNotes.service").PresetNote[];
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onProceedCheckout: (preferredMethod?: "cash" | "mpesa" | "credit") => void;
@@ -80,6 +82,8 @@ export function CartPane({
   onAdjustWeight,
   onOpenWeightEdit,
   onUpdateDiscount,
+  onUpdateItemNote,
+  presetNotes = [],
   onRemoveItem,
   onClearCart,
   onProceedCheckout,
@@ -519,6 +523,8 @@ export function CartPane({
               onAdjustWeight={onAdjustWeight}
               onOpenWeightEdit={onOpenWeightEdit}
               onUpdateDiscount={onUpdateDiscount}
+              onUpdateNote={onUpdateItemNote}
+              presetNotes={presetNotes}
               onRemove={onRemoveItem}
               readOnly={isSavingOrder || Boolean(item.is_saved)}
               canDiscount={!isWaiter}

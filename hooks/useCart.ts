@@ -135,6 +135,14 @@ export function useCart() {
     );
   }, []);
 
+  const updateItemNote = useCallback((cartItemId: string, note: string) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === cartItemId ? { ...item, notes: note.trim() } : item
+      )
+    );
+  }, []);
+
   const removeItem = useCallback((cartItemId: string) => {
     setItems((prev) => prev.filter((it) => it.id !== cartItemId));
   }, []);
@@ -178,6 +186,7 @@ export function useCart() {
     updateWeight,
     adjustWeightBy,
     updateDiscount,
+    updateItemNote,
     removeItem,
     clearCart,
     restoreItems,
