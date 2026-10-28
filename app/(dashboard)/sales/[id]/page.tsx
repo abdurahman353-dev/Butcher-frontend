@@ -938,6 +938,7 @@ export default function SaleDetailPage() {
           setAutoPrintReceipt(false);
         }}
         autoPrint={autoPrintReceipt}
+        isReprint={true}
       />
 
       {/* Settle Payment Modal */}

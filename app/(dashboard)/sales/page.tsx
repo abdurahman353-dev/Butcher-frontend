@@ -1874,6 +1874,7 @@ function SalesLedger() {
           setAutoPrintReceipt(false);
         }}
         autoPrint={autoPrintReceipt}
+        isReprint={true}
       />
 
       {/* Settle Payment Modal */}

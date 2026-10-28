@@ -17,6 +17,7 @@ interface CustomerPreBillModalProps {
   isOpen: boolean;
   onClose: () => void;
   autoPrint?: boolean;
+  isReprint?: boolean;
 }
 
 export function CustomerPreBillModal({
@@ -24,12 +25,15 @@ export function CustomerPreBillModal({
   isOpen,
   onClose,
   autoPrint = true,
+  isReprint = false,
 }: CustomerPreBillModalProps) {
   const { settings } = useShopSettings();
   const { alert } = useSystemDialog();
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
+  const [hasPrinted, setHasPrinted] = useState(false);
   const autoPrintAttemptedRef = useRef(false);
+  const hasPrintedRef = useRef(false);
 
   const inFlightRef = useRef(false);
 
@@ -37,18 +41,28 @@ export function CustomerPreBillModal({
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
       inFlightRef.current = false;
+      hasPrintedRef.current = false;
+      setHasPrinted(false);
     }
   }, [isOpen]);
 
   if (!isOpen || !bill) return null;
 
+  const isReprintBill =
+    isReprint ||
+    bill.status === "printed" ||
+    Boolean(bill.bill_printed_at) ||
+    hasPrintedRef.current;
+
   const handlePrint = async (arg?: boolean | React.MouseEvent) => {
     if (!bill || inFlightRef.current) return;
-    const isReprint = typeof arg === "boolean" ? arg : false;
+    const isReprintNow = typeof arg === "boolean" ? arg : isReprintBill;
     inFlightRef.current = true;
     setIsPrinting(true);
     try {
-      const clientRef = isReprint ? `prebill-${bill.bill_number}-reprint-${Date.now()}` : `prebill-${bill.bill_number}`;
+      const clientRef = isReprintNow
+        ? `prebill-${bill.bill_number}-reprint-${Date.now()}`
+        : `prebill-${bill.bill_number}-${Date.now()}`;
       const escpos = buildPreBillEscPos(bill, settings);
       const res = await printEscPos(escpos, { title: `Bill #${bill.bill_number}`, clientRef });
       if (res.status === "FAILED") {
@@ -60,6 +74,8 @@ export function CustomerPreBillModal({
         setIsPrintAgentOpen(true);
         return;
       }
+      hasPrintedRef.current = true;
+      setHasPrinted(true);
       if (res.status === "PENDING" && res.reason) {
         await alert({
           title: "Slip Queued",
@@ -110,7 +126,7 @@ export function CustomerPreBillModal({
               className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
-              <span>{isPrinting ? "Printing..." : "Print Bill"}</span>
+              <span>{isPrinting ? "Printing..." : (isReprintBill || hasPrinted) ? "Re-print Bill" : "Print Bill"}</span>
             </button>
             <button
               type="button"

@@ -1983,6 +1983,7 @@ export default function PosPage() {
         isOpen={!!printingCustomerBill}
         onClose={() => setPrintingCustomerBill(null)}
         autoPrint={true}
+        isReprint={printingCustomerBill?.status === "printed" || Boolean(printingCustomerBill?.bill_printed_at)}
       />
 
       {/* Checkout Modal */}
@@ -2066,6 +2067,7 @@ export default function PosPage() {
           setAutoPrintReceipt(false);
         }}
         autoPrint={autoPrintReceipt}
+        isReprint={!autoPrintReceipt}
       />
 
       {/* Quick Add Customer Modal */}

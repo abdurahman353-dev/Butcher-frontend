@@ -21,9 +21,10 @@ interface ReceiptModalProps {
   onClose: () => void;
   /** When true, automatically trigger print after the modal mounts */
   autoPrint?: boolean;
+  isReprint?: boolean;
 }
 
-export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: ReceiptModalProps) {
+export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false, isReprint = false }: ReceiptModalProps) {
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
   const { settings } = useShopSettings();
@@ -31,20 +32,26 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [hasPrinted, setHasPrinted] = useState(false);
   const [agentState, setAgentState] = useState<Partial<PrintAgentState>>({});
   const autoPrintAttemptedRef = useRef(false);
+  const hasPrintedRef = useRef(false);
   const inFlightRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
       inFlightRef.current = false;
+      hasPrintedRef.current = false;
+      setHasPrinted(false);
     }
   }, [isOpen]);
 
+  const isReprintSale = isReprint || hasPrintedRef.current;
+
   const handlePrint = async (arg?: boolean | React.MouseEvent) => {
     if (!sale || inFlightRef.current) return;
-    const isReprint = typeof arg === "boolean" ? arg : false;
+    const isReprintNow = typeof arg === "boolean" ? arg : isReprintSale;
     inFlightRef.current = true;
     setIsPrinting(true);
     try {
@@ -57,7 +64,9 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         }
       }
 
-      const clientRef = isReprint ? `sale-${sale.id}-reprint-${Date.now()}` : `sale-${sale.id}`;
+      const clientRef = isReprintNow
+        ? `sale-${sale.id}-reprint-${Date.now()}`
+        : `sale-${sale.id}-${Date.now()}`;
       const commands = buildEscPosReceipt(sale, settings, { openCashDrawer: true, cutPaper: true });
       const res = await printEscPos(commands, {
         title: `Receipt #${sale.sale_number}`,
@@ -74,6 +83,10 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
         setIsPrintAgentOpen(true);
         return;
       }
+
+      hasPrintedRef.current = true;
+      setHasPrinted(true);
+
       if (res.status === "PENDING" && res.reason) {
         await alert({
           title: "Receipt Queued",
@@ -134,7 +147,7 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false }: Recei
               className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors active:scale-95 disabled:opacity-50"
             >
               {isPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
-              <span>{isPrinting ? "Printing..." : "Print"}</span>
+              <span>{isPrinting ? "Printing..." : (isReprintSale || hasPrinted) ? "Re-print" : "Print"}</span>
             </button>
             <button
               type="button"

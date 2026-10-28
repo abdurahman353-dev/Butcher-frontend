@@ -51,6 +51,8 @@ export function KitchenOrderSlipModal({
   const [isPrinting, setIsPrinting] = useState(false);
   const [isPrintAgentOpen, setIsPrintAgentOpen] = useState(false);
   const autoPrintAttemptedRef = useRef(false);
+  const hasPrintedRef = useRef(false);
+  const [hasPrinted, setHasPrinted] = useState(false);
 
   // Filter state: either "all" or a specific category name
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>("all");
@@ -63,6 +65,8 @@ export function KitchenOrderSlipModal({
     if (isOpen) {
       autoPrintAttemptedRef.current = false;
       inFlightRef.current = false;
+      hasPrintedRef.current = false;
+      setHasPrinted(false);
       setSelectedCategoryTab("all");
     }
   }, [isOpen]);
@@ -154,9 +158,10 @@ export function KitchenOrderSlipModal({
           groupsToPrint.length
         );
 
-        const clientRef = isReprint
-          ? `kot-${bill.bill_number}-${group.categoryName}-reprint-${Date.now()}`
-          : `kot-${bill.bill_number}-${group.categoryName}`;
+        const isSlipReprint = isReprint || hasPrintedRef.current;
+        const clientRef = isSlipReprint
+          ? `kot-${bill.bill_number}-${group.categoryName}-reprint-${Date.now()}-${i}`
+          : `kot-${bill.bill_number}-${group.categoryName}-${Date.now()}-${i}`;
 
         const res = await printEscPos(escpos, {
           title: `KOT #${bill.bill_number} - ${group.categoryName}`,
@@ -176,6 +181,8 @@ export function KitchenOrderSlipModal({
         }
       }
 
+      hasPrintedRef.current = true;
+      setHasPrinted(true);
       logSetupStep(opId, "complete");
     } catch (err: any) {
       logSetupStep(opId, "failed", { error: err?.message });
@@ -275,9 +282,13 @@ export function KitchenOrderSlipModal({
               <span>
                 {isPrinting
                   ? "Printing..."
-                  : displayedGroups.length === 1
-                    ? "Print Slip"
-                    : `Print ${displayedGroups.length} Slips`}
+                  : (isReprint || hasPrinted)
+                    ? displayedGroups.length === 1
+                      ? "Re-print Slip"
+                      : `Re-print ${displayedGroups.length} Slips`
+                    : displayedGroups.length === 1
+                      ? "Print Slip"
+                      : `Print ${displayedGroups.length} Slips`}
               </span>
             </button>
             <button
