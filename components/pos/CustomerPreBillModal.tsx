@@ -8,7 +8,7 @@ import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
-import { buildEscPosReceipt } from "@/lib/qz/receipt";
+import { buildEscPosReceipt, buildRestaurantReceiptEscPos, cleanBillNumber, formatReceiptDate, formatReceiptTime } from "@/lib/qz/receipt";
 import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos } from "@/lib/printAgent/client";
 import type { Sale } from "@/types";
 
@@ -138,126 +138,110 @@ export function CustomerPreBillModal({
           </div>
         </div>
 
-        {/* Thermal Receipt Body - Exactly matches ReceiptModal (Image 3) */}
-        <div id="customer-pre-bill-slip" className="p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold overflow-y-auto flex-1 overscroll-contain print:overflow-visible print:p-0 print:m-0">
-          {/* 1. Header Box */}
-          <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
-            <div className="text-base sm:text-lg font-black tracking-tight uppercase">
-              {settings?.shop_name ? settings.shop_name.toUpperCase() : "RESTAURANT"}
+        {/* Thermal Receipt Body - Matching Exact Picture Layout */}
+        <div id="customer-pre-bill-slip" className="p-4 sm:p-6 text-xs leading-snug space-y-2 bg-white text-black font-mono font-bold overflow-y-auto flex-1 overscroll-contain print:overflow-visible print:p-0 print:m-0">
+          {/* Centered Header */}
+          <div className="text-center space-y-0.5">
+            <div className="text-sm sm:text-base font-black uppercase tracking-tight">
+              {settings?.shop_name || "JAMBO COAST PRIDE HOTEL"}
             </div>
-            {settings?.address && (
-              <p className="text-xs font-bold leading-snug">{settings.address}</p>
-            )}
-            {(settings?.phone || settings?.email || settings?.tax_pin) && (
-              <div className="text-[11px] font-bold space-y-0.5">
-                {settings.phone && <p>Tel: {settings.phone}</p>}
-                {settings.email && <p>Email: {settings.email}</p>}
-                {settings.tax_pin && <p>PIN: {settings.tax_pin}</p>}
-              </div>
-            )}
-            <div className="pt-1.5 mt-1.5 border-t-2 border-black text-xs font-bold">
-              {settings?.receipt_header || "Restaurant Dining • Guest Bill"}
+            <div className="text-xs font-bold">
+              {settings?.phone || "0710 747527 / 0757 363626"}
+            </div>
+            <div className="text-xs font-bold">
+              {settings?.tax_pin ? `MPESA PAYBILL NO: ${settings.tax_pin}` : "MPESA PAYBILL NO:"}
             </div>
           </div>
 
-          {/* 2. Transaction Metadata Box - NO Cashier, NO Guests */}
-          <div className="border-2 border-black p-2 text-xs font-bold text-black space-y-1">
-            <div className="flex justify-between font-black text-sm">
-              <span>BILL: #{bill.bill_number}</span>
-              <span>PRE-SETTLEMENT</span>
+          {/* Metadata Section */}
+          <div className="pt-2 text-xs font-bold space-y-0.5">
+            <div className="flex justify-between">
+              <span>Bill No. &nbsp;&nbsp;&nbsp;&nbsp;{cleanBillNumber(bill.bill_number, bill.id)}</span>
+              <span>{formatReceiptDate(bill.bill_printed_at || bill.created_at)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Table N &nbsp;&nbsp;&nbsp;&nbsp;{bill.table_number}</span>
+              <span>{formatReceiptTime(bill.bill_printed_at || bill.created_at)}</span>
             </div>
             <div>
-              <span>Date: {formatDateTime(bill.bill_printed_at || bill.created_at || new Date().toISOString())}</span>
+              <span>Served by: &nbsp;{bill.waiter_name || "Staff"}</span>
             </div>
-            <div className="text-xs pt-0.5 space-y-0.5">
-              <div className="grid grid-cols-2 gap-2 items-start">
-                <div className="space-y-0.5">
-                  <div className="font-black text-black">Table: Table {bill.table_number}</div>
-                  <div className="font-black text-black">Bill No: {bill.bill_number}</div>
-                  {bill.waiter_name && (
-                    <div>Server: {bill.waiter_name}</div>
-                  )}
+            <div className="text-center pt-1 font-black">
+              <div>DINE IN</div>
+              <div>BACK HALL</div>
+            </div>
+          </div>
+
+          {/* Dashed line */}
+          <div className="border-b border-dashed border-black my-1" />
+
+          {/* Column Header */}
+          <div className="flex justify-between text-xs font-bold">
+            <span className="flex-1 text-left">Item name</span>
+            <span className="w-12 text-center">Qty</span>
+            <span className="w-16 text-right">total</span>
+          </div>
+
+          {/* Dashed line */}
+          <div className="border-b border-dashed border-black my-1" />
+
+          {/* Items */}
+          <div className="space-y-1 text-xs">
+            {items.map((item: RestaurantBillItem, idx: number) => (
+              <div key={idx} className="space-y-0.5 font-bold">
+                <div className="flex justify-between">
+                  <span className="flex-1 text-left truncate pr-2">{item.product_name}</span>
+                  <span className="w-12 text-center">{Math.round(Number(item.weight || 1))}</span>
+                  <span className="w-16 text-right">{Math.round(Number(item.line_total || 0))}</span>
                 </div>
-                <div className="space-y-0.5">
-                  <div className="font-bold">Customer: <strong className="font-black text-black">{bill.customer_name || "Walk-in Customer"}</strong></div>
-                  {bill.customer_phone && (
-                    <div>Phone: <strong className="text-black">{bill.customer_phone}</strong></div>
-                  )}
-                  {(bill.customer_address || bill.customer?.address) && (
-                    <div>Address: <strong className="text-black">{bill.customer_address || bill.customer?.address}</strong></div>
-                  )}
+                {item.notes && item.notes.trim() && (
+                  <div className="pl-2 text-[11px] font-semibold text-zinc-800">
+                    {item.notes.trim()} #
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Dashed line */}
+          <div className="border-b border-dashed border-black my-1" />
+
+          {/* Totals */}
+          {(() => {
+            const gross = Number(bill.total || bill.subtotal || 0);
+            const ctLevy = gross > 0 ? gross - (gross / 1.02) : 0;
+            return (
+              <div className="space-y-0.5 text-xs font-bold">
+                <div className="flex justify-between">
+                  <span>Total</span>
+                  <span>{Math.round(gross)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>16% VAT</span>
+                  <span>0.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>2% C.T Levy</span>
+                  <span>{ctLevy.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Vat</span>
+                  <span>{ctLevy.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Net Amount</span>
+                  <span>{Math.round(gross)}</span>
+                </div>
+                <div className="pt-1">
+                  <span>Prepared by &nbsp;&nbsp;&nbsp;{bill.bill_printed_by || bill.cashier_name || "Muhammad"}</span>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
-          {/* 3. Items List */}
-          <div className="py-1 space-y-2.5 text-black">
-            {items.map((item: RestaurantBillItem, idx: number) => {
-              const itemDiscount = Number(item.discount || 0);
-              return (
-                <div key={idx} className="space-y-0.5 font-bold">
-                  <div className="flex justify-between text-xs font-black">
-                    <span className="truncate pr-2">{item.product_name}</span>
-                    <span className="shrink-0">{formatCurrency(item.line_total)}</span>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-zinc-700">
-                    <span>
-                      {item.weight} {formatUnitLabel(item.unit)} x {formatCurrency(item.price_per_kg)}/{formatUnitLabel(item.unit)}
-                    </span>
-                    {itemDiscount > 0 && (
-                      <span className="text-zinc-600 font-bold">
-                        Disc: -{formatCurrency(itemDiscount)}
-                      </span>
-                    )}
-                  </div>
-                  {item.notes && (
-                    <div className="text-[10px] text-zinc-600 italic pl-1">
-                      Note: {item.notes}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 4. Financial Totals Box */}
-          <div className="border-2 border-black p-2 text-xs font-bold text-black space-y-1">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span className="font-black">{formatCurrency(bill.subtotal)}</span>
-            </div>
-            {Number(bill.discount || 0) > 0 && (
-              <div className="flex justify-between">
-                <span>Total Discount:</span>
-                <span className="font-black">-{formatCurrency(bill.discount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm sm:text-base font-black pt-1 border-t-2 border-black text-black">
-              <span>TOTAL DUE:</span>
-              <span>{formatCurrency(bill.total)}</span>
-            </div>
-          </div>
-
-          {/* 5. Banner Box */}
-          <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
-            <div className="font-black text-xs uppercase tracking-wider">
-              *** GUEST INVOICE / BILL ***
-            </div>
-            <div className="text-[11px] font-bold leading-snug">
-              Pre-settlement check. Please present this bill when making payment.
-            </div>
-          </div>
-
-          {/* 6. Footer Box */}
-          <div className="border-2 border-black p-2.5 text-center text-black space-y-1.5">
-            <div className="font-mono text-sm tracking-widest font-black">
-              * {bill.bill_number} *
-            </div>
-            <p className="text-xs font-black leading-snug whitespace-pre-line">
-              {settings?.receipt_footer ||
-                `Thank you for dining with us at ${settings?.shop_name || "our restaurant"}! Please visit again soon.`}
-            </p>
+          {/* Footer */}
+          <div className="text-center pt-2 text-xs font-bold">
+            ----------------- Thank you -----------------
           </div>
         </div>
 
@@ -281,38 +265,12 @@ export function CustomerPreBillModal({
 }
 
 function buildPreBillEscPos(bill: RestaurantBill, settings?: any): any[] {
-  const storeName = settings?.shop_name || "RESTAURANT";
-  const commands: any[] = ["\x1B\x40", "\x1B\x61\x01", "\x1B\x45\x01"];
-  commands.push(`${storeName}\n`);
-  commands.push("\x1B\x45\x00", "\x1B\x61\x01", "GUEST BILL\n", "PRE-SETTLEMENT\n", "--------------\n");
-  commands.push("\x1B\x61\x00");
-  commands.push(`Table: Table ${bill.table_number}\n`);
-  commands.push(`Bill: ${bill.bill_number}\n`);
-  if (bill.customer_name) {
-    commands.push(`Customer: ${bill.customer_name}${bill.customer_phone ? ` (${bill.customer_phone})` : ""}\n`);
-    const addr = bill.customer_address || bill.customer?.address;
-    if (addr) {
-      commands.push(`Address: ${addr}\n`);
-    }
-  }
-  if (bill.waiter_name) {
-    commands.push(`Server: ${bill.waiter_name}\n`);
-  }
-  commands.push(`Time: ${new Date(bill.bill_printed_at || bill.created_at || Date.now()).toLocaleString()}\n`);
-  commands.push("--------------\n");
-  commands.push("ITEM                TOTAL\n");
-  for (const item of bill.items || []) {
-    const name = (item.product_name || "Item").substring(0, 18);
-    const total = Number(item.line_total || 0).toFixed(2);
-    commands.push(`${name.padEnd(20)}${total}\n`);
-  }
-  commands.push("--------------\n");
-  commands.push(`SUBTOTAL: KSh ${Number(bill.subtotal || 0).toFixed(2)}\n`);
-  if (Number(bill.discount || 0) > 0) {
-    commands.push(`DISCOUNT: KSh ${Number(bill.discount).toFixed(2)}\n`);
-  }
-  commands.push(`TOTAL:    KSh ${Number(bill.total || 0).toFixed(2)}\n`);
-  commands.push("--------------\n");
-  commands.push("Thank you!\n\n\n\n\x1D\x56\x41\x03");
-  return commands;
+  return buildRestaurantReceiptEscPos(
+    {
+      ...bill,
+      isPreBill: true,
+    },
+    settings,
+    { cutPaper: true }
+  );
 }

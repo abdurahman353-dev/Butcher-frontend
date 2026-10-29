@@ -27,6 +27,153 @@ export function renderReceiptHtml(
     settings?: Partial<ShopSettings>,
     isRestaurant?: boolean
 ): string {
+    const isRestaurantSale = Boolean(isRestaurant || sale.table_number || sale.bill_number);
+    if (isRestaurantSale) {
+        const storeName = settings?.shop_name ? settings.shop_name.toUpperCase() : "JAMBO COAST PRIDE HOTEL";
+        const storePhone = settings?.phone || "0710 747527 / 0757 363626";
+        const paybillNo = settings?.tax_pin || "";
+        
+        const d = sale.created_at ? new Date(sale.created_at) : new Date();
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        const dateStr = `${day}/${month}/${year}`;
+        
+        let hours = d.getHours();
+        const minutes = String(d.getMinutes()).padStart(2, "0");
+        const ampm = hours >= 12 ? "PM" : "AM";
+        hours = hours % 12 || 12;
+        const timeStr = `${hours}:${minutes}${ampm}`;
+
+        const rawBill = sale.bill_number || "";
+        const match = rawBill.match(/(\d+)$/);
+        const billNo = match ? (parseInt(match[1], 10) || rawBill) : (rawBill || sale.id);
+        const tableNo = sale.table_number || "1";
+        const waiter = sale.waiter_name || "Magufuli";
+        const ordType = sale.order_type ? String(sale.order_type).toUpperCase().replace("_", " ") : "DINE IN";
+
+        const gross = Number(sale.total || 0);
+        const ctLevy = gross > 0 ? gross - (gross / 1.02) : 0;
+        const rec = Number(sale.amount_received || gross);
+        const chg = Number(sale.change_given || 0);
+        const cashier = sale.cashier_name || "Muhammad";
+
+        const resItemsHtml = (sale.items || []).map((it: any) => {
+            const name = escapeHtml(it.product_name || "Item");
+            const qty = Math.round(Number(it.weight || it.quantity || 1));
+            const tot = Math.round(Number(it.subtotal || it.line_total || 0));
+            const notes = it.notes && it.notes.trim() ? `<div style="padding-left: 8px; font-size: 11px; color: #333;">${escapeHtml(it.notes.trim())} #</div>` : "";
+            return `
+              <div style="margin-bottom: 3px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 6px;">${name}</span>
+                  <span style="width: 48px; text-align: center;">${qty}</span>
+                  <span style="width: 64px; text-align: right;">${tot}</span>
+                </div>
+                ${notes}
+              </div>
+            `;
+        }).join("");
+
+        let tenderHtml = "";
+        const method = (sale.payment_method || "cash").toLowerCase();
+        if (method === "cash") {
+            tenderHtml = `
+              <div style="display: flex; justify-content: space-between;"><span>Cash</span><span>KSh ${rec.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+              <div style="display: flex; justify-content: space-between;"><span>Change</span><span>KSh ${chg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            `;
+        } else if (method === "mpesa") {
+            tenderHtml = `
+              <div style="display: flex; justify-content: space-between;"><span>M-Pesa</span><span>KSh ${gross.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+              ${sale.mpesa_reference ? `<div style="display: flex; justify-content: space-between;"><span>Ref:</span><span style="font-family: monospace;">${escapeHtml(sale.mpesa_reference)}</span></div>` : ""}
+            `;
+        } else {
+            tenderHtml = `
+              <div style="display: flex; justify-content: space-between;"><span style="text-transform: uppercase;">${escapeHtml(method)}</span><span>KSh ${gross.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+            `;
+        }
+
+        return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt #${billNo}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+      width: 72mm;
+      margin: 0 auto;
+      padding: 8px 4px;
+      background: #fff;
+      color: #000;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 700;
+      -webkit-print-color-adjust: exact;
+    }
+    .text-center { text-align: center; }
+    .flex-between { display: flex; justify-content: space-between; }
+    .dashed-divider { border-bottom: 1px dashed #000; margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="text-center" style="margin-bottom: 6px;">
+    <div style="font-size: 15px; font-weight: 900; text-transform: uppercase;">${escapeHtml(storeName)}</div>
+    <div style="font-size: 12px;">${escapeHtml(storePhone)}</div>
+    <div style="font-size: 12px;">${paybillNo ? `MPESA PAYBILL NO: ${escapeHtml(paybillNo)}` : "MPESA PAYBILL NO:"}</div>
+  </div>
+
+  <div style="margin-bottom: 6px;">
+    <div class="flex-between">
+      <span>Bill No. &nbsp;&nbsp;&nbsp;&nbsp;${billNo}</span>
+      <span>${dateStr}</span>
+    </div>
+    <div class="flex-between">
+      <span>Table N &nbsp;&nbsp;&nbsp;&nbsp;${escapeHtml(tableNo)}</span>
+      <span>${timeStr}</span>
+    </div>
+    <div>Served by: &nbsp;${escapeHtml(waiter)}</div>
+    <div class="text-center" style="margin-top: 4px; font-weight: 900;">
+      <div>${escapeHtml(ordType)}</div>
+      <div>BACK HALL</div>
+    </div>
+  </div>
+
+  <div class="dashed-divider"></div>
+
+  <div class="flex-between" style="font-weight: 900;">
+    <span style="flex: 1;">Item name</span>
+    <span style="width: 48px; text-align: center;">Qty</span>
+    <span style="width: 64px; text-align: right;">total</span>
+  </div>
+
+  <div class="dashed-divider"></div>
+
+  <div style="margin: 4px 0;">
+    ${resItemsHtml}
+  </div>
+
+  <div class="dashed-divider"></div>
+
+  <div style="margin: 4px 0;">
+    <div class="flex-between"><span>Total</span><span>${Math.round(gross)}</span></div>
+    <div class="flex-between"><span>16% VAT</span><span>0.00</span></div>
+    <div class="flex-between"><span>2% C.T Levy</span><span>${ctLevy.toFixed(2)}</span></div>
+    <div class="flex-between"><span>Total Vat</span><span>${ctLevy.toFixed(2)}</span></div>
+    <div class="flex-between"><span>Net Amount</span><span>${Math.round(gross)}</span></div>
+    ${tenderHtml}
+    <div style="margin-top: 4px;">Prepared by &nbsp;&nbsp;&nbsp;${escapeHtml(cashier)}</div>
+  </div>
+
+  <div class="text-center" style="margin-top: 8px; font-weight: 900;">
+    ----------------- Thank you -----------------
+  </div>
+</body>
+</html>`;
+    }
+
     const shopName = settings?.shop_name ? settings.shop_name.toUpperCase() : "HALAL CHICKEN HUB";
     const address = settings?.address || "";
     const phone = settings?.phone || "";
