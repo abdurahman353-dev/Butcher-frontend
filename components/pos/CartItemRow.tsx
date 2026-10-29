@@ -83,7 +83,7 @@ export function CartItemRow({
               {formatWeight(item.weight, item.unit)}
             </span>
             <div className="min-w-0">
-              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight break-words">
+              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight line-clamp-2">
                 {item.product_name}
               </h4>
               <p className="text-[10px] font-bold text-zinc-500 leading-none mt-0.5">
@@ -144,7 +144,7 @@ export function CartItemRow({
             </div>
 
             <div className="min-w-0 flex-1">
-              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight break-words">
+              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight line-clamp-2">
                 {item.product_name}
               </h4>
               <p className="text-[10px] font-bold text-zinc-500 leading-none mt-0.5">
