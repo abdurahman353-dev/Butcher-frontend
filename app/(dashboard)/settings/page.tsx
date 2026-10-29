@@ -7,6 +7,7 @@ import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { useAuth } from "@/hooks/useAuth";
 import { Settings, Save, CheckCircle2, Upload, Trash2, Image as ImageIcon } from "lucide-react";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { PresetNotesManager } from "@/components/pos/PresetNotesManager";
 
 export default function SettingsPage() {
   const { alert } = useSystemDialog();
@@ -301,6 +302,13 @@ export default function SettingsPage() {
           <span>{isSaving ? "Saving Settings..." : "Save Shop Settings"}</span>
         </button>
       </form>
+
+      {/* Preset KOT Notes — Restaurant Only */}
+      {isRestaurant && (
+        <div className="p-6 bg-white border border-zinc-200 rounded-2xl shadow-xs">
+          <PresetNotesManager />
+        </div>
+      )}
     </div>
   );
 }

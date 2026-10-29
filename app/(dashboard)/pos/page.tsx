@@ -17,6 +17,7 @@ import { customersService } from "@/services/customers.service";
 import { posService } from "@/services/pos.service";
 import { salesService } from "@/services/sales.service";
 import { restaurantService } from "@/services/restaurant.service";
+import { presetNotesService, PresetNote } from "@/services/presetNotes.service";
 import { useCart } from "@/hooks/useCart";
 import { useShift } from "@/hooks/useShift";
 import { useHeldOrders } from "@/hooks/useHeldOrders";
@@ -60,6 +61,7 @@ export default function PosPage() {
   const isClothing = user?.company?.business_type === "clothing";
   const isWaiter = user?.role === "waiter";
   const isSuperAdmin = user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
   const [activeTab, setActiveTab] = useState<"products" | "tables">(
     isRestaurant ? "tables" : "products"
   );
@@ -68,6 +70,7 @@ export default function PosPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [presetNotes, setPresetNotes] = useState<PresetNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
@@ -230,6 +233,7 @@ export default function PosPage() {
     updateWeight,
     adjustWeightBy,
     updateDiscount,
+    updateItemNote,
     removeItem,
     clearCart,
     restoreItems,
@@ -320,10 +324,11 @@ export default function PosPage() {
     const tablesPromise = isRestaurant ? fetchRestaurantTables() : Promise.resolve();
 
     try {
-      const [cats, prodsRes, custsRes] = await Promise.all([
+      const [cats, prodsRes, custsRes, notes] = await Promise.all([
         productsService.getCategories(),
         productsService.getProducts({ per_page: 200, status: "active" }),
         customersService.getCustomers({ per_page: 50 }),
+        isRestaurant ? presetNotesService.getActive() : Promise.resolve([]),
         fetchUnpaidSales(),
         tablesPromise,
       ]);
@@ -331,6 +336,7 @@ export default function PosPage() {
       setCategories(Array.isArray(cats) ? cats : []);
       setProducts(Array.isArray(prodsRes?.data) ? prodsRes.data : []);
       setCustomers(Array.isArray(custsRes?.data) ? custsRes.data : []);
+      setPresetNotes(Array.isArray(notes) ? notes : []);
     } catch (e: any) {
       const msg = e?.message || "Failed to load POS catalog.";
       console.error("Failed to load POS data:", msg, e);
@@ -390,6 +396,13 @@ export default function PosPage() {
   const handleUpdateDiscount = (id: string, discount: number) => {
     if (user?.role === "waiter") return;
     updateDiscount(id, discount);
+    if (activeBill) {
+      setHasUnsavedOrder(true);
+    }
+  };
+
+  const handleUpdateItemNote = (id: string, note: string) => {
+    updateItemNote(id, note);
     if (activeBill) {
       setHasUnsavedOrder(true);
     }
@@ -1666,7 +1679,7 @@ export default function PosPage() {
               isLoading={isLoading}
               isRestaurant={isRestaurant}
               isClothing={isClothing}
-              canDrag={isSuperAdmin}
+              canDrag={true}
               onUpdateProduct={(productId, patch) => {
                 setProducts((prev) =>
                   prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
@@ -1695,6 +1708,8 @@ export default function PosPage() {
           onAdjustWeight={handleAdjustWeight}
           onOpenWeightEdit={(item) => setEditingCartItem(item)}
           onUpdateDiscount={handleUpdateDiscount}
+          onUpdateItemNote={handleUpdateItemNote}
+          presetNotes={presetNotes}
           onRemoveItem={handleRemoveItem}
           onClearCart={clearCart}
           onProceedCheckout={handleProceedCheckout}
@@ -1834,6 +1849,8 @@ export default function PosPage() {
                 setEditingCartItem(item);
               }}
               onUpdateDiscount={handleUpdateDiscount}
+              onUpdateItemNote={handleUpdateItemNote}
+              presetNotes={presetNotes}
               onRemoveItem={handleRemoveItem}
               onClearCart={clearCart}
               onProceedCheckout={(method) => {
