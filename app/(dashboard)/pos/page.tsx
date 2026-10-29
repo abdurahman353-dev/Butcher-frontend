@@ -61,6 +61,7 @@ export default function PosPage() {
   const isClothing = user?.company?.business_type === "clothing";
   const isWaiter = user?.role === "waiter";
   const isSuperAdmin = user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
   const [activeTab, setActiveTab] = useState<"products" | "tables">(
     isRestaurant ? "tables" : "products"
   );
@@ -1678,7 +1679,7 @@ export default function PosPage() {
               isLoading={isLoading}
               isRestaurant={isRestaurant}
               isClothing={isClothing}
-              canDrag={isSuperAdmin}
+              canDrag={true}
               onUpdateProduct={(productId, patch) => {
                 setProducts((prev) =>
                   prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
