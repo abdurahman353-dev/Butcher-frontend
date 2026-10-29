@@ -41,6 +41,9 @@ export function buildEscPosReceipt(
   settings?: Partial<ShopSettings>,
   options: ReceiptFormatOptions = { cutPaper: true }
 ): any[] {
+  if (sale.table_number || sale.bill_number) {
+    return buildRestaurantReceiptEscPos(sale, settings, options);
+  }
   const storeName = settings?.shop_name || "BUTCHER & RESTAURANT";
   const storePhone = settings?.phone || "";
   const storeAddress = settings?.address || "";
@@ -229,6 +232,156 @@ export function buildKitchenSlipEscPos(
  * Safely converts an array of ESC/POS command strings / byte buffers into a base64 string.
  * Ensures characters are masked to <= 255 before btoa encoding.
  */
+
+export function formatReceiptDate(dateStr?: string | null): string {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+export function formatReceiptTime(dateStr?: string | null): string {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes}${ampm}`;
+}
+
+export function cleanBillNumber(billNumber?: string | null, id?: number | null): string {
+  if (!billNumber && id) return String(id);
+  if (!billNumber) return "";
+  const match = billNumber.match(/(\d+)$/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    return isNaN(num) ? billNumber : String(num);
+  }
+  return billNumber;
+}
+
+function format3Col(col1: string, col2: string, col3: string, width = LINE_WIDTH): string {
+  const c2 = String(col2);
+  const c3 = String(col3);
+  const rightPart = c2.padStart(6) + c3.padStart(10);
+  const maxCol1 = width - rightPart.length;
+  const leftPart = col1.length > maxCol1 ? col1.substring(0, maxCol1) : col1.padEnd(maxCol1);
+  return leftPart + rightPart;
+}
+
+/**
+ * Builds raw ESC/POS byte commands for a restaurant receipt matching the exact physical receipt layout.
+ */
+export function buildRestaurantReceiptEscPos(
+  data: any,
+  settings?: Partial<ShopSettings>,
+  options: ReceiptFormatOptions = { cutPaper: true }
+): any[] {
+  const storeName = settings?.shop_name || "JAMBO COAST PRIDE HOTEL";
+  const storePhone = settings?.phone || "0710 747527 / 0757 363626";
+  const paybillNo = settings?.tax_pin || "";
+
+  const commands: any[] = [
+    "\x1B\x40", // Initialize
+  ];
+
+  if (options.openCashDrawer) {
+    commands.push("\x1B\x70\x00\x19\xFA"); // Drawer kick
+  }
+
+  // 1. Centered Header
+  commands.push("\x1B\x61\x01"); // Center align
+  commands.push("\x1B\x45\x01"); // Bold ON
+  commands.push(`${storeName}\n`);
+  commands.push("\x1B\x45\x00"); // Bold OFF
+  commands.push(`${storePhone}\n`);
+  commands.push(paybillNo ? `MPESA PAYBILL NO: ${paybillNo}\n` : "MPESA PAYBILL NO:\n");
+
+  // 2. Metadata: Bill No., Table N, Date, Time, Served by, DINE IN, Zone
+  commands.push("\x1B\x61\x00"); // Left align
+  const billNo = cleanBillNumber(data.bill_number, data.id) || "1";
+  const tableNo = data.table_number || "1";
+  const dateStr = formatReceiptDate(data.bill_printed_at || data.created_at);
+  const timeStr = formatReceiptTime(data.bill_printed_at || data.created_at);
+  const waiterName = data.waiter_name || "Staff";
+  const orderType = data.order_type ? String(data.order_type).toUpperCase().replace("_", " ") : "DINE IN";
+  const zoneName = data.zone || data.table?.zone || "BACK HALL";
+
+  commands.push(padLine(`Bill No.        ${billNo}`, dateStr) + "\n");
+  commands.push(padLine(`Table N         ${tableNo}`, timeStr) + "\n");
+  commands.push(`Served by:      ${waiterName}\n`);
+
+  commands.push("\x1B\x61\x01"); // Center align
+  commands.push(`${orderType}\n`);
+  commands.push(`${zoneName}\n`);
+
+  // 3. Item Table Header
+  commands.push("\x1B\x61\x00"); // Left align
+  commands.push(divider("-"));
+  commands.push(format3Col("Item name", "Qty", "total") + "\n");
+  commands.push(divider("-"));
+
+  // 4. Line Items
+  const items = data.items || [];
+  for (const it of items) {
+    const name = it.product_name || "Item";
+    const qty = Math.round(Number(it.weight || it.quantity || 1));
+    const total = Math.round(Number(it.line_total || it.subtotal || 0));
+    commands.push(format3Col(name, String(qty), String(total)) + "\n");
+    if (it.notes && it.notes.trim()) {
+      commands.push(`  ${it.notes.trim()} #\n`);
+    }
+  }
+
+  // 5. Totals
+  commands.push(divider("-"));
+  const grossTotal = Number(data.total || data.subtotal || 0);
+  const ctLevy = grossTotal > 0 ? grossTotal - (grossTotal / 1.02) : 0;
+  const totalVat = ctLevy;
+
+  commands.push(padLine("Total", String(Math.round(grossTotal))) + "\n");
+  commands.push(padLine("16% VAT", "0.00") + "\n");
+  commands.push(padLine("2% C.T Levy", ctLevy.toFixed(2)) + "\n");
+  commands.push(padLine("Total Vat", totalVat.toFixed(2)) + "\n");
+  commands.push(padLine("Net Amount", String(Math.round(grossTotal))) + "\n");
+
+  // Payment Breakdown if settled
+  if (!data.isPreBill) {
+    const method = (data.payment_method || "cash").toLowerCase();
+    if (method === "cash") {
+      const rec = Number(data.amount_received || grossTotal);
+      const chg = Number(data.change_given || 0);
+      commands.push(padLine("Cash", `KSh ${rec.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) + "\n");
+      commands.push(padLine("Change", `KSh ${chg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) + "\n");
+    } else if (method === "mpesa") {
+      commands.push(padLine("M-Pesa", `KSh ${grossTotal.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) + "\n");
+      if (data.mpesa_reference) {
+        commands.push(padLine("Ref:", data.mpesa_reference) + "\n");
+      }
+    } else {
+      commands.push(padLine(method.toUpperCase(), `KSh ${grossTotal.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`) + "\n");
+    }
+  }
+
+  const cashier = data.cashier_name || data.bill_printed_by || data.settled_by || "Muhammad";
+  commands.push(`Prepared by   ${cashier}\n`);
+
+  // 6. Centered Footer
+  const thankYouText = "Thank you";
+  const dashesEach = Math.max(1, Math.floor((LINE_WIDTH - thankYouText.length - 2) / 2));
+  const thankYouLine = "-".repeat(dashesEach) + " " + thankYouText + " " + "-".repeat(dashesEach);
+  commands.push("\x1B\x61\x01"); // Center
+  commands.push(`${thankYouLine}\n`);
+  commands.push("\n\n\n");
+
+  if (options.cutPaper) {
+    commands.push("\x1D\x56\x41\x03"); // Cut paper
+  }
+
+  return commands;
+}
+
 export function encodeEscPosCommandsToBase64(commands: any[]): string {
   let binary = "";
   for (const cmd of commands) {

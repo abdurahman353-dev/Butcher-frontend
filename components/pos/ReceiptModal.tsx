@@ -8,7 +8,7 @@ import { useShopSettings } from "@/contexts/ShopSettingsContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useSystemDialog } from "@/contexts/DialogContext";
 import { printElementInWindow } from "@/lib/printWindow";
-import { buildEscPosReceipt } from "@/lib/qz/receipt";
+import { buildEscPosReceipt, cleanBillNumber, formatReceiptDate, formatReceiptTime } from "@/lib/qz/receipt";
 import { PrinterSettingsModal } from "@/components/pos/PrinterSettingsModal";
 import { PrintAgentDialog } from "@/components/pos/PrintAgentDialog";
 import { checkHealth, createSetupOperationId, detectAgentState, ensureTokenClearedOn401, getToken, logSetupStep, printEscPos, printHtmlSlip } from "@/lib/printAgent/client";
@@ -27,6 +27,7 @@ interface ReceiptModalProps {
 export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false, isReprint = false }: ReceiptModalProps) {
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isRestaurantSale = isRestaurant || Boolean(sale?.table_number || sale?.bill_number);
   const { settings } = useShopSettings();
   const { alert } = useSystemDialog();
   const [isPrinterSettingsOpen, setIsPrinterSettingsOpen] = useState(false);
@@ -161,7 +162,156 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false, isRepri
 
         {/* Thermal Receipt Body - Smoothly scrollable lengthwise on any device */}
         <div id="thermal-receipt" className="p-4 sm:p-6 text-xs leading-snug space-y-3 bg-white text-black font-bold overflow-y-auto flex-1 overscroll-contain print:overflow-visible print:p-0 print:m-0">
-          {/* 1. Header Box */}
+          {isRestaurantSale ? (
+            /* Restaurant Receipt - Exactly matches physical receipt photo */
+            <div className="space-y-2 font-mono font-bold">
+              {/* 1. Header (Centered) */}
+              <div className="text-center space-y-0.5">
+                <div className="text-sm sm:text-base font-black uppercase tracking-tight">
+                  {settings.shop_name || "JAMBO COAST PRIDE HOTEL"}
+                </div>
+                <div className="text-xs font-bold">
+                  {settings.phone || "0710 747527 / 0757 363626"}
+                </div>
+                <div className="text-xs font-bold">
+                  {settings.tax_pin ? `MPESA PAYBILL NO: ${settings.tax_pin}` : "MPESA PAYBILL NO:"}
+                </div>
+              </div>
+
+              {/* 2. Metadata Section */}
+              <div className="pt-2 text-xs font-bold space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Bill No. &nbsp;&nbsp;&nbsp;&nbsp;{cleanBillNumber(sale.bill_number, sale.id) || sale.sale_number}</span>
+                  <span>{formatReceiptDate(sale.created_at)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Table N &nbsp;&nbsp;&nbsp;&nbsp;{sale.table_number || "1"}</span>
+                  <span>{formatReceiptTime(sale.created_at)}</span>
+                </div>
+                <div>
+                  <span>Served by: &nbsp;{sale.waiter_name || "Magufuli"}</span>
+                </div>
+                <div className="text-center pt-1 font-black">
+                  <div>{sale.order_type ? sale.order_type.toUpperCase().replace("_", " ") : "DINE IN"}</div>
+                  <div>BACK HALL</div>
+                </div>
+              </div>
+
+              {/* Dashed line */}
+              <div className="border-b border-dashed border-black my-1" />
+
+              {/* 3. Column Header */}
+              <div className="flex justify-between text-xs font-bold">
+                <span className="flex-1 text-left">Item name</span>
+                <span className="w-12 text-center">Qty</span>
+                <span className="w-16 text-right">total</span>
+              </div>
+
+              {/* Dashed line */}
+              <div className="border-b border-dashed border-black my-1" />
+
+              {/* 4. Items List */}
+              <div className="space-y-1 text-xs">
+                {(sale.items || []).map((item) => (
+                  <div key={item.id} className="space-y-0.5 font-bold">
+                    <div className="flex justify-between">
+                      <span className="flex-1 text-left truncate pr-2">{item.product_name}</span>
+                      <span className="w-12 text-center">{Math.round(Number(item.weight || 1))}</span>
+                      <span className="w-16 text-right">{Math.round(Number(item.subtotal || 0))}</span>
+                    </div>
+                    {(item as any).notes && (
+                      <div className="pl-2 text-[11px] font-semibold text-zinc-800">
+                        {(item as any).notes.trim()} #
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Dashed line */}
+              <div className="border-b border-dashed border-black my-1" />
+
+              {/* 5. Totals */}
+              {(() => {
+                const gross = Number(sale.total || 0);
+                const ctLevy = gross > 0 ? gross - (gross / 1.02) : 0;
+                const rec = Number(sale.amount_received || gross);
+                const chg = Number(sale.change_given || 0);
+                return (
+                  <div className="space-y-0.5 text-xs font-bold">
+                    <div className="flex justify-between">
+                      <span>Total</span>
+                      <span>{Math.round(gross)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>16% VAT</span>
+                      <span>0.00</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>2% C.T Levy</span>
+                      <span>{ctLevy.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Vat</span>
+                      <span>{ctLevy.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Net Amount</span>
+                      <span>{Math.round(gross)}</span>
+                    </div>
+
+                    {sale.payment_method === "cash" && (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Cash</span>
+                          <span>{formatCurrency(rec)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Change</span>
+                          <span>{formatCurrency(chg)}</span>
+                        </div>
+                      </>
+                    )}
+
+                    {sale.payment_method === "mpesa" && (
+                      <>
+                        <div className="flex justify-between">
+                          <span>M-Pesa</span>
+                          <span>{formatCurrency(gross)}</span>
+                        </div>
+                        {sale.mpesa_reference && (
+                          <div className="flex justify-between">
+                            <span>Ref:</span>
+                            <span className="font-mono">{sale.mpesa_reference}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {sale.payment_method !== "cash" && sale.payment_method !== "mpesa" && (
+                      <div className="flex justify-between">
+                        <span className="uppercase">{sale.payment_method}</span>
+                        <span>{formatCurrency(gross)}</span>
+                      </div>
+                    )}
+
+                    <div className="pt-1">
+                      <span>Prepared by &nbsp;&nbsp;&nbsp;{sale.cashier_name || "Muhammad"}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 6. Footer */}
+              <div className="text-center pt-2 text-xs font-bold">
+                ----------------- Thank you -----------------
+              </div>
+            </div>
+          ) : (
+            /* Traditional Butchery / Retail Receipt */
+            <>
+              {/* ...retail boxes... */}
+              {/* 1. Header Box */}
           <div className="border-2 border-black p-2 text-center text-black space-y-0.5">
             <div className="text-base sm:text-lg font-black tracking-tight uppercase">
               {settings.shop_name ? settings.shop_name.toUpperCase() : "HALAL CHICKEN HUB"}
@@ -479,6 +629,8 @@ export function ReceiptModal({ sale, isOpen, onClose, autoPrint = false, isRepri
                   : `Thank you for choosing ${settings.shop_name || "our butchery"}! Fresh cuts daily.`)}
             </p>
           </div>
+            </>
+          )}
         </div>
       </div>
 
