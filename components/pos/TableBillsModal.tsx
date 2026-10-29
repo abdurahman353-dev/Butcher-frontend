@@ -1323,7 +1323,7 @@ export function TableBillsModal({
                           </button>
                         )}
                         {/* Divide / Split Bill button */}
-                        {itemsCount > 0 && (
+                        {!isWaiter && itemsCount > 0 && (
                           <button
                             type="button"
                             onClick={() => setSplittingBill(bill)}
