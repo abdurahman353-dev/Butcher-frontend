@@ -43,6 +43,7 @@ export function ManageCategoriesModal({
   const { confirm, alert } = useSystemDialog();
   const { user } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
 
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -141,10 +142,10 @@ export function ManageCategoriesModal({
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-900 leading-tight">
-                {isRestaurant ? "Manage Menu Categories" : "Manage Meat Categories"}
+                {isRestaurant ? "Manage Menu Categories" : isClothing ? "Manage Product Categories" : "Manage Meat Categories"}
               </h2>
               <p className="text-[11px] text-zinc-500 leading-tight mt-0.5">
-                {isRestaurant ? "Organise your menu sections (Starters, Mains, Drinks…)" : "Add or organise for products & reports"}
+                {isRestaurant ? "Organise your menu sections (Starters, Mains, Drinks…)" : isClothing ? "Add or organise clothing & apparel categories" : "Add or organise for products & reports"}
               </p>
             </div>
           </div>
@@ -168,7 +169,7 @@ export function ManageCategoriesModal({
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder={isRestaurant ? "e.g. Starters, Mains, Desserts, Beverages..." : "e.g. Beef, Lamb, Camel, Marinated..."}
+                  placeholder={isRestaurant ? "e.g. Starters, Mains, Desserts, Beverages..." : isClothing ? "e.g. Men's Wear, Women's Wear, Kids, Accessories..." : "e.g. Beef, Lamb, Camel, Marinated..."}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   className="flex-1 min-w-0 h-11 bg-white border border-zinc-200 rounded-xl px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 font-semibold shadow-xs"
@@ -247,7 +248,7 @@ export function ManageCategoriesModal({
                         <div className="font-bold text-sm text-zinc-900 truncate">{cat.name}</div>
                         <div className="text-[11px] text-zinc-500 flex items-center gap-1 mt-0.5">
                           <Package className="w-3 h-3 text-zinc-400 shrink-0" />
-                          <span>{cat.products_count ?? 0} {isRestaurant ? "menu items" : "cuts"} recorded</span>
+                          <span>{cat.products_count ?? 0} {isRestaurant ? "menu items" : isClothing ? "products" : "cuts"} recorded</span>
                         </div>
                       </div>
                     </div>

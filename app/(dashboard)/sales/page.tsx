@@ -48,6 +48,7 @@ import { useSystemDialog } from "@/contexts/DialogContext";
 function SalesLedger() {
   const { user, isAdmin } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const { confirm, alert } = useSystemDialog();
   const { settings: shopSettings } = useShopSettings();
   const searchParams = useSearchParams();
@@ -113,8 +114,6 @@ function SalesLedger() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMountRef = useRef(true);
   const allSalesCacheRef = useRef<Sale[]>([]);
-  const prevCashierRef = useRef<string>("all");
-  const [isStaffQuerying, setIsStaffQuerying] = useState(false);
 
   // Load cached sales ONLY if no specific URL filters are requested
   useEffect(() => {
@@ -131,10 +130,9 @@ function SalesLedger() {
     } catch { }
   }, [urlPaymentStatus, urlPaymentMethod]);
 
-  const fetchSales = useCallback(async (silent = false, minDelay = 0) => {
+  const fetchSales = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsLoading(true);
-      if (minDelay > 0) setIsStaffQuerying(true);
 
       const params: any = {
         page: currentPage,
@@ -154,10 +152,7 @@ function SalesLedger() {
       if (minAmount) params.min_amount = minAmount;
       if (maxAmount) params.max_amount = maxAmount;
 
-      const fetchPromise = salesService.getSales(params);
-      const delayPromise = minDelay > 0 ? new Promise((resolve) => setTimeout(resolve, minDelay)) : Promise.resolve();
-
-      const [res] = await Promise.all([fetchPromise, delayPromise]);
+      const res = await salesService.getSales(params);
       setPaginated(res);
 
       if (cashierFilter === "all" && res.data?.length > 0) {
@@ -182,7 +177,6 @@ function SalesLedger() {
       console.error("Failed to load sales:", e);
     } finally {
       setIsLoading(false);
-      setIsStaffQuerying(false);
       setIsRefreshing(false);
       setIsInitialLoading(false);
     }
@@ -203,17 +197,8 @@ function SalesLedger() {
     sortDirection,
   ]);
 
-  // Clean staff filter handler: instantly wipes stale data and initiates 3s verified query
+  // Simple cashier filter handler - no artificial delays or data wiping
   const handleCashierChange = useCallback((newVal: string) => {
-    // 1. Immediately wipe previous rows so no old data lingers on screen
-    setPaginated((prev) => ({
-      ...prev,
-      data: [],
-      total: 0,
-    }));
-    setIsLoading(true);
-    setIsStaffQuerying(true);
-
     setCashierFilter(newVal);
     setCurrentPage(1);
   }, []);
@@ -229,33 +214,23 @@ function SalesLedger() {
     handleCashierChange(filterId);
   }, [paginated.filter_options, handleCashierChange]);
 
-  // Reactive Fetch: Hold 'Querying Live Database' state until data is fully retrieved
+  // Reactive fetch: debounce all filter changes identically (like reports filter)
   useEffect(() => {
     if (isFirstMountRef.current) {
       isFirstMountRef.current = false;
-      fetchSales(); // non-silent on mount
+      fetchSales();
       return;
     }
 
-    const isCashierChange = prevCashierRef.current !== cashierFilter;
-    prevCashierRef.current = cashierFilter;
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (isCashierChange) {
-      // 3-second deliberate loading window for clean, rock-solid database fetch
-      fetchSales(false, 3000);
-    } else {
-      debounceRef.current = setTimeout(() => {
-        // Non-silent: hold live database loading state until real data arrives
-        fetchSales(false);
-      }, 150);
-    }
+    debounceRef.current = setTimeout(() => {
+      fetchSales(false);
+    }, 300);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [fetchSales, cashierFilter]);
+  }, [fetchSales]);
 
   // Real-time polling every 12s with current active filters (silent background sync)
   usePolling(() => fetchSales(true), 12000);
@@ -909,7 +884,7 @@ function SalesLedger() {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-          placeholder={isRestaurant ? "Search by bill #, sale #, table, customer, phone, server, or item..." : "Search by sale #, customer name, phone, cashier, or meat cut..."}
+          placeholder={isRestaurant ? "Search by bill #, sale #, table, customer, phone, server, or item..." : "Search by sale #, customer name, phone, cashier, or item..."}
           className="w-full h-12 bg-white border-2 border-emerald-500 rounded-2xl pl-12 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all"
         />
         {search && (
@@ -1514,7 +1489,7 @@ function SalesLedger() {
                 <th className="py-3.5 px-3">{isRestaurant ? "Cashier & Waiter" : "Cashier / Staff"}</th>
                 <th className="py-3.5 px-3">{isRestaurant ? "Table & Customer" : "Customer Details"}</th>
                 <th className="py-3.5 px-3">Payment Tender</th>
-                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Items Ordered" : "Items / Cuts"}</th>
+                <th className="py-3.5 px-3 text-right">{isRestaurant ? "Items Ordered" : "Items"}</th>
                 <th className="py-3.5 px-3 text-right">Amount (KSh)</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
                 <th className="py-3.5 pr-4 text-center">Actions</th>
@@ -1728,7 +1703,7 @@ function SalesLedger() {
                         {sale.items?.length ?? 0}
                       </span>{" "}
                       <span className="text-[11px] text-zinc-400">
-                        {sale.items?.length === 1 ? (isRestaurant ? "item" : "cut") : (isRestaurant ? "items" : "cuts")}
+                        {sale.items?.length === 1 ? "item" : "items"}
                       </span>
                     </td>
 

@@ -1173,7 +1173,9 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
                     tickLine={false}
                     tickFormatter={(val) =>
                       chartMetric === "weight"
-                        ? `${val}kg`
+                        ? isClothing
+                          ? `${val}pcs`
+                          : `${val}kg`
                         : val >= 1000
                         ? `${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k`
                         : `KSh ${val}`
@@ -1193,7 +1195,7 @@ ${(analytics.freed_meals?.items||[]).length>0?`<div style="background:#faf5ff;bo
                       chartMetric === "revenue"
                         ? "Revenue"
                         : chartMetric === "weight"
-                        ? "Volume Sold"
+                        ? (isClothing ? "Units Sold" : "Volume Sold")
                         : "Profit",
                     ]}
                   />

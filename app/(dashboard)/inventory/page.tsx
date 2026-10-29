@@ -34,6 +34,7 @@ type SortDir = "asc" | "desc";
 export default function InventoryPage() {
   const { user, isAdmin } = useAuth();
   const isRestaurant = user?.company?.business_type === "restaurant";
+  const isClothing = user?.company?.business_type === "clothing";
   const [activeTab, setActiveTab] = useState<"levels" | "movements">("levels");
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -236,6 +237,8 @@ export default function InventoryPage() {
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
             {isRestaurant
               ? "Real-time stock levels, supplier replenishments, kitchen inventory, audit adjustments, and wastage."
+              : isClothing
+              ? "Real-time apparel stock levels, supplier replenishments, audit adjustments, and wastage."
               : "Real-time meat weight levels, supplier stock-in replenishments, audit adjustments, and wastage."}
           </p>
         </div>
@@ -290,7 +293,7 @@ export default function InventoryPage() {
         <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-xs flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-              {isRestaurant ? "Menu & Stock Items" : "Meat Cuts"}
+              {isRestaurant ? "Menu & Stock Items" : isClothing ? "Products" : "Meat Cuts"}
             </span>
             <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <Boxes className="w-3.5 h-3.5" />
@@ -317,7 +320,7 @@ export default function InventoryPage() {
             onClick={() => setStatusFilter("low_stock")}
             className="text-[11px] text-amber-700 font-semibold text-left hover:underline"
           >
-            {kpis.lowStock > 0 ? (isRestaurant ? "View low stock items →" : "View low stock cuts →") : "All well stocked"}
+            {kpis.lowStock > 0 ? (isRestaurant ? "View low stock items →" : "View low stock items →") : "All well stocked"}
           </button>
         </div>
 
@@ -352,7 +355,7 @@ export default function InventoryPage() {
               : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
           }`}
         >
-          {isRestaurant ? "🍽️" : "🥩"} Current Stock Levels ({products.length})
+          {isRestaurant ? "🍽️" : isClothing ? "👕" : "🥩"} Current Stock Levels ({products.length})
         </button>
 
         <button
@@ -559,7 +562,7 @@ export default function InventoryPage() {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  <SortTh label={isRestaurant ? "Menu / Stock Item" : "Product Cut"} col="name" className="pl-4" />
+                  <SortTh label={isRestaurant ? "Menu / Stock Item" : isClothing ? "Product / Item" : "Product Cut"} col="name" className="pl-4" />
                   <th className="py-3.5 px-3">SKU</th>
                   <th className="py-3.5 px-3">Category</th>
                   <SortTh label="Available Stock" col="current_stock" className="text-right" />
@@ -575,7 +578,7 @@ export default function InventoryPage() {
                 {filteredProducts.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-10 text-center text-zinc-400 text-sm">
-                      {isRestaurant ? "No items match your filters." : "No meat cuts match your filters."}
+                      {isRestaurant ? "No items match your filters." : "No items match your filters."}
                     </td>
                   </tr>
                 ) : (
@@ -711,7 +714,7 @@ export default function InventoryPage() {
               <thead>
                 <tr className="border-b border-zinc-200 bg-zinc-50/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
                   <th className="py-3.5 pl-4">Timestamp</th>
-                  <th className="py-3.5 px-3">{isRestaurant ? "Item Name" : "Cut Name"}</th>
+                  <th className="py-3.5 px-3">{isRestaurant ? "Item Name" : "Item Name"}</th>
                   <th className="py-3.5 px-3">Activity Type</th>
                   <th className="py-3.5 px-3 text-right">Quantity</th>
                   <th className="py-3.5 px-3 text-right">Before</th>

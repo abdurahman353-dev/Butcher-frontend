@@ -28,6 +28,7 @@ export function WeightInput({
 }: WeightInputProps) {
   const { user } = useAuth();
   const isRestaurant = (user?.company?.business_type ?? "") === "restaurant";
+  const isClothing = (user?.company?.business_type ?? "") === "clothing";
 
   const COUNTABLE_UNITS = ["PACK", "PCS", "PLATE", "PORTION", "BOTTLE", "CUP", "BOWL", "GLASS", "BOX", "TRIP"];
   const unitUp = (unit || "KG").toUpperCase();
@@ -67,6 +68,7 @@ export function WeightInput({
     if (unitUp === "BOTTLE") return "🥤";
     if (unitUp === "BOWL") return "🍜";
     if (isRestaurant) return "🍽️";
+    if (isClothing) return "👕";
     return "🥩";
   })();
 
