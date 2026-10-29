@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
   const [showForgotNotice, setShowForgotNotice] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [suspendedAmount, setSuspendedAmount] = useState<string | null>(null);
   // SSR-safe: initialize with neutral value, update from localStorage after mount
   const [mounted, setMounted] = useState(false);
   const [cachedShopName, setCachedShopName] = useState("Butchery & Restaurant POS");
@@ -89,6 +90,9 @@ export default function LoginPage() {
         err?.message ||
         "Invalid credentials. Please check your email and password.";
       setError(msg);
+      // Extract subscription amount from the error message if present
+      const amountMatch = msg.match(/Amount due:\s*(KSh[\s\d,]+)/i);
+      setSuspendedAmount(amountMatch ? amountMatch[1].trim() : null);
     } finally {
       setIsLoading(false);
     }
@@ -168,6 +172,12 @@ export default function LoginPage() {
                       <p className="text-red-700/90 text-xs mt-0.5 leading-snug">
                         Complete payment below to reactivate your butchery account immediately.
                       </p>
+                      {suspendedAmount && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-red-600 text-white text-sm font-black shadow-sm">
+                          <span>💳 Amount Due:</span>
+                          <span className="tracking-tight">{suspendedAmount}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
