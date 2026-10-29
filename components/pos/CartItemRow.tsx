@@ -73,108 +73,112 @@ export function CartItemRow({
 
   const hasNote = Boolean(item.notes && item.notes.trim().length > 0);
 
-  // ── Saved / read-only row ────────────────────────────────────────────────────
+  // ── Saved / read-only row ──────────────────────────────────────────────────
   if (readOnly) {
     return (
-      <div className="py-1 px-2.5 bg-white border border-zinc-200/90 hover:border-zinc-300 rounded-lg flex flex-col gap-0.5 shadow-2xs transition-colors">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="shrink-0 px-2 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-xs font-black text-zinc-950 tabular-nums">
-              {formatWeight(item.weight, item.unit)}
-            </span>
-            <div className="min-w-0">
-              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight line-clamp-2">
-                {item.product_name}
-              </h4>
-              <p className="text-[10px] font-bold text-zinc-500 leading-none mt-0.5">
-                {formatCurrency(item.price_per_kg)}/{unitLabel}
-              </p>
-            </div>
-          </div>
-          <div className="text-right shrink-0 flex items-center gap-2">
-            <span className="text-sm font-black text-emerald-700 tabular-nums">
-              {formatCurrency(item.subtotal)}
-            </span>
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full" title="Sent to Kitchen">
-              <Check className="w-3 h-3 text-emerald-600" strokeWidth={3} />
-              <span className="hidden xs:inline">Sent</span>
-            </span>
-          </div>
-        </div>
-        {hasNote && (
-          <div className="flex items-start gap-1 pl-8 text-[10px] font-semibold text-amber-800 italic">
-            <MessageSquare className="w-3 h-3 text-amber-600 shrink-0 mt-px" />
-            <span className="truncate">{item.notes}</span>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── Active / editable row ────────────────────────────────────────────────────
-  return (
-    <>
-      <div className="py-1.5 px-2.5 bg-white border border-zinc-200/90 hover:border-zinc-300 rounded-lg flex flex-col gap-1 shadow-2xs transition-colors">
-        <div className="flex items-center justify-between gap-2">
-          {/* Stepper + Name */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="flex items-center gap-0.5 bg-zinc-100 border border-zinc-300 rounded-md p-0.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => onAdjustWeight(item.id, -stepDelta)}
-                className="w-6 h-6 rounded bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-200 active:scale-95 transition-transform"
-              >
-                <Minus className="w-3 h-3 text-zinc-900" strokeWidth={2.5} />
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenWeightEdit(item)}
-                className="px-1.5 text-xs font-black text-zinc-950 tabular-nums hover:text-emerald-700 transition-colors"
-              >
-                {formatWeight(item.weight, item.unit)}
-              </button>
-              <button
-                type="button"
-                onClick={() => onAdjustWeight(item.id, stepDelta)}
-                disabled={isAtMaxStock}
-                className="w-6 h-6 rounded bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-200 active:scale-95 transition-transform disabled:opacity-30"
-              >
-                <Plus className="w-3 h-3 text-zinc-900" strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <h4 className="text-[13px] sm:text-sm font-black text-zinc-950 leading-tight line-clamp-2">
-                {item.product_name}
-              </h4>
-              <p className="text-[10px] font-bold text-zinc-500 leading-none mt-0.5">
-                {formatCurrency(item.price_per_kg)}/{unitLabel}
-                {item.discount > 0 && (
-                  <span className="text-amber-700 font-extrabold ml-1">(-{formatCurrency(item.discount)})</span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          {/* Subtotal + Action buttons */}
+      <div className="py-1 px-2.5 bg-white border border-zinc-200/90 rounded-lg flex flex-col gap-0.5 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 px-2 py-0.5 rounded bg-zinc-100 border border-zinc-300 text-xs font-black text-zinc-950 tabular-nums">
+            {formatWeight(item.weight, item.unit)}
+          </span>
+          <h4 className="flex-1 min-w-0 text-[13px] font-black text-zinc-950 leading-tight line-clamp-2">
+            {item.product_name}
+          </h4>
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-sm font-black text-emerald-700 tabular-nums">
               {formatCurrency(item.subtotal)}
             </span>
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+              <Check className="w-3 h-3 text-emerald-600" strokeWidth={3} />
+              <span>Sent</span>
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 pl-[calc(theme(spacing.2)+3rem)]">
+          <span className="text-[10px] font-bold text-zinc-400">
+            {formatCurrency(item.price_per_kg)}/{unitLabel}
+          </span>
+          {hasNote && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 italic ml-1">
+              <MessageSquare className="w-3 h-3 text-amber-500 shrink-0" />
+              {item.notes}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-            {/* Note button — bigger for touch devices */}
+  // ── Active / editable row ──────────────────────────────────────────────────
+  return (
+    <>
+      <div className="py-1.5 px-2.5 bg-white border border-zinc-200/90 hover:border-zinc-300 rounded-lg flex flex-col gap-1 shadow-2xs transition-colors">
+
+        {/* ── Row 1: Stepper | Name | Price ── */}
+        <div className="flex items-center gap-2">
+          {/* Stepper */}
+          <div className="flex items-center gap-0.5 bg-zinc-100 border border-zinc-300 rounded-md p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onAdjustWeight(item.id, -stepDelta)}
+              className="w-6 h-6 rounded bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-200 active:scale-95 transition-transform"
+            >
+              <Minus className="w-3 h-3 text-zinc-900" strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenWeightEdit(item)}
+              className="px-1.5 text-xs font-black text-zinc-950 tabular-nums hover:text-emerald-700 transition-colors min-w-[2rem] text-center"
+            >
+              {formatWeight(item.weight, item.unit)}
+            </button>
+            <button
+              type="button"
+              onClick={() => onAdjustWeight(item.id, stepDelta)}
+              disabled={isAtMaxStock}
+              className="w-6 h-6 rounded bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-200 active:scale-95 transition-transform disabled:opacity-30"
+            >
+              <Plus className="w-3 h-3 text-zinc-900" strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {/* Full-width name */}
+          <h4 className="flex-1 min-w-0 text-[13px] sm:text-sm font-black text-zinc-950 leading-tight line-clamp-2">
+            {item.product_name}
+          </h4>
+
+          {/* Subtotal */}
+          <span className="text-sm font-black text-emerald-700 tabular-nums shrink-0">
+            {formatCurrency(item.subtotal)}
+          </span>
+        </div>
+
+        {/* ── Row 2: Unit price | Action buttons (always visible) ── */}
+        <div className="flex items-center justify-between gap-1">
+          {/* Unit price + discount info */}
+          <p className="text-[10px] font-bold text-zinc-400 leading-none truncate">
+            {formatCurrency(item.price_per_kg)}/{unitLabel}
+            {item.discount > 0 && (
+              <span className="text-amber-700 font-extrabold ml-1">
+                (-{formatCurrency(item.discount)})
+              </span>
+            )}
+          </p>
+
+          {/* Action buttons — always visible, compact */}
+          <div className="flex items-center gap-1 shrink-0">
             {onUpdateNote && (
               <button
                 type="button"
                 onClick={() => setIsNotePickerOpen(true)}
                 title={hasNote ? `Note: ${item.notes}` : "Add item note"}
-                className={`p-2 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center ${
+                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center min-w-[28px] min-h-[28px] ${
                   hasNote
                     ? "bg-amber-400 text-white shadow-sm"
-                    : "text-zinc-500 hover:text-amber-600 hover:bg-amber-50 border border-zinc-200"
+                    : "text-zinc-400 bg-zinc-100 hover:text-amber-600 hover:bg-amber-50 border border-zinc-200"
                 }`}
               >
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -186,28 +190,28 @@ export function CartItemRow({
                   else { setShowDiscount(true); setTimeout(() => inputRef.current?.focus(), 50); }
                 }}
                 title={item.discount > 0 ? `Discount: -${formatCurrency(item.discount)}` : "Add discount"}
-                className={`p-2 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center ${
+                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center min-w-[28px] min-h-[28px] ${
                   item.discount > 0
                     ? "bg-amber-500 text-white shadow-sm"
-                    : "text-amber-700 hover:bg-amber-50 border border-zinc-200"
+                    : "text-amber-600 bg-zinc-100 hover:bg-amber-50 border border-zinc-200"
                 }`}
               >
-                <Tag className="w-4 h-4" />
+                <Tag className="w-3.5 h-3.5" />
               </button>
             )}
 
             <button
               type="button"
               onClick={() => onRemove(item.id)}
-              className="p-2 rounded-lg text-zinc-500 hover:text-red-600 hover:bg-red-50 border border-zinc-200 transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+              className="p-1.5 rounded-lg text-zinc-400 bg-zinc-100 hover:text-red-600 hover:bg-red-50 border border-zinc-200 transition-colors flex items-center justify-center min-w-[28px] min-h-[28px]"
               title="Remove item"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Note pill (when set) */}
+        {/* Note pill */}
         {hasNote && (
           <button
             type="button"
@@ -247,7 +251,7 @@ export function CartItemRow({
         )}
       </div>
 
-      {/* Note Picker Modal — receives presetNotes already loaded, no fetch */}
+      {/* Note Picker Modal */}
       <ItemNotePickerModal
         isOpen={isNotePickerOpen}
         onClose={() => setIsNotePickerOpen(false)}
