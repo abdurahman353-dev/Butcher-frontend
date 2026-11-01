@@ -106,7 +106,7 @@ export function TableBillsModal({
   const [customerAddress, setCustomerAddress] = useState("");
   const [billNotes, setBillNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBillId, setSelectedBillId] = useState<number | "">("" );
   const [expandedBills, setExpandedBills] = useState<Record<number, boolean>>({});
 
   // ── Customer Change / Edit State for Existing Bills ──
@@ -401,16 +401,9 @@ export function TableBillsModal({
       (b.status === "open" || b.status === "printed")
   );
 
-  const filteredBills = activeBills.filter((bill) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return (
-      bill.bill_number.toLowerCase().includes(q) ||
-      (bill.waiter_name && bill.waiter_name.toLowerCase().includes(q)) ||
-      (bill.customer_name && bill.customer_name.toLowerCase().includes(q)) ||
-      (bill.items && bill.items.some((it) => it.product_name.toLowerCase().includes(q)))
-    );
-  });
+  const filteredBills = selectedBillId === ""
+    ? activeBills
+    : activeBills.filter((bill) => bill.id === selectedBillId);
 
   // Instant local PIN verification with live backend fallback (never fails valid PINs)
   const handlePinInput = async (val: string) => {
@@ -718,34 +711,30 @@ export function TableBillsModal({
         {/* ── Modal Content ────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
 
-          {/* Section header */}
-          {/* Section header: Responsive with fast bill search & + New Bill button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-1">
+          {/* Section header: label left, dropdown + New Bill right — fully responsive */}
+          <div className="flex items-center justify-between gap-2 pb-1 flex-wrap">
             <h4 className="text-[11px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 shrink-0">
               <Receipt className="w-3.5 h-3.5 text-zinc-400" />
-              Active Bills on this Table ({filteredBills.length}{filteredBills.length !== activeBills.length ? ` / ${activeBills.length}` : ""})
+              Active Bills on this Table ({filteredBills.length}{selectedBillId !== "" ? ` / ${activeBills.length}` : ""})
             </h4>
 
-            <div className="flex items-center gap-2 flex-1 sm:justify-end">
-              {activeBills.length > 0 && !isCreatingNew && (
-                <div className="relative flex-1 sm:max-w-xs w-full">
-                  <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search bill number (e.g. B-2-012)..."
-                    className="w-full pl-8 pr-7 py-1.5 bg-white border-2 border-emerald-500 hover:border-emerald-600 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-xs font-bold text-zinc-900 placeholder-zinc-400 outline-none transition-all shadow-xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 p-0.5"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+            <div className="flex items-center gap-2 min-w-0">
+              {activeBills.length > 1 && !isCreatingNew && (
+                <div className="relative w-52 sm:w-60">
+                  <Receipt className="w-4 h-4 sm:w-3.5 sm:h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                  <select
+                    value={selectedBillId}
+                    onChange={(e) => setSelectedBillId(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="w-full pl-9 pr-8 py-2 sm:py-1.5 bg-white border-2 border-emerald-500 hover:border-emerald-600 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-sm sm:text-xs font-black text-zinc-900 outline-none transition-all shadow-xs appearance-none cursor-pointer tracking-wide"
+                  >
+                    <option value="">All Bills ({activeBills.length})</option>
+                    {activeBills.map((bill) => (
+                      <option key={bill.id} value={bill.id}>
+                        {bill.bill_number}{bill.customer_name ? ` — ${bill.customer_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 sm:w-3.5 sm:h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
                 </div>
               )}
 
@@ -1021,13 +1010,13 @@ export function TableBillsModal({
             </div>
           ) : filteredBills.length === 0 && !isCreatingNew ? (
             <div className="p-6 text-center bg-zinc-50 border border-dashed border-zinc-300 rounded-xl">
-              <p className="text-xs font-bold text-zinc-700">No bills match "{searchQuery}"</p>
+              <p className="text-xs font-bold text-zinc-700">No bills found for the selected bill number.</p>
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
+                onClick={() => setSelectedBillId("")}
                 className="mt-2 text-xs text-emerald-700 font-bold hover:underline"
               >
-                Clear Search
+                Show All Bills
               </button>
             </div>
           ) : (
