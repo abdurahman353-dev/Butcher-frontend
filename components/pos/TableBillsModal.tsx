@@ -720,12 +720,12 @@ export function TableBillsModal({
 
             <div className="flex items-center gap-2 min-w-0">
               {activeBills.length > 1 && !isCreatingNew && (
-                <div className="relative w-52 sm:w-60">
-                  <Receipt className="w-4 h-4 sm:w-3.5 sm:h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                <div className="relative w-64">
+                  <Receipt className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
                   <select
                     value={selectedBillId}
                     onChange={(e) => setSelectedBillId(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="w-full pl-9 pr-8 py-2 sm:py-1.5 bg-white border-2 border-emerald-500 hover:border-emerald-600 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-sm sm:text-xs font-black text-zinc-900 outline-none transition-all shadow-xs appearance-none cursor-pointer tracking-wide"
+                    className="w-full pl-9 pr-8 py-2.5 bg-white border-2 border-emerald-500 hover:border-emerald-600 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-base font-black text-zinc-900 outline-none transition-all shadow-xs appearance-none cursor-pointer tracking-wide"
                   >
                     <option value="">All Bills ({activeBills.length})</option>
                     {activeBills.map((bill) => (
@@ -734,7 +734,7 @@ export function TableBillsModal({
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 sm:w-3.5 sm:h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                  <ChevronDown className="w-5 h-5 absolute right-2.5 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
                 </div>
               )}
 
