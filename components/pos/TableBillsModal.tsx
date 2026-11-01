@@ -108,6 +108,17 @@ export function TableBillsModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedBillId, setSelectedBillId] = useState<number | "">("" );
   const [expandedBills, setExpandedBills] = useState<Record<number, boolean>>({});
+  // Tracks which bill's cancel-confirmation dialog is open — all its buttons become unclickable
+  const [cancellingBillId, setCancellingBillId] = useState<number | null>(null);
+
+  const handleCancelBillWithLock = async (bill: RestaurantBill) => {
+    setCancellingBillId(bill.id);
+    try {
+      await onCancelBill(bill);
+    } finally {
+      setCancellingBillId(null);
+    }
+  };
 
   // ── Customer Change / Edit State for Existing Bills ──
   const [editingCustomerBill, setEditingCustomerBill] = useState<RestaurantBill | null>(null);
@@ -1029,7 +1040,9 @@ export function TableBillsModal({
                   <div
                     key={bill.id}
                     className={`p-4 rounded-2xl border-2 transition-all space-y-3 ${
-                      isPrinted
+                      cancellingBillId === bill.id
+                        ? "opacity-50 pointer-events-none select-none " + (isPrinted ? "bg-amber-50/70 border-amber-300" : "bg-white border-zinc-200")
+                        : isPrinted
                         ? "bg-amber-50/70 border-amber-300"
                         : "bg-white border-zinc-200 hover:border-zinc-300"
                     }`}
@@ -1217,20 +1230,14 @@ export function TableBillsModal({
                       );
                     })()}
 
-                    {/* Action Buttons as specified by user:
-                        - Open Bill (post products)
-                        - Print Bill (customer pre-bill)
-                        - Print Kitchen Slip
-                        - Settle / Checkout
-                        - Cancel
-                    */}
+                    {/* Action Buttons */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                       <div className="flex items-center gap-1.5">
                         {/* Cancel button — admin & cashier only */}
                         {!isWaiter && (
                           <button
                             type="button"
-                            onClick={() => onCancelBill(bill)}
+                            onClick={() => handleCancelBillWithLock(bill)}
                             className="px-2.5 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 active:bg-rose-300 border border-rose-300 rounded-xl transition-colors font-bold flex items-center gap-1"
                             title="Cancel this bill"
                           >
@@ -1404,6 +1411,7 @@ export function TableBillsModal({
                         )}
                       </div>
                     </div>
+
                   </div>
                 );
               })}

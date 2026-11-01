@@ -462,6 +462,33 @@ export default function PosPage() {
         return;
       }
     }
+
+    // ── Auto-cancel empty ghost bills ────────────────────────────────────────
+    // If the user opened a bill, added NOTHING, and hits Exit — silently cancel
+    // the bill so it never shows as a KSh 0.00 card on the table map.
+    const billToAutoCancel = activeBillRef.current;
+    if (billToAutoCancel && billToAutoCancel.id > 0 && items.length === 0) {
+      // 1. Optimistically remove it from the floor map RIGHT NOW (instant UI)
+      setRestaurantTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== billToAutoCancel.table_id) return t;
+          const remaining = (t.active_bills || []).filter((b) => b.id !== billToAutoCancel.id);
+          return {
+            ...t,
+            active_bills: remaining,
+            active_bills_count: remaining.length,
+            total_active_amount: remaining.reduce((s, b) => s + (b.total || 0), 0),
+            status: remaining.length === 0 ? ("grey" as const) : t.status,
+          };
+        })
+      );
+      // 2. Cancel on server in background — no await, no spinner
+      restaurantService.cancelBill(billToAutoCancel.id).catch((e) => {
+        console.warn("Auto-cancel empty bill failed:", e);
+      });
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Unlock the table so other users can access it
     if (activeTable) {
       try { await restaurantService.unlockTable(activeTable.id); } catch (e) { console.error("Unlock table error:", e); }
@@ -975,7 +1002,7 @@ export default function PosPage() {
     }
   };
 
-  // Restaurant: Cancel Bill
+  // Restaurant: Cancel Bill — optimistic (instant UI, background API)
   const handleCancelBill = async (bill: RestaurantBill) => {
     if (bill.id === 0) {
       clearCart();
@@ -997,32 +1024,81 @@ export default function PosPage() {
 
     if (!shouldCancel) return;
 
-    try {
-      await restaurantService.cancelBill(bill.id);
-      if (activeBill?.id === bill.id) {
-        clearCart();
-        setActiveBill(null);
-        setActiveTable(null);
-        setHasUnsavedOrder(false);
-        setActiveTab("tables");
-      }
-      setIsTableModalOpen(false);
-      // Silently refresh — no spinner
-      fetchRestaurantTables(true);
-    } catch (e: any) {
+    // ── Instant optimistic removal — no await, no spinner ──────────────────
+    // 1. Remove from floor map immediately
+    setRestaurantTables((prev) =>
+      prev.map((t) => {
+        if (t.id !== bill.table_id) return t;
+        const remaining = (t.active_bills || []).filter((b) => b.id !== bill.id);
+        return {
+          ...t,
+          active_bills: remaining,
+          active_bills_count: remaining.length,
+          total_active_amount: remaining.reduce((s, b) => s + (b.total || 0), 0),
+          status: remaining.length === 0 ? ("grey" as const) : t.status,
+        };
+      })
+    );
+
+    // 2. If this was the currently active bill, clear session instantly
+    if (activeBill?.id === bill.id) {
+      activeBillRef.current = null;
+      activeTableRef.current = null;
+      clearCart();
+      setActiveBill(null);
+      setActiveTable(null);
+      setHasUnsavedOrder(false);
+      setActiveTab("tables");
+    }
+
+    // 3. Close the modal instantly
+    setIsTableModalOpen(false);
+    // ───────────────────────────────────────────────────────────────────────
+
+    // 4. Fire API in background — roll back on failure
+    restaurantService.cancelBill(bill.id).catch((e: any) => {
       console.error("Cancel bill error:", e);
       alert({
         title: "Error Cancelling Bill",
         message: e?.response?.data?.message || e?.message || "Could not cancel this bill.",
         type: "danger",
       });
-    }
+      // Re-fetch to restore true state from server
+      fetchRestaurantTables(true);
+    });
   };
 
   // Restaurant: Exit the active table session and return to Floor Tables (ultra-fast)
   const handleCloseActiveBillSession = useCallback(() => {
     if (isSavingOrder) return;
     const tableToUnlock = activeTableRef.current || activeTable;
+
+    // ── Auto-cancel empty ghost bills ────────────────────────────────────────
+    // Capture the bill BEFORE clearing refs. If the user opened a bill,
+    // added nothing, and hit Exit — silently cancel it so it never appears
+    // as a KSh 0.00 card on the table map.
+    const billToAutoCancel = activeBillRef.current;
+    if (billToAutoCancel && billToAutoCancel.id > 0 && items.length === 0) {
+      // Optimistically remove from floor map instantly (0ms)
+      setRestaurantTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== billToAutoCancel.table_id) return t;
+          const remaining = (t.active_bills || []).filter((b) => b.id !== billToAutoCancel.id);
+          return {
+            ...t,
+            active_bills: remaining,
+            active_bills_count: remaining.length,
+            total_active_amount: remaining.reduce((s, b) => s + (b.total || 0), 0),
+            status: remaining.length === 0 ? ("grey" as const) : t.status,
+          };
+        })
+      );
+      // Fire-and-forget cancel on server
+      restaurantService.cancelBill(billToAutoCancel.id).catch((e) => {
+        console.warn("Auto-cancel empty bill failed:", e);
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // 1. Instantly reset refs synchronously so in-flight requests ignore closed session
     activeBillRef.current = null;
@@ -1043,7 +1119,7 @@ export default function PosPage() {
     if (tableToUnlock) {
       restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
     }
-  }, [activeTable, clearCart, isSavingOrder]);
+  }, [activeTable, clearCart, isSavingOrder, items]);
 
   const handlePromptExitActiveTable = async () => {
     if (isSavingOrder) {
