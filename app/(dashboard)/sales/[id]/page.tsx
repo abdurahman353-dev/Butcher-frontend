@@ -428,12 +428,42 @@ export default function SaleDetailPage() {
       {sale.settled_at && (
         <div className="p-4 bg-green-50 border border-green-200 rounded-2xl flex items-start gap-3">
           <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-          <div className="text-xs space-y-0.5">
+          <div className="text-xs space-y-1">
             <h4 className="font-bold text-green-900">Payment Settled in Full</h4>
             <p className="text-green-700">
               Paid via <strong>{sale.payment_method.toUpperCase()}</strong> on {formatDateTime(sale.settled_at)}
               {sale.settled_by ? ` by ${sale.settled_by}` : ""}.
             </p>
+            {sale.notes && (
+              <p className="text-green-800 bg-green-100/70 border border-green-200 rounded-lg px-2.5 py-1.5 font-medium">
+                <span className="font-bold">Note/Reason:</span> {sale.notes}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sale Notes / Free Meal Reason (always visible when present) */}
+      {!sale.settled_at && sale.payment_status !== "pending" && sale.notes && (
+        <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-2xl">
+          <p className="text-xs text-zinc-800">
+            <span className="font-bold text-zinc-900">Notes / Reason:</span> {sale.notes}
+          </p>
+        </div>
+      )}
+
+      {/* Cancelled Banner if applicable */}
+      {sale.sale_status === "cancelled" && (
+        <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1.5 flex-1">
+            <h4 className="font-bold text-rose-900">Cancellation Warning: This bill/sale was cancelled</h4>
+            {sale.notes && (
+              <div className="mt-1 px-3 py-2 bg-rose-100 border border-rose-300 rounded-lg">
+                <span className="text-[10px] uppercase font-bold text-rose-600 tracking-wider block mb-0.5">Cancellation Reason</span>
+                <p className="text-rose-950 font-semibold">{sale.notes}</p>
+              </div>
+            )}
           </div>
         </div>
       )}

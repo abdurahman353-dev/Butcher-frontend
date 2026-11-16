@@ -99,28 +99,22 @@ export default function PosPage() {
    */
   const sanitizeTablesData = useCallback((rawTables: RestaurantTable[]): RestaurantTable[] => {
     return rawTables.map((t) => {
-      // Keep real bills (id > 0) OR bills with items/total OR current active bill
+      // Only keep bills with saved/actual order content. Never show empty ghost bills.
       const validBills = (t.active_bills || []).filter(
         (b) =>
-          b.id > 0 ||
-          (b.items && b.items.length > 0) ||
-          (b.total && b.total > 0) ||
-          (activeBillRef.current?.id === b.id && activeTableRef.current?.id === t.id)
+          b.table_id === t.id &&
+          b.status !== "cancelled" &&
+          b.status !== "settled" &&
+          ((b.items && b.items.length > 0) || Number(b.total || 0) > 0)
       );
-      const hasValid =
-        validBills.length > 0 ||
-        (t.total_active_amount && t.total_active_amount > 0) ||
-        (t.active_bills_count && t.active_bills_count > 0) ||
-        t.status === "red" ||
-        t.status === "yellow";
-      const totalAmount =
-        validBills.reduce((sum, b) => sum + (b.total || 0), 0) || t.total_active_amount || 0;
+      const totalAmount = validBills.reduce((sum, b) => sum + (Number(b.total) || 0), 0);
+      const hasUnprinted = validBills.some((b) => b.status === "open");
       return {
         ...t,
         active_bills: validBills,
-        active_bills_count: Math.max(validBills.length, t.active_bills_count || 0),
+        active_bills_count: validBills.length,
         total_active_amount: totalAmount,
-        status: hasValid ? (t.status === "yellow" ? "yellow" : "red") : ("grey" as const),
+        status: validBills.length === 0 ? ("grey" as const) : hasUnprinted ? ("red" as const) : ("yellow" as const),
       };
     });
   }, []);
@@ -1003,7 +997,8 @@ export default function PosPage() {
   };
 
   // Restaurant: Cancel Bill — optimistic (instant UI, background API)
-  const handleCancelBill = async (bill: RestaurantBill) => {
+
+  const handleCancelBill = async (bill: RestaurantBill, reason: string) => {
     if (bill.id === 0) {
       clearCart();
       setActiveBill(null);
@@ -1014,17 +1009,9 @@ export default function PosPage() {
       return;
     }
 
-    const shouldCancel = await confirm({
-      title: `Cancel Bill ${bill.bill_number}?`,
-      message: `Are you sure you want to cancel this bill on Table ${bill.table_number}? This action cannot be undone.`,
-      confirmText: "Cancel Bill",
-      cancelText: "Keep Bill",
-      type: "danger",
-    });
+    const cancelReason = String(reason || "").trim();
+    if (!cancelReason) return;
 
-    if (!shouldCancel) return;
-
-    // ── Instant optimistic removal — no await, no spinner ──────────────────
     // 1. Remove from floor map immediately
     setRestaurantTables((prev) =>
       prev.map((t) => {
@@ -1053,17 +1040,15 @@ export default function PosPage() {
 
     // 3. Close the modal instantly
     setIsTableModalOpen(false);
-    // ───────────────────────────────────────────────────────────────────────
 
-    // 4. Fire API in background — roll back on failure
-    restaurantService.cancelBill(bill.id).catch((e: any) => {
+    // 4. Fire API in background � roll back on failure
+    restaurantService.cancelBill(bill.id, cancelReason).catch((e: any) => {
       console.error("Cancel bill error:", e);
       alert({
         title: "Error Cancelling Bill",
         message: e?.response?.data?.message || e?.message || "Could not cancel this bill.",
         type: "danger",
       });
-      // Re-fetch to restore true state from server
       fetchRestaurantTables(true);
     });
   };
@@ -1093,8 +1078,8 @@ export default function PosPage() {
           };
         })
       );
-      // Fire-and-forget cancel on server
-      restaurantService.cancelBill(billToAutoCancel.id).catch((e) => {
+      // Fire-and-forget cleanup on server (empty bill removal)
+      restaurantService.cancelBill(billToAutoCancel.id, "Auto-cancelled: no items saved").catch((e) => {
         console.warn("Auto-cancel empty bill failed:", e);
       });
     }
@@ -1540,40 +1525,70 @@ export default function PosPage() {
     }
   };
 
-  const handleCustomerCreated = async (newCustomer: Customer) => {
+  const handleCustomerCreated = (newCustomer: Customer) => {
     setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.id !== newCustomer.id)]);
     setSelectedCustomer(newCustomer);
     setIsAddCustomerOpen(false);
 
     if (activeBill) {
       if (activeBill.id > 0) {
-        try {
-          const res = await restaurantService.updateBillCustomer(activeBill.id, {
+        // For real customers update bill now; for temp customers, sync will update after create
+        if (newCustomer.id > 0) {
+          void restaurantService.updateBillCustomer(activeBill.id, {
             customer_id: newCustomer.id,
             customer_name: newCustomer.name,
             customer_phone: newCustomer.phone || null,
             customer_address: newCustomer.address || null,
-          });
-          if (res.data) {
-            handleBillUpdated(res.data);
-            triggerTableSync();
-          }
-        } catch (e) {
-          console.error("Failed to assign new customer to bill:", e);
+          }).then((res) => {
+            if (res.data) {
+              handleBillUpdated(res.data);
+              triggerTableSync();
+            }
+          }).catch((e) => console.error("Failed to assign new customer to bill:", e));
+        } else {
+          handleBillUpdated({
+            ...activeBill,
+            customer_name: newCustomer.name,
+            customer_phone: newCustomer.phone || null,
+            customer_address: newCustomer.address || null,
+          } as any);
         }
       } else {
-        setActiveBill((prev) =>
-          prev
-            ? {
-                ...prev,
-                customer_id: newCustomer.id,
-                customer_name: newCustomer.name,
-                customer_phone: newCustomer.phone || undefined,
-                customer_address: newCustomer.address || undefined,
-              }
-            : null
-        );
+        handleBillUpdated({
+          ...activeBill,
+          ...(newCustomer.id > 0 ? { customer_id: newCustomer.id } : {}),
+          customer_name: newCustomer.name,
+          customer_phone: newCustomer.phone || null,
+          customer_address: newCustomer.address || null,
+        } as any);
       }
+    }
+  };
+
+  const handleCustomerSynced = (tempId: number, realCustomer: Customer) => {
+    setCustomers((prev) => prev.map((c) => (c.id === tempId ? realCustomer : c)));
+    setSelectedCustomer((prev) => (prev?.id === tempId ? realCustomer : prev));
+
+    if (activeBill && activeBill.id > 0) {
+      void restaurantService.updateBillCustomer(activeBill.id, {
+        customer_id: realCustomer.id,
+        customer_name: realCustomer.name,
+        customer_phone: realCustomer.phone || null,
+        customer_address: realCustomer.address || null,
+      }).then((res) => {
+        if (res.data) {
+          handleBillUpdated(res.data);
+          triggerTableSync();
+        }
+      }).catch((e) => console.error("Failed to sync created customer to bill:", e));
+    } else if (activeBill && activeBill.id <= 0) {
+      handleBillUpdated({
+        ...activeBill,
+        customer_id: realCustomer.id,
+        customer_name: realCustomer.name,
+        customer_phone: realCustomer.phone || null,
+        customer_address: realCustomer.address || null,
+      } as any);
     }
   };
 
@@ -2168,6 +2183,7 @@ export default function PosPage() {
         isOpen={isAddCustomerOpen}
         onClose={() => setIsAddCustomerOpen(false)}
         onCustomerCreated={handleCustomerCreated}
+        onCustomerSynced={handleCustomerSynced}
       />
 
       {/* Edit Customer Modal */}

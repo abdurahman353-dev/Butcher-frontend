@@ -57,7 +57,7 @@ interface TableBillsModalProps {
   }) => Promise<void>;
   onPrintCustomerBill: (bill: RestaurantBill) => Promise<void>;
   onSettleBill: (bill: RestaurantBill) => void;
-  onCancelBill: (bill: RestaurantBill) => Promise<void>;
+  onCancelBill: (bill: RestaurantBill, reason: string) => Promise<void> | void;
   onPrintKitchenSlip: (bill: RestaurantBill, productId?: number) => void;
   customers?: Customer[];
   onBillUpdated?: (updatedBill: RestaurantBill) => void;
@@ -106,19 +106,12 @@ export function TableBillsModal({
   const [customerAddress, setCustomerAddress] = useState("");
   const [billNotes, setBillNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedBillId, setSelectedBillId] = useState<number | "">("" );
+  const [currentBillIndex, setCurrentBillIndex] = useState(0);
   const [expandedBills, setExpandedBills] = useState<Record<number, boolean>>({});
-  // Tracks which bill's cancel-confirmation dialog is open — all its buttons become unclickable
-  const [cancellingBillId, setCancellingBillId] = useState<number | null>(null);
-
-  const handleCancelBillWithLock = async (bill: RestaurantBill) => {
-    setCancellingBillId(bill.id);
-    try {
-      await onCancelBill(bill);
-    } finally {
-      setCancellingBillId(null);
-    }
-  };
+  // Cancel dialog state (reason required before cancel)
+  const [cancelDialogBill, setCancelDialogBill] = useState<RestaurantBill | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonError, setCancelReasonError] = useState("");
 
   // ── Customer Change / Edit State for Existing Bills ──
   const [editingCustomerBill, setEditingCustomerBill] = useState<RestaurantBill | null>(null);
@@ -157,48 +150,59 @@ export function TableBillsModal({
     setCustSearchQuery("");
   };
 
-  const handleSaveCustomerChange = async () => {
+  const handleSaveCustomerChange = () => {
     if (!editingCustomerBill) return;
-    setIsSavingCustomer(true);
+
+    const prevBill = editingCustomerBill;
+    const optimisticBill: RestaurantBill = {
+      ...editingCustomerBill,
+      customer_id: editSelectedCustId ?? undefined,
+      customer_name: editCustName.trim() || undefined,
+      customer_phone: editCustPhone.trim() || undefined,
+      customer_address: editCustAddress.trim() || undefined,
+    };
+
+    // Instant optimistic update
+    setBillsList((prev) =>
+      prev.map((b) => (b.id === optimisticBill.id ? { ...b, ...optimisticBill } : b))
+    );
+    if (onBillUpdated) {
+      onBillUpdated(optimisticBill);
+    }
+    if (table && table.active_bills) {
+      table.active_bills = table.active_bills.map((b) =>
+        b.id === optimisticBill.id ? { ...b, ...optimisticBill } : b
+      );
+    }
+
+    setEditingCustomerBill(null);
     setCustomerUpdateMessage(null);
-    try {
-      const res = await restaurantService.updateBillCustomer(editingCustomerBill.id, {
+    setIsSavingCustomer(false);
+
+    // Persist in background
+    void restaurantService
+      .updateBillCustomer(prevBill.id, {
         customer_id: editSelectedCustId,
         customer_name: editCustName.trim() || undefined,
         customer_phone: editCustPhone.trim() || undefined,
         customer_address: editCustAddress.trim() || undefined,
+      })
+      .then((res) => {
+        const updated = res.data;
+        setBillsList((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+        if (onBillUpdated) onBillUpdated(updated);
+        if (table && table.active_bills) {
+          table.active_bills = table.active_bills.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
+        }
+      })
+      .catch(() => {
+        // Revert on failure
+        setBillsList((prev) => prev.map((b) => (b.id === prevBill.id ? { ...b, ...prevBill } : b)));
+        if (onBillUpdated) onBillUpdated(prevBill);
+        if (table && table.active_bills) {
+          table.active_bills = table.active_bills.map((b) => (b.id === prevBill.id ? { ...b, ...prevBill } : b));
+        }
       });
-
-      const updated = res.data;
-
-      // 1. Immediately update internal billsList so the screen re-renders right now
-      setBillsList((prev) =>
-        prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b))
-      );
-
-      // 2. Notify parent (pos/page.tsx) so tables and activeBill update
-      if (onBillUpdated) {
-        onBillUpdated(updated);
-      }
-
-      // 3. Mutate table.active_bills as well
-      if (table && table.active_bills) {
-        table.active_bills = table.active_bills.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
-      }
-
-      setCustomerUpdateMessage({ type: "success", text: "Customer details updated successfully!" });
-      setTimeout(() => {
-        setEditingCustomerBill(null);
-        setCustomerUpdateMessage(null);
-      }, 350);
-    } catch (err: any) {
-      setCustomerUpdateMessage({
-        type: "error",
-        text: err?.response?.data?.message || err?.message || "Failed to update customer.",
-      });
-    } finally {
-      setIsSavingCustomer(false);
-    }
   };
 
   const [billsList, setBillsList] = useState<RestaurantBill[]>(
@@ -393,28 +397,34 @@ export function TableBillsModal({
       // Silently ignore — falls back gracefully to live verify endpoint
     });
   }, [isOpen, table?.id]);
+  useEffect(() => {
+    setCurrentBillIndex(0);
+  }, [table?.id]);
+
 
   useEffect(() => {
     setBillsList(
       (table?.active_bills || []).filter(
-        (b) => b.table_id === table?.id && b.status !== "cancelled" && b.status !== "settled"
+        (b) =>
+          b.table_id === table?.id &&
+          b.status !== "cancelled" &&
+          b.status !== "settled" &&
+          ((b.items && b.items.length > 0) || Number(b.total || 0) > 0)
       )
     );
   }, [table?.active_bills, table?.id]);
 
-  // Only show real bills (id > 0) that belong to this table and are open/printed.
-  // Never filter by items count or total — a freshly created bill has no items yet
-  // but is still a real, persisted bill that must remain visible.
+  // Only show bills with saved order content (no empty ghost bills)
   const activeBills = (billsList || []).filter(
     (b) =>
       b.id > 0 &&
       b.table_id === table?.id &&
-      (b.status === "open" || b.status === "printed")
+      (b.status === "open" || b.status === "printed") &&
+      ((b.items && b.items.length > 0) || Number(b.total || 0) > 0)
   );
 
-  const filteredBills = selectedBillId === ""
-    ? activeBills
-    : activeBills.filter((bill) => bill.id === selectedBillId);
+  const clampedIndex = activeBills.length === 0 ? 0 : Math.min(currentBillIndex, activeBills.length - 1);
+  const filteredBills = activeBills.length === 0 ? [] : [activeBills[clampedIndex]];
 
   // Instant local PIN verification with live backend fallback (never fails valid PINs)
   const handlePinInput = async (val: string) => {
@@ -722,30 +732,41 @@ export function TableBillsModal({
         {/* ── Modal Content ────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
 
-          {/* Section header: label left, dropdown + New Bill right — fully responsive */}
+          {/* Section header: label left, nav + New Bill right */}
           <div className="flex items-center justify-between gap-2 pb-1 flex-wrap">
             <h4 className="text-[11px] font-black uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 shrink-0">
               <Receipt className="w-3.5 h-3.5 text-zinc-400" />
-              Active Bills on this Table ({filteredBills.length}{selectedBillId !== "" ? ` / ${activeBills.length}` : ""})
+              Active Bills on this Table ({activeBills.length})
             </h4>
 
             <div className="flex items-center gap-2 min-w-0">
               {activeBills.length > 1 && !isCreatingNew && (
-                <div className="relative w-64">
-                  <Receipt className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
-                  <select
-                    value={selectedBillId}
-                    onChange={(e) => setSelectedBillId(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="w-full pl-9 pr-8 py-2.5 bg-white border-2 border-emerald-500 hover:border-emerald-600 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-xl text-base font-black text-zinc-900 outline-none transition-all shadow-xs appearance-none cursor-pointer tracking-wide"
+                <div className="flex items-center gap-1.5 bg-zinc-100 border border-zinc-200 rounded-xl p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentBillIndex((i) => Math.max(0, i - 1))}
+                    disabled={clampedIndex === 0}
+                    className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-white border-2 border-zinc-300 text-zinc-800 hover:bg-zinc-50 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
+                    title="Previous bill"
+                    aria-label="Previous bill"
                   >
-                    <option value="">All Bills ({activeBills.length})</option>
-                    {activeBills.map((bill) => (
-                      <option key={bill.id} value={bill.id}>
-                        {bill.bill_number}{bill.customer_name ? ` — ${bill.customer_name}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-5 h-5 absolute right-2.5 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+                    <ChevronRight className="w-6 h-6 rotate-180 stroke-[2.5]" />
+                  </button>
+                  <div className="px-3 min-w-[100px] text-center">
+                    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider leading-none">Bill</div>
+                    <div className="text-base font-black text-zinc-900 leading-tight">{clampedIndex + 1} / {activeBills.length}</div>
+                    <div className="text-sm sm:text-base font-black text-zinc-950 truncate max-w-[160px] tracking-tight">{activeBills[clampedIndex]?.bill_number || ""}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentBillIndex((i) => Math.min(activeBills.length - 1, i + 1))}
+                    disabled={clampedIndex >= activeBills.length - 1}
+                    className="h-11 w-11 sm:h-12 sm:w-12 rounded-xl bg-white border-2 border-zinc-300 text-zinc-800 hover:bg-zinc-50 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
+                    title="Next bill"
+                    aria-label="Next bill"
+                  >
+                    <ChevronRight className="w-6 h-6 stroke-[2.5]" />
+                  </button>
                 </div>
               )}
 
@@ -753,9 +774,9 @@ export function TableBillsModal({
                 <button
                   type="button"
                   onClick={handleStartCreateNew}
-                  className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                  className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   <span>+ New Bill</span>
                 </button>
               )}
@@ -1021,14 +1042,7 @@ export function TableBillsModal({
             </div>
           ) : filteredBills.length === 0 && !isCreatingNew ? (
             <div className="p-6 text-center bg-zinc-50 border border-dashed border-zinc-300 rounded-xl">
-              <p className="text-xs font-bold text-zinc-700">No bills found for the selected bill number.</p>
-              <button
-                type="button"
-                onClick={() => setSelectedBillId("")}
-                className="mt-2 text-xs text-emerald-700 font-bold hover:underline"
-              >
-                Show All Bills
-              </button>
+              <p className="text-xs font-bold text-zinc-700">No bills found.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1040,9 +1054,7 @@ export function TableBillsModal({
                   <div
                     key={bill.id}
                     className={`p-4 rounded-2xl border-2 transition-all space-y-3 ${
-                      cancellingBillId === bill.id
-                        ? "opacity-50 pointer-events-none select-none " + (isPrinted ? "bg-amber-50/70 border-amber-300" : "bg-white border-zinc-200")
-                        : isPrinted
+                      isPrinted
                         ? "bg-amber-50/70 border-amber-300"
                         : "bg-white border-zinc-200 hover:border-zinc-300"
                     }`}
@@ -1051,7 +1063,7 @@ export function TableBillsModal({
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm sm:text-base font-black text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-lg border border-zinc-200">
+                          <span className="font-mono text-base sm:text-lg font-black text-zinc-950 bg-zinc-200 px-2.5 py-1 rounded-lg border border-zinc-300">
                             {bill.bill_number}
                           </span>
                           <span
@@ -1207,16 +1219,16 @@ export function TableBillsModal({
                                       </span>
                                     )}
                                   </span>
-                                  {/* Item-level reprint if multiple items & bill was kitchen-printed (Cashiers & Admins only) */}
-                                  {bill.kitchen_printed_at && !isWaiter && (
+                                  {/* Item-level kitchen slip (Cashiers & Admins only) */}
+                                  {!isWaiter && itemsCount > 0 && (
                                     <button
                                       type="button"
                                       onClick={() => onPrintKitchenSlip(bill, item.product_id)}
                                       className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg transition-colors text-[10px] font-bold flex items-center gap-1 shrink-0 shadow-xs"
-                                      title={`Reprint slip for ${item.product_name}`}
+                                      title={`${bill.kitchen_printed_at ? "Reprint" : "Print"} slip for ${item.product_name}`}
                                     >
                                       <ChefHat className="w-3 h-3" />
-                                      <span className="font-bold">Reprint</span>
+                                      <span className="font-bold">{bill.kitchen_printed_at ? "Reprint" : "Print"}</span>
                                     </button>
                                   )}
                                 </div>
@@ -1237,7 +1249,11 @@ export function TableBillsModal({
                         {!isWaiter && (
                           <button
                             type="button"
-                            onClick={() => handleCancelBillWithLock(bill)}
+                            onClick={() => {
+                              setCancelDialogBill(bill);
+                              setCancelReason("");
+                              setCancelReasonError("");
+                            }}
                             className="px-2.5 py-1.5 text-xs bg-rose-100 text-rose-700 hover:bg-rose-200 active:bg-rose-300 border border-rose-300 rounded-xl transition-colors font-bold flex items-center gap-1"
                             title="Cancel this bill"
                           >
@@ -1246,16 +1262,16 @@ export function TableBillsModal({
                           </button>
                         )}
 
-                        {/* Print Kitchen Slip (KOT) — Only Cashiers & Admins can reprint, Waiters blocked */}
-                        {bill.kitchen_printed_at && !isWaiter && (
+                        {/* Print Kitchen Slip (KOT) - Cashiers & Admins only */}
+                        {!isWaiter && itemsCount > 0 && (
                           <button
                             type="button"
                             onClick={() => onPrintKitchenSlip(bill)}
                             className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl transition-colors font-bold flex items-center gap-1 shadow-xs"
-                            title="Re-print Kitchen Slip"
+                            title={bill.kitchen_printed_at ? "Re-print Kitchen Slip" : "Print Kitchen Slip"}
                           >
                             <ChefHat className="w-3.5 h-3.5" />
-                            <span>Kitchen Slip</span>
+                            <span>{bill.kitchen_printed_at ? "Kitchen Slip" : "Print KOT"}</span>
                           </button>
                         )}
                       </div>
@@ -2335,7 +2351,6 @@ export function TableBillsModal({
                   setEditingCustomerBill(null);
                   setCustomerUpdateMessage(null);
                 }}
-                disabled={isSavingCustomer}
                 className="px-4 py-2 rounded-xl border border-zinc-300 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-bold transition-all cursor-pointer"
               >
                 Cancel
@@ -2343,20 +2358,74 @@ export function TableBillsModal({
               <button
                 type="button"
                 onClick={handleSaveCustomerChange}
-                disabled={isSavingCustomer}
-                className="px-5 py-2 rounded-xl bg-zinc-900 hover:bg-black active:scale-95 text-white text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-zinc-900 hover:bg-black active:scale-95 text-white text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
-                {isSavingCustomer ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Save Customer Info</span>
-                  </>
-                )}
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Save Customer Info</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Bill Reason Dialog */}
+      {cancelDialogBill && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-zinc-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-rose-50">
+              <div>
+                <h4 className="text-base font-black text-zinc-900">Cancel Bill</h4>
+                <p className="text-xs text-zinc-600 mt-0.5">
+                  {cancelDialogBill.bill_number} • Table {cancelDialogBill.table_number}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCancelDialogBill(null); setCancelReason(""); setCancelReasonError(""); }}
+                className="p-2 rounded-xl text-zinc-400 hover:text-zinc-700 hover:bg-zinc-200/60"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="block text-xs font-bold text-zinc-700">
+                Reason for cancelling this bill <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => { setCancelReason(e.target.value); if (e.target.value.trim()) setCancelReasonError(""); }}
+                rows={3}
+                autoFocus
+                placeholder="Enter reason..."
+                className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500"
+              />
+              {cancelReasonError && (
+                <p className="text-xs font-semibold text-rose-600">{cancelReasonError}</p>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-zinc-100 bg-zinc-50 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setCancelDialogBill(null); setCancelReason(""); setCancelReasonError(""); }}
+                className="h-9 px-4 rounded-xl border border-zinc-300 bg-white hover:bg-zinc-100 text-zinc-700 text-xs font-bold"
+              >
+                Keep Bill
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const reason = cancelReason.trim();
+                  if (!reason) { setCancelReasonError("Reason is required."); return; }
+                  const bill = cancelDialogBill;
+                  setCancelDialogBill(null);
+                  setCancelReason("");
+                  setCancelReasonError("");
+                  void onCancelBill(bill, reason);
+                }}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1.5"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>Cancel Bill</span>
               </button>
             </div>
           </div>

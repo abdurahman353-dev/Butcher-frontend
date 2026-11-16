@@ -28,7 +28,10 @@ export function StatusBadge({ status, className = "", type = "sale" }: StatusBad
     } else if (normalized === "pending" || normalized === "processing") {
       styles = "bg-amber-50 text-amber-700 border-amber-200";
       label = "Pending";
-    } else if (normalized === "failed" || normalized === "cancelled") {
+    } else if (normalized === "cancelled") {
+      styles = "bg-rose-50 text-rose-700 border-rose-200";
+      label = "Cancelled";
+    } else if (normalized === "failed") {
       styles = "bg-rose-50 text-rose-700 border-rose-200";
       label = "Failed";
     }

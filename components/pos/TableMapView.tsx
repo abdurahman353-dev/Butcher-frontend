@@ -307,15 +307,15 @@ export function TableMapView({
             {filteredTables.map((table) => {
               const isSelected = activeTableId === table.id;
 
-              // Real active bills on this table
+              // Real active bills on this table (must have saved items/amount)
               const realBills = (table.active_bills || []).filter(
-                (b) => (b.items && b.items.length > 0) || (b.total && b.total > 0) || b.id > 0
+                (b) => b.status !== "cancelled" && b.status !== "settled" && ((b.items && b.items.length > 0) || Number(b.total || 0) > 0)
               );
-              const realBillsCount = Math.max(realBills.length, table.active_bills_count || 0, (table.active_bills || []).length);
-              const realTotalAmount = realBills.reduce((sum, b) => sum + (b.total || 0), 0) || table.total_active_amount || 0;
-              const isTrulyActive =
-                realBillsCount > 0 || table.status === "red" || realTotalAmount > 0;
-              const isTrulyBilled = table.status === "yellow" && (realBillsCount > 0 || realTotalAmount > 0);
+              const realBillsCount = realBills.length;
+              const realTotalAmount = realBills.reduce((sum, b) => sum + (Number(b.total) || 0), 0);
+              const hasUnprinted = realBills.some((b) => b.status === "open");
+              const isTrulyActive = realBillsCount > 0 && hasUnprinted;
+              const isTrulyBilled = realBillsCount > 0 && !hasUnprinted;
 
               // Colour scheme per status
               let cardClasses =

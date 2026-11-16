@@ -19,31 +19,29 @@ interface QuickAddCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCustomerCreated: (customer: Customer) => void;
+  onCustomerSynced?: (tempId: number, customer: Customer) => void;
 }
 
 export function QuickAddCustomerModal({
   isOpen,
   onClose,
   onCustomerCreated,
+  onCustomerSynced,
 }: QuickAddCustomerModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const errors: Record<string, string> = {};
-    if (!name.trim()) {
-      errors.name = "Customer name is required.";
-    }
     if (!phone.trim()) {
       errors.phone = "Phone number is required.";
     }
@@ -54,37 +52,48 @@ export function QuickAddCustomerModal({
     }
     setFieldErrors({});
 
-    setIsSubmitting(true);
-    try {
-      const created = await customersService.createCustomer({
-        name: name.trim(),
-        phone: phone.trim(),
-        address: address.trim() || undefined,
-        email: email.trim() || undefined,
+    const payload = {
+      name: name.trim() || undefined,
+      phone: phone.trim(),
+      address: address.trim() || undefined,
+      email: email.trim() || undefined,
+    };
+
+    const tempId = -Date.now();
+    const optimistic: Customer = {
+      id: tempId,
+      name: payload.name || payload.phone,
+      phone: payload.phone,
+      address: payload.address || "",
+      email: payload.email || "",
+    } as Customer;
+
+    // Instant UI: close/reset and reflect immediately
+    onCustomerCreated(optimistic);
+    setName("");
+    setPhone("");
+    setAddress("");
+    setEmail("");
+    setFieldErrors({});
+    setError(null);
+    onClose();
+
+    // Persist in background
+    void customersService
+      .createCustomer(payload)
+      .then((created) => {
+        onCustomerSynced?.(tempId, created);
+      })
+      .catch((err: any) => {
+        const msg =
+          err?.errors
+            ? Object.values(err.errors as Record<string, string[]>).flat().join(" ")
+            : err?.response?.data?.message || err?.message || "Failed to save customer.";
+        alert(msg);
       });
-
-      // Reset form
-      setName("");
-      setPhone("");
-      setAddress("");
-      setEmail("");
-      setFieldErrors({});
-      setError(null);
-
-      onCustomerCreated(created);
-    } catch (err: any) {
-      const msg =
-        err?.errors
-          ? Object.values(err.errors as Record<string, string[]>).flat().join(" ")
-          : err?.response?.data?.message || err?.message || "Failed to create customer.";
-      setError(msg);
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleClose = () => {
-    if (isSubmitting) return;
     setError(null);
     setFieldErrors({});
     onClose();
@@ -113,7 +122,6 @@ export function QuickAddCustomerModal({
           <button
             type="button"
             onClick={handleClose}
-            disabled={isSubmitting}
             className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
@@ -132,7 +140,7 @@ export function QuickAddCustomerModal({
           {/* Customer Name */}
           <div>
             <label className="block text-xs font-bold text-zinc-800 mb-1">
-              Customer Name <span className="text-red-500">*</span>
+              Customer Name <span className="text-zinc-400 font-normal">(Optional)</span>
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -141,23 +149,10 @@ export function QuickAddCustomerModal({
                 autoFocus
                 placeholder="e.g. Mama Brian / John Mwangi"
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((p) => ({ ...p, name: "" }));
-                }}
-                className={`w-full pl-9 pr-3 py-2 text-xs font-semibold text-zinc-900 border rounded-xl focus:outline-none transition-all ${
-                  fieldErrors.name
-                    ? "border-red-400 bg-red-50/20 focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                    : "border-zinc-300 focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                }`}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs font-semibold text-zinc-900 border border-zinc-300 rounded-xl focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition-all"
               />
             </div>
-            {fieldErrors.name && (
-              <p className="text-[11px] text-red-600 font-semibold mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-                {fieldErrors.name}
-              </p>
-            )}
           </div>
 
           {/* Customer Phone */}
@@ -232,27 +227,16 @@ export function QuickAddCustomerModal({
             <button
               type="button"
               onClick={handleClose}
-              disabled={isSubmitting}
               className="flex-1 py-2.5 rounded-xl border border-zinc-300 text-zinc-700 font-bold text-xs hover:bg-zinc-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Save &amp; Select</span>
-                </>
-              )}
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Save &amp; Select</span>
             </button>
           </div>
         </form>
