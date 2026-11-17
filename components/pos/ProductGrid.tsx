@@ -196,7 +196,6 @@ export function ProductGrid({
           selectedCategoryId={selectedCategory}
           onSelectCategory={setSelectedCategory}
           productCounts={categoryCounts.counts}
-          totalCount={categoryCounts.total}
           isRestaurant={isRestaurant}
           isClothing={isClothing}
           canDrag={canDrag}
