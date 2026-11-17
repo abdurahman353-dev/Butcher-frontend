@@ -29,11 +29,45 @@ export function ProductGrid({
   onUpdateProduct,
 }: ProductGridProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("");
 
   // Drag-and-drop state for products
   const [draggedProductId, setDraggedProductId] = useState<number | null>(null);
   const [dragOverProductId, setDragOverProductId] = useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!categories.length) return;
+
+    let ordered = categories;
+    if (isRestaurant) {
+      try {
+        const saved = localStorage.getItem("pos_restaurant_category_order");
+        if (saved) {
+          const ids: number[] = JSON.parse(saved);
+          if (Array.isArray(ids) && ids.length > 0) {
+            const map = new Map(categories.map((c) => [c.id, c]));
+            const sorted: Category[] = [];
+            for (const id of ids) {
+              const found = map.get(id);
+              if (found) {
+                sorted.push(found);
+                map.delete(id);
+              }
+            }
+            map.forEach((c) => sorted.push(c));
+            if (sorted.length) ordered = sorted;
+          }
+        }
+      } catch (_) {}
+    }
+
+    const exists = ordered.some((c) => c.id.toString() === selectedCategory);
+    if (!selectedCategory || !exists) {
+      setSelectedCategory(ordered[0].id.toString());
+    }
+  }, [categories, selectedCategory, isRestaurant]);
+
+  const activeCategory = selectedCategory || categories[0]?.id.toString() || "";
 
   // Custom product order from localStorage + DB sync
   const [customOrderIds, setCustomOrderIds] = React.useState<number[]>([]);
@@ -63,7 +97,7 @@ export function ProductGrid({
     const list = products.filter((p) => {
       if (!p.is_active) return false;
 
-      if (selectedCategory !== "all" && p.category_id.toString() !== selectedCategory) {
+      if (!activeCategory || p.category_id.toString() !== activeCategory) {
         return false;
       }
 
@@ -93,7 +127,7 @@ export function ProductGrid({
       if (idxA !== idxB) return idxA - idxB;
       return 0;
     });
-  }, [products, selectedCategory, searchQuery, isRestaurant, customOrderIds]);
+  }, [products, activeCategory, searchQuery, isRestaurant, customOrderIds]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -193,7 +227,7 @@ export function ProductGrid({
 
         <CategoryBar
           categories={categories}
-          selectedCategoryId={selectedCategory}
+          selectedCategoryId={activeCategory}
           onSelectCategory={setSelectedCategory}
           productCounts={categoryCounts.counts}
           isRestaurant={isRestaurant}
@@ -227,10 +261,10 @@ export function ProductGrid({
                 : `No ${isRestaurant ? "menu items" : "products"} available in this category.`
             }
             icon={PackageOpen}
-            actionLabel={searchQuery || selectedCategory !== "all" ? "Clear Filters" : undefined}
+            actionLabel={searchQuery || (categories[0] && activeCategory !== categories[0].id.toString()) ? "Clear Filters" : undefined}
             onAction={() => {
               setSearchQuery("");
-              setSelectedCategory("all");
+              setSelectedCategory(categories[0]?.id.toString() ?? "");
             }}
           />
         ) : (
