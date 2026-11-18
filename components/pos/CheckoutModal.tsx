@@ -160,6 +160,7 @@ export function CheckoutModal({
         sale_id: 0,
         product_id: it.product_id,
         product_name: it.product_name,
+        unit: it.unit || "KG",
         weight: it.weight,
         price_per_kg: it.price_per_kg,
         discount: it.discount || 0,

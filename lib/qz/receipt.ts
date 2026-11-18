@@ -28,6 +28,37 @@ function divider(char = "-", width = LINE_WIDTH): string {
   return char.repeat(width) + "\n";
 }
 
+export function formatReceiptQty(weight: number | string | null | undefined): string {
+  const num = Number(weight != null ? weight : 1);
+  if (isNaN(num)) return "1";
+  if (Number.isInteger(num)) return num.toString();
+  return parseFloat(num.toFixed(3)).toString();
+}
+
+export function padThreeCols(col1: string, col2: string, col3: string, width = LINE_WIDTH): string {
+  const c3 = col3.padStart(8);
+  const c2 = col2.padStart(16);
+  const maxC1 = width - c2.length - c3.length;
+  return col1.substring(0, maxC1).padEnd(maxC1) + c2 + c3;
+}
+
+export function formatButcheryItemLine(
+  name: string,
+  qtyPrice: string,
+  total: string,
+  width = LINE_WIDTH
+): string {
+  const totalCol = total.padStart(8);
+  const qtyCol = qtyPrice.padStart(16);
+  const maxNameWidth = width - totalCol.length - qtyCol.length; // e.g. 42 - 8 - 16 = 18
+
+  if (name.length <= maxNameWidth) {
+    return name.padEnd(maxNameWidth) + qtyCol + totalCol;
+  } else {
+    return name + "\n" + "".padEnd(maxNameWidth) + qtyCol + totalCol;
+  }
+}
+
 export interface ReceiptFormatOptions {
   openCashDrawer?: boolean;
   cutPaper?: boolean;
@@ -95,21 +126,20 @@ export function buildEscPosReceipt(
   commands.push(divider("-"));
 
   // --- ITEMS HEADER ---
-  commands.push(padLine("ITEM", "QTY x PRICE        TOTAL") + "\n");
+  commands.push(padThreeCols("ITEM", "QTY x PRICE", "TOTAL", LINE_WIDTH) + "\n");
   commands.push(divider("-"));
 
   // --- ITEMS LIST ---
   const items: SaleItem[] = sale.items || [];
   for (const item of items) {
     const name = item.product_name || "Item";
-    const qty = Number(item.weight || 1).toFixed(item.unit === "KG" ? 3 : 0);
-    const unit = item.unit || "KG";
+    const qtyStr = formatReceiptQty(item.weight);
+    const unit = (item.unit || "KG").toUpperCase();
     const price = Number(item.price_per_kg || 0).toFixed(2);
     const total = Number(item.subtotal || 0).toFixed(2);
+    const qtyPrice = `${qtyStr} ${unit} @ ${price}`;
 
-    commands.push(`\x1B\x45\x01${name}\x1B\x45\x00\n`);
-    const lineRight = `${qty} ${unit} @ ${price}    ${total}`;
-    commands.push("  " + padLine("", lineRight, LINE_WIDTH - 2) + "\n");
+    commands.push(formatButcheryItemLine(name, qtyPrice, total, LINE_WIDTH) + "\n");
   }
 
   commands.push(divider("-"));
