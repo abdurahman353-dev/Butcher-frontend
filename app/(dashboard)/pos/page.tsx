@@ -1352,7 +1352,7 @@ export default function PosPage() {
         items: formattedItems.length > 0 ? formattedItems : undefined,
       });
 
-      // Optimistic floor map table update — immediately free table with zero delay
+      // Optimistic floor map table update �?" immediately free table with zero delay
       const currentTableId = activeTable?.id || activeBill.table_id;
       if (currentTableId) {
         setRestaurantTables((prev) =>
@@ -1370,7 +1370,7 @@ export default function PosPage() {
         );
       }
 
-      // Non-blocking cleanup — don't delay the success screen
+      // Non-blocking cleanup �?" don't delay the success screen
       clearCart();
       setSelectedCustomer(null);
       const tableToUnlock = activeTable;
@@ -1382,7 +1382,7 @@ export default function PosPage() {
         restaurantService.unlockTable(tableToUnlock.id).catch(() => {});
       }
       triggerTableSync();
-      // Silently refresh in background — no spinner
+      // Silently refresh in background �?" no spinner
       fetchRestaurantTables(true);
       fetchUnpaidSales();
       productsService
